@@ -100,6 +100,21 @@ Hand edits to the rest of the file still win: Sagitta reads the tikz-cd whenever
 - `CONTRIBUTING.md`: the source, the tests, and how to report a bug.
 - `LICENSE`, `NOTICE`: the licence, and quiver's and KaTeX's notices.
 
+## AI use
+
+Sagitta was made with AI assistance.
+I used Anthropic's Claude (via Claude Code) to generate much of its code, tests, and documentation.
+quiver and KaTeX, which Sagitta builds on, are their authors' own work.
+As the author, I take full responsibility for Sagitta.
+I directed, reviewed, and tested all generated content carefully.
+
+### Why disclose at all?
+
+I believe personal responsibility and human creativity are virtues.
+I try to use AI tools to augment both, but I acknowledge that it would take significant time (if possible at all) for me to produce code of the same quality.
+Transparency is another of these virtues, particularly in the modern age.
+I do not wish to pretend that I am perfect beyond measure, only to show that I take careful measures to use modern tools to assist in my creativity and output.
+
 ## Licence
 
 Sagitta is free software, under the GNU General Public License, version 3 or later (`LICENSE`).
