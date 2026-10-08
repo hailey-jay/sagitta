@@ -10,7 +10,7 @@ It is in daily use there, but the file format and keys may still change before 1
 
 ### AppImage
 
-Download `Sagitta-<version>-x86_64.AppImage` from the latest release, then:
+Download `Sagitta-<version>-x86_64.AppImage` from the [latest release](https://github.com/hailey-jay/sagitta/releases/latest), then:
 
 ```
 chmod +x Sagitta-*.AppImage
@@ -32,7 +32,7 @@ You need git and Node.js (for npm).
 Clone the repository and let npm fetch Electron into `node_modules`:
 
 ```
-git clone <this repository> sagitta
+git clone https://github.com/hailey-jay/sagitta.git
 cd sagitta
 npm install
 ./sagitta
