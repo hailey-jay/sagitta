@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+# Throwaway only.
+scratch/
+# Editor leavings.
+\#*\#
+*~
+.#*
+# Claude Code worktrees.
+.claude/
+# A local Electron, from npm install.
+node_modules/
+# Packages, from npm run dist.
+dist/

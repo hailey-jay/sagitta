@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A .tikzcd file is Sagitta's tikz-cd export, which LaTeX \inputs. Linked
+     into ~/.local/share/mime/packages by install.sh. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+    <mime-type type="text/x-tikzcd">
+        <comment>tikz-cd diagram</comment>
+        <sub-class-of type="text/x-tex"/>
+        <icon name="text-x-tex"/>
+        <glob pattern="*.tikzcd"/>
+    </mime-type>
+</mime-info>

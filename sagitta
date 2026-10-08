@@ -1,0 +1,22 @@
+#!/bin/sh
+# sagitta [--macros FILE] [--devtools] [DIAGRAM.tikzcd] [-- SWITCHES]
+#
+# Runs the app on Electron: $SAGITTA_ELECTRON if set, else the first of
+# electron43 and electron on PATH, else the one `npm install` puts in
+# node_modules. The app reads the arguments (see electron/main.js); relative
+# paths are resolved against the directory this is run from.
+app="$(dirname "$(readlink -f "$0")")"
+electron="${SAGITTA_ELECTRON:-}"
+if [ -z "$electron" ]; then
+    for candidate in electron43 electron "$app/node_modules/.bin/electron"; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            electron="$candidate"
+            break
+        fi
+    done
+fi
+if [ -z "$electron" ]; then
+    echo "sagitta: no Electron found; install electron43, or run npm install in $app" >&2
+    exit 1
+fi
+exec "$electron" "$app" "$@"

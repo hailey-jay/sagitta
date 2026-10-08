@@ -1,0 +1,14 @@
+name: Feature
+description: Something Sagitta could do.
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes:
+      label: What you want to do
+      description: The diagram or the workflow, and what gets in the way now.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: How it could work
+      description: Keys, commands, or what the export should be, if you have an idea.

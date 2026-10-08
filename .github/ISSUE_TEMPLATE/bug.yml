@@ -1,0 +1,27 @@
+name: Bug
+description: Something Sagitta does wrong.
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Include any message in the mode line.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: The diagram
+      description: The .tikzcd file, and the macros.tex beside it if labels are involved. Paste them, or attach them.
+      render: latex
+  - type: input
+    attributes:
+      label: Version
+      description: The output of `sagitta --version`.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: System
+      description: Your distribution, and which Electron the launcher picked ($SAGITTA_ELECTRON, electron43, electron, or node_modules).
+    validations:
+      required: true

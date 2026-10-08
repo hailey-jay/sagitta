@@ -1,0 +1,14 @@
+# Rendered by install.sh into ~/.local/share/applications with @BIN@ replaced:
+# launchers do not necessarily see the shell's PATH, so Exec names the launcher
+# outright. The icon is installed into the hicolor theme under the name sagitta.
+[Desktop Entry]
+Type=Application
+Name=Sagitta
+GenericName=Commutative diagram editor
+Comment=Draw tikz-cd diagrams and edit .tikzcd files
+Exec=@BIN@/sagitta %f
+Icon=sagitta
+Terminal=false
+Categories=Science;Math;
+MimeType=text/x-tikzcd;
+StartupWMClass=sagitta

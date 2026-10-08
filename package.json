@@ -1,0 +1,66 @@
+{
+    "name": "sagitta",
+    "productName": "Sagitta",
+    "version": "0.1.0",
+    "description": "A keyboard-driven commutative diagram editor for .tikzcd files, grown from quiver",
+    "license": "GPL-3.0-or-later",
+    "author": "Hailey Jay Garcia <504haileyjay@gmail.com>",
+    "private": true,
+    "desktopName": "sagitta.desktop",
+    "main": "electron/main.js",
+    "scripts": {
+        "start": "./sagitta",
+        "test": "python3 -m pytest tests",
+        "dist": "electron-builder --linux AppImage --publish never"
+    },
+    "devDependencies": {
+        "electron": "^43.7.7",
+        "electron-builder": "^26.15.3"
+    },
+    "build": {
+        "directories": {
+            "output": "dist"
+        },
+        "files": [
+            "package.json",
+            "index.html",
+            "main.css",
+            "katex.css",
+            "src/**",
+            "fonts/**",
+            "icons/**",
+            "icon.png",
+            "electron/**"
+        ],
+        "fileAssociations": [
+            {
+                "ext": "tikzcd",
+                "name": "tikz-cd diagram",
+                "mimeType": "text/x-tikzcd"
+            }
+        ],
+        "linux": {
+            "target": [
+                "AppImage"
+            ],
+            "executableName": "sagitta",
+            "icon": "icon.png",
+            "category": "Science",
+            "synopsis": "Keyboard-driven tikz-cd diagram editor",
+            "desktop": {
+                "entry": {
+                    "GenericName": "Commutative diagram editor",
+                    "Comment": "Draw tikz-cd diagrams and edit .tikzcd files",
+                    "Categories": "Science;Math;",
+                    "StartupWMClass": "sagitta"
+                }
+            }
+        },
+        "appImage": {
+            "artifactName": "Sagitta-${version}-${arch}.AppImage"
+        },
+        "toolsets": {
+            "appimage": "1.0.3"
+        }
+    }
+}

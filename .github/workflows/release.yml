@@ -1,0 +1,53 @@
+# Builds the AppImage for a tag v<version> and publishes it as a GitHub release, with the tag's
+# section of CHANGELOG.md as its notes. Pushing the tag is the whole of releasing; see
+# CONTRIBUTING.md.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The tag names the version package.json gives, which the app reports and the file carries.
+      - name: Check the tag against package.json
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "The tag is $GITHUB_REF_NAME, but package.json says $version." >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Take the release notes from CHANGELOG.md
+        run: |
+          awk -v heading="## $VERSION" '
+            $0 == heading { inside = 1; next }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "CHANGELOG.md has no section for $VERSION." >&2
+            exit 1
+          fi
+      - run: npm ci
+      - run: pip install pytest
+      - run: python3 -m pytest tests
+        env:
+          SAGITTA_ELECTRON: ${{ github.workspace }}/node_modules/.bin/electron
+      - run: npm run dist
+      - name: Publish the release
+        run: gh release create "$GITHUB_REF_NAME" dist/*.AppImage --title "Sagitta $VERSION" --notes-file notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}

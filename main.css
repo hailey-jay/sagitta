@@ -1,0 +1,1002 @@
+/* Root styles */
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+:root {
+    /* UI colours. */
+    --ui-black: hsl(0, 0%, 6%); /* Almost black. */
+    --ui-white: hsl(0, 0%, 96%); /* Almost white. */
+    --ui-accent: #f8a7b7; /* Accent pink. */
+    --ui-secondary: #a7c8f8; /* Secondary accent blue: prompts, hints, and values. */
+
+    --ui-background: transparent;
+    --ui-border: hsla(0, 0%, 100%, 0.2);
+    --ui-rule: hsla(0, 0%, 100%, 0.1); /* The faint lines between the key list's cells. */
+    --ui-hover: hsla(0, 0%, 100%, 0.1);
+    --ui-active: hsla(0, 0%, 100%, 0.2);
+    --ui-focus: var(--ui-accent);
+    --ui-text: hsla(0, 0%, 100%, 0.6);
+    --ui-error: hsl(0, 50%, 50%);
+    --ui-warning: hsl(50, 100%, 70%);
+
+    /* The canvas: its background, the grid, and the ink that the default colour (black) is
+       drawn in. Every other colour is drawn exactly. */
+    --canvas: white;
+    --grid: #eee;
+    --ink: black;
+    /* A faint wash, and faint text, of the ink. */
+    --ink-faint: hsla(0, 0%, 0%, 0.1);
+    --ink-text: hsla(0, 0%, 0%, 0.4);
+
+    /* Cell states. */
+    --cell-hover: hsla(0, 0%, 0%, 0.1);
+    --cell-selected: hsla(0, 0%, 0%, 0.2);
+    --cell-source: hsla(0, 0%, 0%, 0.2);
+    --cell-target: hsla(0, 0%, 0%, 0.2);
+
+    /* The height of the mode line along the bottom of the window (0 when it is hidden). */
+    --mode-line-height: 24px;
+}
+
+/* Dark mode (`:dark-mode`): a grey canvas, with the default colour drawn in white. It changes only how
+   the diagram is shown, never the colours it holds or exports. */
+body.dark {
+    --canvas: #3c3c3c;
+    --grid: #484848;
+    --ink: white;
+    --ink-faint: hsla(0, 0%, 100%, 0.1);
+    --ink-text: hsla(0, 0%, 100%, 0.4);
+
+    --cell-hover: hsla(0, 0%, 100%, 0.1);
+    --cell-selected: hsla(0, 0%, 100%, 0.2);
+    --cell-source: hsla(0, 0%, 100%, 0.2);
+    --cell-target: hsla(0, 0%, 100%, 0.2);
+}
+
+/* Arrows draw in their colour's exact `hsla`, as SVG attributes, which these override for black
+   alone. Masks keep theirs. */
+body.dark svg [stroke="hsla(0, 0%, 0%, 1)"]:not(mask *) {
+    stroke: var(--ink);
+}
+body.dark svg [fill="hsla(0, 0%, 0%, 1)"]:not(mask *) {
+    fill: var(--ink);
+}
+
+/* The highlight behind a hovered or selected arrow. */
+body.dark path.arrow-background {
+    stroke: var(--ink);
+}
+body.dark circle.arrow-background {
+    fill: var(--ink);
+}
+
+body {
+    position: absolute;
+    width: 100%; height: 100%;
+    margin: 0;
+    overflow: hidden;
+
+    background: var(--canvas);
+
+    font-family: Arial, sans-serif;
+
+    touch-action: none;
+    user-select: none;
+}
+
+kbd {
+    white-space: pre;
+}
+
+/* The canvas of cells */
+
+.container {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+}
+
+.canvas {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform-origin: top left;
+}
+
+.ui.pan .container {
+    cursor: grab;
+}
+
+.ui.pan .container:active {
+    cursor: grabbing;
+}
+
+/* Grid interaction */
+
+.grid {
+    position: fixed;
+    pointer-events: none;
+    z-index: -100;
+}
+
+.grid.hidden {
+    display: none;
+}
+
+.focus-point {
+    display: block;
+    position: absolute;
+    margin-left: 1px; margin-top: 1px;
+    width: 126px; height: 126px;
+
+    background: hsla(0, 0%, 0%, 0);
+
+    text-align: center;
+    font: 16px Arial, sans-serif;
+    color: var(--ink-text);
+}
+
+.focus-point.revealed {
+    background: var(--ink-faint);
+}
+
+.focus-point.focused {
+    border: var(--ui-focus) 4px solid;
+    border-radius: 0px;
+}
+
+.focus-point.smooth {
+    transition: left 0.1s, top 0.1s, width 0.1s, height 0.1s, padding-top 0.1s;
+}
+
+.focus-point::before {
+    visibility: hidden;
+    position: relative;
+    top: -8px;
+}
+
+.focus-point.active::before {
+    content: "Add edge";
+}
+
+.focus-point.revealed::before {
+    visibility: visible;
+}
+
+/* Vertices */
+
+.vertex {
+    position: absolute;
+}
+
+.ui.default .vertex {
+    cursor: move;
+}
+
+.vertex .content {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+
+    border-radius: 16px;
+
+    text-align: center;
+}
+
+.grid:not(.hidden) + .container .vertex.empty:not(.selected) .content:not(:hover) {
+    border: var(--cell-hover) 2px solid;
+}
+
+.ui.default .vertex .content {
+    cursor: default;
+}
+
+/* This is so explicit because of the CSS specificity rules. */
+.ui.default .vertex:not(.selected):not(.source):not(.target) .content:hover,
+.ui.command .vertex:not(.selected):not(.source):not(.target) .content:hover {
+    background: var(--cell-hover);
+}
+
+.vertex.source .content {
+    background: var(--cell-source);
+}
+
+.vertex.target .content {
+    background: var(--cell-target);
+}
+
+.vertex.selected .content {
+    background: var(--cell-selected);
+}
+
+/* Labels in the default colour have no colour of their own (see `Cell.initialise`). */
+.label {
+    color: var(--ink);
+    display: block;
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+
+    text-align: center;
+    font-family: inherit;
+    /* The `ui.label_size` setting (see `UI.initialise`). */
+    font-size: var(--label-size, 26px);
+    white-space: nowrap;
+
+    pointer-events: none;
+    user-select: none;
+}
+
+/* The overlay edge drawn while connecting cells. */
+.overlay, .overlay .arrow-background  {
+    pointer-events: none !important;
+}
+
+/* The minibuffer: the label input, and the search and command prompts, in a line just above the mode
+line. It is only visible while focused. */
+.label-input-container {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: var(--mode-line-height);
+    height: 32px;
+    z-index: 150;
+
+    background: var(--ui-black);
+
+    color: var(--ui-white);
+
+    transition: opacity 0.1s;
+}
+
+.label-input-container:not(:focus-within),
+.label-input-container.hidden {
+    opacity: 0;
+
+    pointer-events: none;
+}
+
+.ui.connect .label-input-container {
+    pointer-events: none;
+}
+
+.label-input {
+    width: 100%; height: 32px;
+    padding: 4px 6px;
+    padding-right: calc(24px + 6px);
+
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    outline: none;
+
+    font-family: monospace;
+    font-size: 14pt;
+    color: inherit;
+    text-align: left;
+}
+
+.label-input:hover:not(:disabled):not(:focus) {
+    background: hsla(0, 0%, 15%, 0.9);
+}
+
+.label-input:focus {
+    width: calc(100% - 80px);
+}
+
+/* The prompt: "label" while editing, or the kind of prompt. */
+.input-mode {
+    display: inline-block;
+    vertical-align: bottom;
+    width: 80px; height: 32px;
+    line-height: 32px;
+
+    background: var(--ui-accent);
+
+    font-family: monospace;
+    font-size: 12pt;
+    color: var(--ui-black);
+    text-align: center;
+}
+
+.ui:not(.command) .input-mode::before {
+    content: "label";
+}
+
+.command .input-mode {
+    background: var(--ui-secondary);
+}
+
+.command .label-input:focus {
+    /* Make `shadow-flash` the prompt's colour. */
+    --ui-accent: var(--ui-secondary);
+}
+
+/* The command line's completions, listed above it. Clicking one inserts it. */
+.prompt-completions {
+    position: absolute;
+    left: 0; right: 0; bottom: 100%;
+    max-height: 40vh;
+    padding: 8px;
+    overflow-y: auto;
+
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 2px 12px;
+
+    background: var(--ui-black);
+    border-bottom: var(--ui-border) solid 1px;
+
+    font-family: monospace;
+    font-size: 11pt;
+}
+
+.prompt-completions.hidden {
+    display: none;
+}
+
+.prompt-completions span {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 6px;
+
+    border-radius: 4px;
+
+    cursor: pointer;
+}
+
+.prompt-completions span:hover {
+    background: var(--ui-hover);
+}
+
+.prompt-completions span.current {
+    background: var(--ui-secondary);
+
+    color: var(--ui-black);
+}
+
+.prompt-completions kbd {
+    margin-left: 12px;
+
+    opacity: 0.5;
+}
+
+/* Cells matching the `/` search. */
+.cell.search-match .label {
+    outline: 2px solid var(--ui-secondary);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.label-input::selection {
+    background-color: white;
+}
+
+.label-input-container .colour-indicator {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    width: 24px;
+    transform: translateY(-50%);
+    border-radius: 4px;
+}
+
+.command .label-input-container .colour-indicator {
+    display: none;
+}
+
+input[type="text"].flash {
+    animation: shadow-flash 0.2s;
+}
+
+@keyframes shadow-flash {
+    from {
+        box-shadow: 0 0 0 4px var(--ui-accent);
+    }
+
+    to {
+        box-shadow: 0 0 0 var(--ui-accent);
+    }
+}
+
+.slider:not(.disabled):not(.focused) .thumb.hover,
+.slider.symmetric:not(.disabled):not(.focused):hover .thumb,
+.linked-sliders.linked:hover .thumb
+{
+    background: hsl(0, 0%, 20%);
+}
+
+.slider:not(.disabled):not(.focused) .thumb.active,
+.slider.symmetric:not(.disabled):not(.focused).active .thumb,
+
+kbd.hint {
+    position: absolute;
+    min-width: 20px;
+    padding: 2px 4px;
+
+    background: var(--ui-secondary);
+    border-radius: 2px;
+
+    color: var(--ui-black);
+    text-align: center;
+
+    pointer-events: none;
+}
+
+.colour-indicator {
+    display: inline-block;
+    vertical-align: middle;
+    position: relative;
+    width: 48px;
+    height: 24px;
+
+    border: var(--ui-border) solid 1px;
+    border-radius: 2px;
+
+    cursor: pointer;
+}
+
+/* Highlight the hints when their codes are (partially) typed. */
+kbd.hint.focused, kbd.hint .focused {
+    color: var(--ui-white);
+}
+
+.ui:not(.command).show-queue kbd.hint.queue.next {
+    background: var(--ui-white);
+    border: var(--ui-accent) 1px solid;
+
+    color: var(--ui-accent);
+}
+
+/* Cells' codes are shown while typing one (after `/`), and, while cycling the queue, the hint of
+   the queued cell Tab goes to next. */
+.ui:not(.command):not(.show-queue) kbd.hint.queue,
+.ui:not(.command) kbd.hint.queue:not(.next) {
+    display: none;
+}
+
+kbd.hint:not(.queue) {
+    display: none;
+}
+
+.ui.command .cell kbd.hint {
+    display: block;
+}
+
+.vertex kbd.hint {
+    left: 50%; top: 0;
+    transform: translateX(-50%);
+}
+
+.arrow kbd {
+    z-index: 10;
+    transform: translate(-50%, -50%);
+}
+
+.ui.command kbd.hint:empty::after,
+.cell kbd.hint:empty:not(.queue)::after,
+.ui:not(.show-queue) kbd.hint:empty::after {
+    content: attr(data-code);
+}
+
+/* When cells are queued, we can press Tab to select the next. */
+.ui:not(.command).show-queue .cell kbd.queue.next.hint::before {
+    content: "⇥";
+}
+
+/* The flash of a button triggered from the keyboard. */
+
+button.flash {
+    animation: background-flash 0.4s ease-in;
+}
+
+@keyframes background-flash {
+    from {
+        background: var(--ui-accent);
+    }
+}
+
+label input[type="checkbox"] {
+    margin-top: -1px;
+    margin-right: 6pt;
+    width: 12pt;
+    height: 12pt;
+    vertical-align: middle;
+
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--ui-white);
+    border-radius: 2px;
+    outline: none;
+}
+
+label input[type="checkbox"]:hover {
+    background: hsl(0, 0%, 80%);
+}
+
+label input[type="checkbox"]:checked {
+    background: var(--ui-focus);
+
+    text-align: center;
+}
+
+label input[type="checkbox"]:checked::before {
+    content: "✓";
+
+    color: var(--ui-black);
+}
+
+/* Arrows */
+
+.arrow > svg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.arrow.invalid, .arrow .invalid {
+    display: none;
+}
+
+.arrow > svg:first-child {
+    z-index: 1;
+}
+
+.arrow > svg:nth-child(2) {
+    z-index: 4;
+}
+
+.arrow:not(.reconnecting) > svg:first-child > .arrow-background {
+    pointer-events: stroke;
+}
+
+.arrow:not(.target):not(.selected) > svg:first-child:not(:hover) > .arrow-background,
+.ui.connect .cell:not(.target):not(.selected) > svg:first-child:hover > .arrow-background,
+.ui.pointer-move .cell:not(.selected) > svg:first-child:hover > .arrow-background {
+    opacity: 0;
+}
+
+.arrow:not(.target):not(.selected) > svg:first-child:hover {
+    opacity: 0.1 !important;
+}
+
+.arrow-endpoint {
+    display: none;
+}
+
+.ui.default .arrow:hover .arrow-endpoint, .ui.default .arrow.selected .arrow-endpoint {
+    display: block;
+}
+
+.arrow-endpoint {
+    position: absolute;
+    z-index: 3;
+
+    background: var(--canvas);
+}
+
+.arrow-endpoint:hover {
+    border: var(--ui-accent) 2px solid;
+}
+
+/* Arrow labels */
+
+.arrow .katex, .arrow .katex-error {
+    font-size: 1em;
+}
+
+/* The mode line */
+
+.mode-line {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: var(--mode-line-height);
+    z-index: 150;
+
+    display: flex;
+    align-items: stretch;
+
+    background: var(--ui-black);
+
+    font: 12px monospace;
+    line-height: var(--mode-line-height);
+    color: var(--ui-white);
+    white-space: nowrap;
+}
+
+.hide-mode-line {
+    --mode-line-height: 0px;
+}
+
+.hide-mode-line .mode-line {
+    display: none;
+}
+
+.mode-line button {
+    padding: 0 8px;
+
+    background: transparent;
+    border: none;
+    outline: none;
+
+    font: inherit;
+    color: inherit;
+
+    cursor: pointer;
+}
+
+.mode-line button:hover:not(:disabled) {
+    background: var(--ui-hover);
+}
+
+.mode-line button:disabled {
+    opacity: 0.35;
+
+    cursor: default;
+}
+
+.mode-line .mode {
+    min-width: 64px;
+    padding: 0 10px;
+
+    background: hsl(0, 0%, 22%);
+
+    text-align: center;
+}
+
+.mode-line[data-mode="layer"] .mode {
+    background: var(--ui-accent);
+
+    color: var(--ui-black);
+}
+
+.mode-line[data-mode="prompt"] .mode {
+    background: var(--ui-secondary);
+}
+
+.mode-line[data-mode="other"] .mode {
+    background: var(--ui-accent);
+
+    color: var(--ui-black);
+}
+
+.mode-line .mode .detail {
+    margin-left: 8px;
+}
+
+.mode-line .file {
+    padding: 0 10px;
+
+    color: var(--ui-secondary);
+}
+
+.mode-line .file.dirty {
+    color: var(--ui-accent);
+}
+
+.mode-line .target {
+    max-width: 40vw;
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+}
+
+.mode-line .arrow {
+    max-width: 40vw;
+    padding: 0 8px;
+    overflow: hidden;
+
+    color: var(--ui-secondary);
+    text-overflow: ellipsis;
+}
+
+.mode-line .arrow:empty {
+    display: none;
+}
+
+.mode-line .queue {
+    padding: 0 8px;
+
+    color: var(--ui-accent);
+}
+
+.mode-line .message {
+    min-width: 0;
+    padding: 0 8px;
+    overflow: hidden;
+
+    color: var(--ui-secondary);
+    text-overflow: ellipsis;
+}
+
+/* Errors stay until dismissed (by Escape, or a click). */
+.mode-line .message.error {
+    border-radius: 2px;
+
+    background: var(--ui-error);
+    color: var(--ui-white);
+
+    cursor: pointer;
+}
+
+.mode-line .message:empty {
+    display: none;
+}
+
+.mode-line .fill {
+    flex: 1;
+}
+
+.mode-line .hint {
+    opacity: 0.7;
+}
+
+.mode-line kbd {
+    color: var(--ui-accent);
+}
+
+.mode-line .zoom {
+    display: flex;
+    margin: 0 8px;
+}
+
+.mode-line .zoom .level {
+    min-width: 56px;
+}
+
+.mode-line .menu {
+    padding: 0 12px;
+
+    font-size: 16px;
+}
+
+/* The command layer's hint, lit while the layer is active. */
+.mode-line .layer.active {
+    background: var(--ui-active);
+    opacity: 1;
+}
+
+/* The tips along the top while the diagram is empty. */
+.tip {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 140;
+
+    display: flex;
+    gap: 20px;
+    padding: 0 14px;
+
+    background: var(--ui-black);
+    border-radius: 0 0 4px 4px;
+
+    font: 12px monospace;
+    line-height: 22px;
+    color: var(--ui-text);
+    white-space: nowrap;
+
+    pointer-events: none;
+}
+
+.tip kbd {
+    color: var(--ui-accent);
+}
+
+.tip.hidden {
+    display: none;
+}
+
+/* The command layer's bindings, listed above the mode line while the layer is active. */
+
+.which-key {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: var(--mode-line-height);
+    z-index: 140;
+    padding: 12px 16px;
+
+    background: var(--ui-black);
+    border-bottom: var(--ui-border) solid 1px;
+
+    font: 12px monospace;
+    color: var(--ui-white);
+}
+
+/* One row per group: its title in a column on the left, then its bindings in a grid of equal
+   columns, each line its key, what it does, and what it is set to. */
+.which-key .main, .which-key .submenu {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.which-key .group {
+    position: relative;
+
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(32ch, 1fr));
+    padding-left: 150px;
+}
+
+.which-key.descriptive .group {
+    grid-template-columns: repeat(auto-fill, minmax(52ch, 1fr));
+}
+
+/* After the layouts above, which would otherwise override it. */
+.which-key.hidden, .which-key .hidden {
+    display: none;
+}
+
+.which-key h3 {
+    position: absolute;
+    top: 0; left: 0;
+    width: 150px;
+    margin: 0;
+    /* The height of a cell, borders included, so that the title sits level with its first row. */
+    line-height: 22px;
+
+    font-size: 11px;
+    font-weight: normal;
+    color: var(--ui-text);
+    text-transform: uppercase;
+}
+
+.which-key .entry {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    /* Each cell is outlined, and overlaps its neighbours by the width of the line, so that the
+       lines between cells are single. */
+    margin: 0 -1px -1px 0;
+    padding: 2px 8px;
+
+    border: var(--ui-rule) solid 1px;
+
+    line-height: 16px;
+}
+
+.which-key .entry kbd {
+    flex: none;
+    min-width: 4ch;
+
+    color: var(--ui-accent);
+}
+
+/* What the line does takes the room left, so that the values and buttons line up on the right. */
+.which-key .entry kbd + span, .which-key .entry i + span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.which-key.descriptive .entry kbd + span {
+    white-space: normal;
+}
+
+/* The chord also bound to a command layer binding. */
+.which-key .entry kbd.chord {
+    min-width: 0;
+
+    opacity: 0.6;
+}
+
+.which-key .entry kbd.chord:empty {
+    display: none;
+}
+
+/* The current value of what a binding changes, or the current option. */
+.which-key .entry .value {
+    flex: none;
+
+    color: var(--ui-secondary);
+}
+
+.which-key .entry .value:empty {
+    display: none;
+}
+
+/* A colour in the colour layer. */
+.which-key .entry i.swatch {
+    display: inline-block;
+    flex: none;
+    width: 10px; height: 10px;
+    align-self: center;
+
+    border: var(--ui-border) solid 1px;
+    border-radius: 2px;
+}
+
+.which-key .entry.current span:first-of-type::after {
+    content: " ●";
+
+    color: var(--ui-secondary);
+}
+
+/* A line whose key a click presses. */
+.which-key .entry.clickable {
+    cursor: pointer;
+}
+
+.which-key .entry.clickable:hover {
+    background: var(--ui-hover);
+}
+
+/* The sliders' step buttons. */
+.which-key .entry .steps {
+    flex: none;
+}
+
+.which-key .entry .steps button {
+    width: 16px;
+    padding: 0;
+
+    background: transparent;
+    border: var(--ui-border) solid 1px;
+    border-radius: 2px;
+
+    font: inherit;
+    line-height: 12px;
+    color: var(--ui-white);
+
+    cursor: pointer;
+}
+
+.which-key .entry .steps button:hover {
+    background: var(--ui-active);
+}
+
+.which-key .entry .steps button + button {
+    margin-left: 2px;
+}
+
+.which-key.no-edge .needs-edge {
+    display: none;
+}
+
+.which-key.no-selection .needs-selection {
+    opacity: 0.3;
+}
+
+/* The compact list: each line only its key and value (what it does shows on hovering), packed
+   along its group's row, under a narrower title. Lists other than the command layer's keep their
+   descriptions, which they need. */
+.which-key.compact .main .group {
+    display: flex;
+    flex-wrap: wrap;
+    padding-left: 120px;
+}
+
+/* After the layout above, which would otherwise override it. */
+.which-key.compact.no-edge .main .needs-edge {
+    display: none;
+}
+
+.which-key.compact .main h3 {
+    width: 120px;
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.which-key.compact .main .entry kbd {
+    min-width: 2ch;
+}
+
+.which-key.compact .main .entry kbd:first-child + span, .which-key.compact .main .entry kbd.chord {
+    display: none;
+}
+
+.which-key.compact .main .entry.current kbd::after {
+    content: " ●";
+
+    color: var(--ui-secondary);
+}

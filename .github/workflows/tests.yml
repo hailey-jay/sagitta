@@ -1,0 +1,25 @@
+# Runs the test suite headless on a local Electron from npm.
+name: tests
+
+on:
+  push:
+  pull_request:
+  # A button on the Actions tab, to rerun the suite by hand.
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - run: pip install pytest
+      - run: python3 -m pytest tests
+        env:
+          SAGITTA_ELECTRON: ${{ github.workspace }}/node_modules/.bin/electron
