@@ -1,10 +1,10 @@
 # Sagitta
 
-A keyboard-driven editor for tikz-cd commutative diagrams, grown from [quiver](https://q.uiver.app) and run as a desktop app on Electron.
+Sagitta is a keyboard-driven editor for tikz-cd commutative diagrams, grown from my personal tweaks to [quiver](https://q.uiver.app) and run as a desktop app on Electron.
 It edits `.tikzcd` files that a paper `\input`s directly.
 
 Status: Sagitta runs only on Linux for now.
-It is in daily use there, but the file format and keys may still change before 1.0.
+I use it daily, but the file format and keys may still change before 1.0.
 
 ## Install
 
@@ -50,7 +50,6 @@ It also renders `sagitta.desktop` and registers `text/x-tikzcd`, so `.tikzcd` fi
 `--docs` also links the manual into a directory of your choice.
 
 If your distribution packages Electron 43 (`electron43` on Arch), the launcher uses that instead of the copy in `node_modules`, and you can skip `npm install`.
-The launcher looks at `$SAGITTA_ELECTRON` first, then `electron43` and `electron` on PATH, then the local copy.
 
 ## Usage
 
@@ -63,7 +62,7 @@ sagitta [--macros FILE] [--devtools] [DIAGRAM.tikzcd] [-- SWITCHES]
 
 Typing labels the cell under the cursor, spreadsheet-style.
 The `;` key opens the command layer, `:` the command line, and `C-/` the help, which lists every key.
-If you mean to put a `;` or `:` as the first character in a cell, `<ret>` focuses the text interface.
+If you mean to put a `;` or `:` as the first character in a cell, `RET` focuses the text interface.
 With a mouse, right-click or the `; commands` button opens the command layer, and clicking a line of its list runs it.
 `C-s` saves.
 
@@ -88,8 +87,8 @@ If not, copy [`quiver.sty`](https://github.com/varkor/quiver/blob/master/package
 
 A `.tikzcd` file is the export verbatim, so `\input{pullback.tikzcd}` typesets it, centred on its own line.
 Its first line, `%#q=...`, is a comment holding the diagram exactly.
-As Sagitta is a fork of quiver, this hash is the same.
-Navigating to `https://q.uiver.com/#q=...` yields the same diagram.
+Since Sagitta is a fork of quiver, this hash is the same.
+Navigating to `https://q.uiver.app/#q=...` yields the same diagram.
 Hand edits to the rest of the file still win: Sagitta reads the tikz-cd whenever that line no longer matches it.
 
 ## Documentation
@@ -103,7 +102,7 @@ Hand edits to the rest of the file still win: Sagitta reads the tikz-cd whenever
 ## AI use
 
 Sagitta was made with AI assistance.
-I used Anthropic's Claude (via Claude Code) to generate much of its code, tests, and documentation.
+I used Anthropic's Claude (via Claude Code) to generate code, tests, and documentation.
 quiver and KaTeX, which Sagitta builds on, are their authors' own work.
 As the author, I take full responsibility for Sagitta.
 I directed, reviewed, and tested all generated content carefully.
