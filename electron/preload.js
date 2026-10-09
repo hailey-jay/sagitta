@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("host", {
     resolve: invoke("resolve"),
     read: invoke("read"),
     write: invoke("write"),
+    config_dir: invoke("config_dir"),
     read_settings: invoke("read_settings"),
     read_keys: invoke("read_keys"),
     write_settings: invoke("write_settings"),

@@ -62,6 +62,7 @@ While the diagram is empty, a line of tips runs along the top.
 ## The keys file
 
 `~/.config/sagitta/keys`, if it exists, rebinds keys.
+On Windows the file is `%APPDATA%\sagitta\keys`.
 It is read at startup, and Sagitta never writes it.
 Each line names something, then its keys, which replace all of its defaults:
 
@@ -123,7 +124,8 @@ Any other command (Tab at `:` lists them) can be bound too, and its keys run it 
 
 ## Settings
 
-Settings live in `~/.config/sagitta/settings.json`, written with every default the first time a setting changes, so the file shows each setting there is.
+Settings live in `~/.config/sagitta/settings.json`, or in `%APPDATA%\sagitta\settings.json` on Windows.
+Sagitta writes the file with every default the first time a setting changes, so the file shows each setting there is.
 It can be edited by hand, and is read at startup.
 
 The settings layer (`C-,`, or the mode line's `⚙`) lists them, each on a key, and shows every change straight away.

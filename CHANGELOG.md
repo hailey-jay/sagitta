@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Runs on Windows, as a per-user installer that registers `.tikzcd`, or as a portable executable. Neither is signed, so SmartScreen warns the first time.
+- A windowed program on Windows has no console, so `--help` and `--version` open a dialog there.
+- Saving retries the rename over the diagram. Windows can refuse the rename for a moment while an indexer, a scanner, or a sync client holds the file open.
+- The `macros.tex` search stops at the home directory on Windows too. The same path can be spelt in more than one case there, and the old comparison missed it.
+- A complaint about `settings.json` or `keys` names the directory holding them, rather than always `~/.config/sagitta`.
 - `|` types itself instead of wrapping the label or bringing a closing `|`, since it is as often a restriction or "divides" as an absolute value. It still pairs after `\left`, and `\|` and `\lvert` still pair.
 
 ## 0.1.0

@@ -565,7 +565,7 @@ class UI {
 
     /// Report what was wrong with the settings and the keys files in the mode line: the first
     /// problem, and how many others there were. Each is logged as a warning, too.
-    report_problems() {
+    async report_problems() {
         const problems = [
             ...this.settings.problems.map((problem) => `settings.json: ${problem}`),
             ...this.keymap.problems.map((problem) => `keys, ${problem}`),
@@ -575,7 +575,10 @@ class UI {
         }
         if (problems.length > 0) {
             const more = problems.length > 1 ? ` (and ${problems.length - 1} more)` : "";
-            this.mode_line.error(`~/.config/sagitta/${problems[0]}${more}`);
+            // The shell knows where it keeps these files, and the path differs between
+            // platforms, so do not spell it here. The directory ends in the separator already.
+            const directory = await host.config_dir();
+            this.mode_line.error(`${directory}${problems[0]}${more}`);
         }
     }
 

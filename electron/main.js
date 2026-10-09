@@ -24,11 +24,28 @@ exist yet, or else an empty diagram. In the app, C-/ lists the keys.
   -- SWITCHES    pass the rest to Electron, as in -- --ozone-platform=wayland
 `;
 
+/// Whether what would go to the console has to go in a dialog instead. A packaged Windows app is a
+/// GUI binary, and one started from Explorer, a shortcut, or even a shell has no console attached,
+/// so writing to `process.stdout` prints nothing.
+const WINDOWED = process.platform === "win32" && !process.stdout.isTTY;
+
+/// Put `text` where the user will see it, then exit with `code`. Every caller is reporting and
+/// quitting, so this does not return.
+function report(text, code) {
+    if (WINDOWED) {
+        // `showErrorBox` is the one dialog Electron opens before `whenReady`, and so the only way
+        // to say anything this early.
+        dialog.showErrorBox("Sagitta", text);
+    } else {
+        (code === 0 ? process.stdout : process.stderr).write(text);
+    }
+    app.exit(code);
+    process.exit(code);
+}
+
 /// Print `message` and the way to the usage, and exit.
 function usage_error(message) {
-    process.stderr.write(`sagitta: ${message}; see sagitta --help\n`);
-    app.exit(2);
-    process.exit(2);
+    report(`sagitta: ${message}; see sagitta --help\n`, 2);
 }
 
 /// The command-line arguments, as `{ diagram, macros, devtools, switches, arguments }`, with paths
@@ -50,13 +67,9 @@ function parse_arguments() {
     for (let i = 0; i < argv.length; ++i) {
         const argument = argv[i];
         if (argument === "-h" || argument === "--help") {
-            process.stdout.write(USAGE);
-            app.exit(0);
-            process.exit(0);
+            report(USAGE, 0);
         } else if (argument === "--version") {
-            process.stdout.write(`sagitta ${app.getVersion()}\n`);
-            app.exit(0);
-            process.exit(0);
+            report(`sagitta ${app.getVersion()}\n`, 0);
         } else if (argument === "--macros") {
             if (i + 1 === argv.length) {
                 usage_error("--macros needs a file");
@@ -95,7 +108,8 @@ if (args.switches.length > 0) {
     app.exit(0);
 }
 
-// `app.getPath("userData")`, and so the settings file, is `~/.config/sagitta`.
+// `app.getPath("userData")`, and so the settings file, is `~/.config/sagitta` on Linux and
+// `%APPDATA%\sagitta` on Windows.
 app.setName("sagitta");
 
 // Dialogs offer these, diagrams first.
@@ -113,6 +127,29 @@ function read_file(file) {
             return null;
         }
         throw error;
+    }
+}
+
+/// Rename `temporary` over `target`. On Windows an indexer, an antivirus scanner, or a sync client
+/// can hold the target open for a moment, and the rename fails where on Linux it would succeed.
+/// Retry briefly, so that a save does not fail for something that passes on its own.
+function rename_over(temporary, target) {
+    const ATTEMPTS = 10;
+    const WAIT = 20;
+    for (let attempt = 1; ; ++attempt) {
+        try {
+            fs.renameSync(temporary, target);
+            return;
+        } catch (error) {
+            const transient = error.code === "EPERM" || error.code === "EBUSY"
+                || error.code === "EACCES";
+            if (!transient || attempt === ATTEMPTS) {
+                throw error;
+            }
+            // Saving is synchronous all the way to the page, so block. 20ms at a time stays
+            // below what the user would notice, and the whole wait is at most a fifth of a second.
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, WAIT);
+        }
     }
 }
 
@@ -142,7 +179,7 @@ function write_file(file, text) {
         } finally {
             fs.closeSync(descriptor);
         }
-        fs.renameSync(temporary, target);
+        rename_over(temporary, target);
     } catch (error) {
         fs.rmSync(temporary, { force: true });
         throw error;
@@ -201,6 +238,10 @@ app.whenReady().then(() => {
         read: read_file,
         write: write_file,
         // The settings, as the text of `settings.json`, or `null` before it has been written.
+        // Where the settings and keys files live, for the page to name in a message: it differs
+        // between Linux and Windows. It ends in the platform's separator, so that the page can put
+        // a file name after it without choosing one.
+        config_dir: () => app.getPath("userData") + path.sep,
         read_settings: () => read_file(settings),
         // The keys file, which only the user writes, or `null` if there is none.
         read_keys: () => read_file(path.join(app.getPath("userData"), "keys")),
@@ -214,8 +255,14 @@ app.whenReady().then(() => {
         // ends at the enclosing git repository's root, and never reaches the home directory, so
         // that a stray `~/macros.tex` is not taken up by every diagram outside a project.
         find_up: (directory, name) => {
+            // Windows spells one directory several ways, and they differ in case. Compare paths
+            // the way the platform does, or the search takes up a `macros.tex` above the home
+            // directory.
+            const same = (a, b) => process.platform === "win32"
+                ? a.toLowerCase() === b.toLowerCase()
+                : a === b;
             const home = os.homedir();
-            for (let current = directory; current !== home; current = path.dirname(current)) {
+            for (let current = directory; !same(current, home); current = path.dirname(current)) {
                 const candidate = path.join(current, name);
                 if (fs.existsSync(candidate)) {
                     return candidate;
