@@ -32,10 +32,11 @@ The macros reload whenever the file changes.
 
 ## Keys
 
-Typing edits the label of the targeted cell, spreadsheet-style, except that `(`, `[`, `{`, and `|` wrap the label (or the selected part of it) instead of replacing it.
+Typing edits the label of the targeted cell, spreadsheet-style, except that `(`, `[`, and `{` wrap the label (or the selected part of it) instead of replacing it.
 Elsewhere they bring their closing delimiter, as in most editors, unless it is already next; typing the closing one steps over it, and Backspace in an empty pair deletes both.
 `\{` and `\|` pair the same way, and `\langle`, `\lvert`, `\lVert`, `\lceil`, and `\lfloor` once something other than a letter follows them.
 After `\left`, the closing delimiter comes with `\right`.
+`|` pairs only there, since it is as often a restriction or "divides" as an absolute value: elsewhere it types itself, and `\|` or `\lvert` gives a pair.
 The commands live one key away:
 
 - `;` the command layer: arrow styles and label alignment (a key, then the choice's own key, as listed), sliders (a key, then a number and RET), and presets.
