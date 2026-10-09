@@ -1,10 +1,11 @@
-# Runs the test suite headless on a local Electron from npm.
+# Runs the test suite headless on a local Electron from npm, and packages Sagitta for Windows when
+# asked by hand. The suite itself is Linux-only: it drives Electron with `--ozone-platform=headless`.
 name: tests
 
 on:
   push:
   pull_request:
-  # A button on the Actions tab, to rerun the suite by hand.
+  # A button on the Actions tab, to rerun the suite and package for Windows by hand.
   workflow_dispatch:
 
 jobs:
@@ -23,3 +24,25 @@ jobs:
       - run: python3 -m pytest tests
         env:
           SAGITTA_ELECTRON: ${{ github.workspace }}/node_modules/.bin/electron
+
+  # The Windows packages, built the way a release builds them, so that a break in the packaging
+  # shows up before a tag rather than during one. Nothing here runs the suite: it needs Linux.
+  # This job runs only from the button on the Actions tab, since each run downloads Electron and
+  # writes two packages of about 100MB.
+  package-windows:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run dist:win
+      # The packages keep for a week, to install and try on a real Windows machine.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*.exe
+          if-no-files-found: error
+          retention-days: 7
