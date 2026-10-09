@@ -3,7 +3,7 @@
 Sagitta is a keyboard-driven editor for tikz-cd commutative diagrams, grown from my personal tweaks to [quiver](https://q.uiver.app) and run as a desktop app on Electron.
 It edits `.tikzcd` files that a paper `\input`s directly.
 
-Status: Sagitta runs only on Linux for now.
+Status: Sagitta runs only on Linux for now; Windows support is tracked in [#2](https://github.com/hailey-jay/sagitta/issues/2).
 I use it daily, but the file format and keys may still change before 1.0.
 
 ## Install
