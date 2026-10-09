@@ -11,7 +11,8 @@
     "scripts": {
         "start": "./sagitta",
         "test": "python3 -m pytest tests",
-        "dist": "electron-builder --linux AppImage --publish never"
+        "dist": "electron-builder --linux AppImage --publish never",
+        "dist:win": "electron-builder --win nsis portable --publish never"
     },
     "devDependencies": {
         "electron": "^43.7.7",
@@ -58,6 +59,25 @@
         },
         "appImage": {
             "artifactName": "Sagitta-${version}-${arch}.AppImage"
+        },
+        "win": {
+            "target": [
+                "nsis",
+                "portable"
+            ],
+            "executableName": "sagitta",
+            "icon": "icon.png"
+        },
+        "nsis": {
+            "artifactName": "Sagitta-${version}-${arch}-setup.${ext}",
+            "shortcutName": "Sagitta",
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "perMachine": false
+        },
+        "portable": {
+            "artifactName": "Sagitta-${version}-${arch}-portable.${ext}",
+            "requestExecutionLevel": "user"
         },
         "toolsets": {
             "appimage": "1.0.3"

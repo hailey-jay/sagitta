@@ -1,6 +1,9 @@
-# Builds the AppImage for a tag v<version> and publishes it as a GitHub release, with the tag's
+# Builds the packages for a tag v<version> and publishes them as a GitHub release, with the tag's
 # section of CHANGELOG.md as its notes. Pushing the tag is the whole of releasing; see
 # CONTRIBUTING.md.
+#
+# The AppImage is built on Linux and the Windows packages on Windows, each on its own runner.
+# Neither then needs Wine, and the native tools write the icon and the version metadata.
 name: release
 
 on:
@@ -11,7 +14,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,6 +24,39 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: npm ci
+      - run: pip install pytest
+      # The suite is Linux-only: it drives Electron with `--ozone-platform=headless`.
+      - run: python3 -m pytest tests
+        env:
+          SAGITTA_ELECTRON: ${{ github.workspace }}/node_modules/.bin/electron
+      - run: npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: dist/*.AppImage
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*.exe
+          if-no-files-found: error
+
+  release:
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       # The tag names the version package.json gives, which the app reports and the file carries.
       - name: Check the tag against package.json
         run: |
@@ -41,13 +77,14 @@ jobs:
             echo "CHANGELOG.md has no section for $VERSION." >&2
             exit 1
           fi
-      - run: npm ci
-      - run: pip install pytest
-      - run: python3 -m pytest tests
-        env:
-          SAGITTA_ELECTRON: ${{ github.workspace }}/node_modules/.bin/electron
-      - run: npm run dist
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
       - name: Publish the release
-        run: gh release create "$GITHUB_REF_NAME" dist/*.AppImage --title "Sagitta $VERSION" --notes-file notes.md
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            packages/*.AppImage packages/*.exe \
+            --title "Sagitta $VERSION" --notes-file notes.md
         env:
           GH_TOKEN: ${{ github.token }}

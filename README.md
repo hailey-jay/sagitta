@@ -3,8 +3,9 @@
 Sagitta is a keyboard-driven editor for tikz-cd commutative diagrams, grown from my personal tweaks to [quiver](https://q.uiver.app) and run as a desktop app on Electron.
 It edits `.tikzcd` files that a paper `\input`s directly.
 
-Status: Sagitta runs only on Linux for now; Windows support is tracked in [#2](https://github.com/hailey-jay/sagitta/issues/2).
-I use it daily, but the file format and keys may still change before 1.0.
+Status: I use Sagitta daily on Linux.
+The Windows packages are new, and less tested than the Linux ones.
+The file format and keys may still change before 1.0.
 
 ## Install
 
@@ -26,6 +27,23 @@ On Ubuntu 24.04 and later, AppArmor stops Chromium's sandbox inside an AppImage,
 Run it with `-- --no-sandbox` to start it without the sandbox.
 Sagitta loads only its own pages, so the sandbox guards little here.
 
+### Windows
+
+Download either package for Windows from the [latest release](https://github.com/hailey-jay/sagitta/releases/latest):
+
+- `Sagitta-<version>-x64-setup.exe` installs for the current user, with no administrator prompt.
+  It adds a Start menu entry and opens `.tikzcd` files from Explorer.
+  Uninstall it from Settings, under Installed apps.
+- `Sagitta-<version>-x64-portable.exe` runs without installing and leaves nothing behind except its settings.
+  It registers nothing, so `.tikzcd` files do not open in it from Explorer.
+
+Both are unsigned, so SmartScreen says "Windows protected your PC" the first time.
+Choose "More info", then "Run anyway".
+
+Settings and the keys file live in `%APPDATA%\sagitta`, rather than `~/.config/sagitta`.
+
+A windowed program on Windows has no console, so `--help` and `--version` open a dialog instead of printing.
+
 ### From source
 
 You need git and Node.js (for npm).
@@ -44,6 +62,9 @@ To put `sagitta` on PATH and open `.tikzcd` files from the file manager:
 ```
 ./install.sh [--bin=DIR] [--docs=DIR] [--dry-run]
 ```
+
+`install.sh` is for Linux.
+On Windows, use the installer above.
 
 This links the launcher into `--bin` (default `~/.local/bin`) and the icon into the hicolor theme.
 It also renders `sagitta.desktop` and registers `text/x-tikzcd`, so `.tikzcd` files open in Sagitta.
