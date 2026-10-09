@@ -1,7 +1,7 @@
 {
     "name": "sagitta",
     "productName": "Sagitta",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "A keyboard-driven commutative diagram editor for .tikzcd files, grown from quiver",
     "license": "GPL-3.0-or-later",
     "author": "Hailey Jay Garcia <504haileyjay@gmail.com>",
