@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `|` types itself instead of wrapping the label or bringing a closing `|`, since it is as often a restriction or "divides" as an absolute value. It still pairs after `\left`, and `\|` and `\lvert` still pair.
+
 ## 0.1.0
 
 First public release, for Linux only, as an AppImage or from source.

@@ -299,7 +299,6 @@ def test_a_nudge_bends_the_arrow_beside_a_loop(sagitta, home):
     ([["Escape"], ["Enter"], ["Left", ["shift"]], ["["], ["{"], ["Enter"]], "\t{[{A}]} & B"),
     ([["Escape"], ["Backspace"], ["Escape"], ["("], ["x"], ["Enter"]], "\t{(x)} & B"),
     ([["Escape"], ["Enter"], ["("], ["x"], [")"], ["Enter"]], "\t{A(x)} & B"),
-    ([["Escape"], ["Enter"], ["|"], ["x"], ["|"], ["Enter"]], "\t{A|x|} & B"),
     # Not before its closing one; and deleting an empty pair deletes both.
     ([["Escape"], ["Enter"], ["("], ["("], ["Enter"]], "\t{A(()} & B"),
     ([["Escape"], ["Enter"], ["["], ["Backspace"], ["Enter"]], "\tA & B"),
@@ -329,6 +328,12 @@ def _typed(*keys):
     (_typed("\\", *"left(x)y"), "\t{A\\left(x\\right)y} & B"),
     (_typed("\\", *"left.x"), "\t{A\\left.x\\right.} & B"),
     (_typed("\\", *"left(", "Backspace"), "\t{A\\left} & B"),
+    (_typed("\\", *"left|x|"), "\t{A\\left|x\\right|} & B"),
+    (_typed("\\", "|", "x"), "\t{A\\|x\\|} & B"),
+    # `|` alone is as often a restriction as a delimiter, so it neither wraps nor pairs.
+    ([["Escape"], ["|"], ["Enter"]], "\t{|} & B"),
+    (_typed("|", "U"), "\t{A|U} & B"),
+    (_typed("|", "|", "Backspace"), "\t{A|} & B"),
     # `\(` and `\[` are left alone, as is a delimiter after a line break.
     (_typed("\\", "("), "\t{A\\(} & B"),
     (_typed("\\", "\\", "{"), "\\begin{array}{c} A\\\\{} \\end{array} & B"),

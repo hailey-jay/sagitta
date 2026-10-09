@@ -5,7 +5,11 @@ const Delimiters = {};
 
 /// The opening delimiters that wrap a label, or the selected part of one, rather than replacing
 /// it, and otherwise bring the delimiter they close with (see `UI.create_label_input`).
-Delimiters.PLAIN = { "(": ")", "[": "]", "{": "}", "|": "|" };
+Delimiters.PLAIN = { "(": ")", "[": "]", "{": "}" };
+
+/// The delimiters that pair only after `\left`: `.`, and `|`, which in a label is as often a
+/// restriction or "divides" as an absolute value.
+Delimiters.LEFT = { ".": ".", "|": "|" };
 
 /// `text` between the delimiter `open` and its closing one.
 Delimiters.wrap = (text, open) => `${open}${text}${Delimiters.PLAIN[open]}`;
@@ -23,16 +27,17 @@ Delimiters.LATEX = {
 /// itself. `data` is `null` for deleting backwards.
 /// - An opening delimiter typed over selected text wraps it, leaving it selected, and otherwise
 ///   brings its closing one, unless that is already next. After `\left`, the closing one comes
-///   with `\right`, and `\left.` brings `\right.`.
+///   with `\right`. `.` and `|` pair only after `\left`, so `\left.` brings `\right.`, and `|`
+///   alone types itself.
 /// - A closing delimiter steps over the same one next (or the same one after `\right`, whether
 ///   `\right` is typed or not), taking the part of it already typed.
 /// - Deleting backwards from inside an empty pair deletes both.
 Delimiters.type = (value, start, end, data) => {
-    // The pairs, longest first, with `.`, which pairs only after `\left`.
-    const pairs = [
-        ...Object.entries({ ...Delimiters.PLAIN, ...Delimiters.LATEX }),
-        [".", "."],
-    ].sort(([a], [b]) => b.length - a.length);
+    // The pairs, longest first, with those that pair only after `\left`.
+    const pairs = Object.entries({ ...Delimiters.PLAIN, ...Delimiters.LATEX, ...Delimiters.LEFT })
+        .sort(([a], [b]) => b.length - a.length);
+    // Whether `close` closes a pair only after `\right`.
+    const after_right = (close) => Object.hasOwn(Delimiters.LEFT, close);
     // Whether `text` ends in a backslash that escapes whatever follows.
     const escaping = (text) => /(^|[^\\])(\\\\)*\\$/.test(text);
     // `close`, or `\right` and `close` if `text`, which comes before the opening delimiter, ends
@@ -55,7 +60,7 @@ Delimiters.type = (value, start, end, data) => {
                 continue;
             }
             const next = [closing(preceding, close), close]
-                .find((next) => next !== "." && after.startsWith(next));
+                .find((next) => !after_right(next) && after.startsWith(next));
             if (next !== undefined) {
                 return {
                     value: preceding + after.slice(next.length),
@@ -73,7 +78,7 @@ Delimiters.type = (value, start, end, data) => {
         const steps = pairs.flatMap(([, close]) => [
             [`\\right${close}`, `\\right${close}`],
             [`\\right${close}`, close],
-            ...close !== "." ? [[close, close]] : [],
+            ...!after_right(close) ? [[close, close]] : [],
         ]).sort(([a, x], [b, y]) => y.length - x.length || b.length - a.length);
         const step = steps.find(([close, typed]) => typed.endsWith(data)
             && before.endsWith(typed.slice(0, -1)) && after.startsWith(close));
@@ -88,17 +93,16 @@ Delimiters.type = (value, start, end, data) => {
         }
     }
 
-    if (Object.hasOwn(Delimiters.PLAIN, data) || data === ".") {
+    if (Object.hasOwn(Delimiters.PLAIN, data) || Object.hasOwn(Delimiters.LEFT, data)) {
         const escaped = escaping(before);
         const open = escaped ? `\\${data}` : data;
-        const partner = open === "."
-            ? "." : Delimiters.PLAIN[open] ?? Delimiters.LATEX[open];
+        const partner = Delimiters.LEFT[open] ?? Delimiters.PLAIN[open] ?? Delimiters.LATEX[open];
         if (partner === undefined) {
             return null;
         }
         const close = closing(escaped ? before.slice(0, -1) : before, partner);
-        // `.` is a delimiter only after `\left`.
-        if (close === "." || start === end && after.startsWith(close)) {
+        // `.` and `|` are delimiters only after `\left`.
+        if (after_right(close) || start === end && after.startsWith(close)) {
             return null;
         }
         return insert(data, close);
