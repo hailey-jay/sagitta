@@ -62,11 +62,14 @@ const pending = [];
     const parsed = parse(bare);
     check("the picture alone reads back", counts(parsed.ui), [4, 5]);
     check("with no diagnostics", parsed.diagnostics.length, 0);
-    // The braces the export writes around a label are part of the label the parser reads: the
-    // round trip is over the bytes, not over what LaTeX makes of them.
-    check("and the same labels",
-        labels(parsed.ui).join(" "),
-        ["X \\times_Z Y", "Y", "X", "Z", "{\\pr_2}", "{\\pr_1}", "", "g", "f"].join(" "));
+    // The braces the export writes round a label that is not a single word are taken off again,
+    // or every reading would add another pair.
+    check("and the same labels", labels(parsed.ui), labels(ui));
+    check("so it writes the same picture",
+        parsed.ui.text().replace(/^%.*\n/, ""), bare);
+    check("but braces that close before the end are the label's own",
+        ["{a}{b}", "{f'}", "{\\}}", "\\{x\\}"].map(Parser.unbrace),
+        ["{a}{b}", "f'", "\\}", "\\{x\\}"]);
     check("the corner survives the parse",
         parsed.ui.quiver.all_cells().filter((cell) => cell.is_edge())
             .map((edge) => edge.options.style.name).sort(),

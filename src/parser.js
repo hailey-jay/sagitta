@@ -731,7 +731,7 @@ class Parser {
         if (this.eat("\"")) {
             const label = this.eat(/[^"]*/);
             this.eat("\"", true);
-            edge.label = label;
+            edge.label = Parser.unbrace(label);
             while (this.eat("'")) {
                 swap_label_alignment();
             }
@@ -1312,6 +1312,26 @@ Parser.prototype.parse_route = function (edge) {
     edge.options.route = route;
     edge.options.rounding = rounding;
     edge.route_label_leg = leg ?? route.length;
+};
+
+/// An arrow's label without the one pair of braces round all of it, which the export adds to any
+/// label that is not a single word (`"{f'}"`), so that reading it does not keep them and the next
+/// export add another pair. Braces that close before the end (`"{a}{b}"`) are part of the label.
+Parser.unbrace = (label) => {
+    if (!label.startsWith("{") || !label.endsWith("}")) {
+        return label;
+    }
+    let depth = 0;
+    for (let i = 0; i < label.length; ++i) {
+        if (label[i] === "\\") {
+            ++i;
+        } else if (label[i] === "{") {
+            ++depth;
+        } else if (label[i] === "}" && --depth === 0) {
+            return i === label.length - 1 ? label.slice(1, -1) : label;
+        }
+    }
+    return label;
 };
 
 /// Represents the essential information about an edge.
