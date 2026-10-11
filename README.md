@@ -95,7 +95,7 @@ With a mouse, right-click or the `; commands` button opens the command layer, an
 examples/
 ├── macros.tex          \pr and \coker, which both the diagrams and the paper use
 ├── pullback.tikzcd     a pullback square, as Sagitta saves it
-├── snake-lemma.tikzcd  the snake lemma, with a curved dashed connecting morphism
+├── snake-lemma.tikzcd  the snake lemma, with a routed dashed connecting morphism
 └── paper.tex           \usepackage{quiver}, \input{macros}, then each diagram
 ```
 

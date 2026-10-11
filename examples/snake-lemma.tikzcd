@@ -1,30 +1,31 @@
-%#q=WzAsMTcsWzEsMCwiXFxrZXIgYSJdLFsyLDAsIlxca2VyIGIiXSxbMywwLCJcXGtlciBjIl0sWzAsMSwiMCJdLFsxLDEsIkEiXSxbMiwxLCJCIl0sWzMsMSwiQyJdLFs0LDEsIjAiXSxbMCwyLCIwIl0sWzEsMiwiQSciXSxbMiwyLCJCJyJdLFszLDIsIkMnIl0sWzQsMiwiMCJdLFsxLDMsIlxcY29rZXIgYSJdLFsyLDMsIlxcY29rZXIgYiJdLFszLDMsIlxcY29rZXIgYyJdLFs0LDMsIjAiXSxbMCwxXSxbMCw0XSxbMSwyXSxbMSw1XSxbMiw2XSxbMyw0XSxbNCw1LCJmIl0sWzQsOSwiYSIsMl0sWzUsNiwiZyJdLFs1LDEwLCJiIiwyXSxbNiw3XSxbNiwxMSwiYyJdLFs4LDldLFs5LDEwLCJmJyJdLFs5LDEzXSxbMTAsMTEsImcnIl0sWzEwLDE0XSxbMTEsMTJdLFsxMSwxNV0sWzEzLDE0XSxbMTQsMTVdLFsxNSwxNl0sWzIsMTMsIlxcZGVsdGEiLDAseyJjdXJ2ZSI6LTEsInN0eWxlIjp7ImJvZHkiOnsibmFtZSI6ImRhc2hlZCJ9fX1dXQ==
-\[\begin{tikzcd}[column sep=small]
-	& {\ker a} & {\ker b} & {\ker c} \\
-	0 & A & B & C & 0 \\
-	0 & {A'} & {B'} & {C'} & 0 \\
-	& {\coker a} & {\coker b} & {\coker c} & 0
-	\arrow[from=1-2, to=1-3]
-	\arrow[from=1-2, to=2-2]
-	\arrow[from=1-3, to=1-4]
-	\arrow[from=1-3, to=2-3]
-	\arrow[from=1-4, to=2-4]
-	\arrow["\delta", curve={height=-6pt}, dashed, from=1-4, to=4-2]
-	\arrow[from=2-1, to=2-2]
-	\arrow["f", from=2-2, to=2-3]
-	\arrow["a"', from=2-2, to=3-2]
-	\arrow["g", from=2-3, to=2-4]
-	\arrow["b"', from=2-3, to=3-3]
+%#q=WzAsMTcsWzEsMCwiXFxrZXIgYSJdLFsyLDAsIlxca2VyIGIiXSxbMywwLCJcXGtlciBjIl0sWzAsMSwiMCJdLFsxLDEsIkEiXSxbMiwxLCJCIl0sWzMsMSwiQyJdLFs0LDEsIjAiXSxbMCwyLCIwIl0sWzEsMiwiQSciXSxbMiwyLCJCJyJdLFszLDIsIkMnIl0sWzQsMiwiMCJdLFsxLDMsIlxcY29rZXIgYSJdLFsyLDMsIlxcY29rZXIgYiJdLFszLDMsIlxcY29rZXIgYyJdLFs0LDMsIjAiXSxbMCwxXSxbMCw0XSxbMSwyXSxbMSw1XSxbMiw2XSxbMyw0XSxbNCw1LCJmIl0sWzQsOSwiYSIsMl0sWzUsNiwiZyJdLFs1LDEwLCJiIiwyXSxbNiw3XSxbNiwxMSwiYyJdLFs4LDldLFs5LDEwLCJmJyJdLFs5LDEzXSxbMTAsMTEsImcnIl0sWzEwLDE0XSxbMTEsMTJdLFsxMSwxNV0sWzEzLDE0XSxbMTQsMTVdLFsxNSwxNl0sWzIsMTMsIlxcZGVsdGEiLDIseyJsYWJlbF9wb3NpdGlvbiI6MjksImN1cnZlIjotMSwicm91dGUiOltbMywtMV0sWy0xLC0xXSxbLTEsM11dLCJzdHlsZSI6eyJib2R5Ijp7Im5hbWUiOiJkYXNoZWQifX19XV0=
+\[\begin{tikzcd}[nodes in empty cells,column sep=small]
+	&&&& \\
+	&& {\ker a} & {\ker b} & {\ker c} \\
+	& 0 & A & B & C & 0 \\
+	& 0 & {A'} & {B'} & {C'} & 0 \\
+	&& {\coker a} & {\coker b} & {\coker c} & 0
+	\arrow[from=2-3, to=2-4]
+	\arrow[from=2-3, to=3-3]
 	\arrow[from=2-4, to=2-5]
-	\arrow["c", from=2-4, to=3-4]
-	\arrow[from=3-1, to=3-2]
-	\arrow["{f'}", from=3-2, to=3-3]
-	\arrow[from=3-2, to=4-2]
-	\arrow["{g'}", from=3-3, to=3-4]
-	\arrow[from=3-3, to=4-3]
-	\arrow[from=3-4, to=3-5]
-	\arrow[from=3-4, to=4-4]
+	\arrow[from=2-4, to=3-4]
+	\arrow[from=2-5, to=3-5]
+	\arrow["\delta"'{pos=0.51}, to path={[rounded corners=6pt] -- (\tikzcdmatrixname-1-5.center) -- (\tikzcdmatrixname-1-1.center) \tikztonodes -- (\tikzcdmatrixname-5-1.center) -- (\tikztotarget) [sharp corners]}, dashed, from=2-5, to=5-3]
+	\arrow[from=3-2, to=3-3]
+	\arrow["f", from=3-3, to=3-4]
+	\arrow["a"', from=3-3, to=4-3]
+	\arrow["g", from=3-4, to=3-5]
+	\arrow["b"', from=3-4, to=4-4]
+	\arrow[from=3-5, to=3-6]
+	\arrow["c", from=3-5, to=4-5]
 	\arrow[from=4-2, to=4-3]
-	\arrow[from=4-3, to=4-4]
-	\arrow[from=4-4, to=4-5]
+	\arrow["{f'}", from=4-3, to=4-4]
+	\arrow[from=4-3, to=5-3]
+	\arrow["{g'}", from=4-4, to=4-5]
+	\arrow[from=4-4, to=5-4]
+	\arrow[from=4-5, to=4-6]
+	\arrow[from=4-5, to=5-5]
+	\arrow[from=5-3, to=5-4]
+	\arrow[from=5-4, to=5-5]
+	\arrow[from=5-5, to=5-6]
 \end{tikzcd}\]

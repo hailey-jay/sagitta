@@ -192,7 +192,7 @@ A cell the staircase passes through that already holds something is joined to ra
 Cells already next to each other have no staircase, and nor does a loop.
 One undo puts the single arrow back.
 
-A connecting morphism with one label is one arrow instead: curved (`; b`, and `; -` for dashed, as `examples/snake-lemma.tikzcd` draws $\delta$), or routed round the diagram (see Routes).
+A connecting morphism with one label is one arrow instead: curved (`; b`, and `; -` for dashed), or routed round the diagram (see Routes), as `examples/snake-lemma.tikzcd` draws $\delta$.
 
 ## Settings
 

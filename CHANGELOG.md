@@ -16,7 +16,7 @@
 - `:snake` replaces the selected arrow with a chain of arrows through new empty cells, along the staircase between its ends, so a map drawn step by step is one command rather than a placement apiece. `:snake x` or `:snake y` chooses which axis steps first.
 - Control with the wheel zooms, as Shift already did, since that is what every browser and editor uses.
 - Dragging with the middle button pans, over a cell as well as over empty space, which dragging with Control or Option held cannot.
-- `examples/snake-lemma.tikzcd`, which the example paper inputs beside the pullback. Its connecting morphism is one curved dashed arrow: an arrow has a single curve, and giving it waypoints would need a field the encoded first line has no room for.
+- `examples/snake-lemma.tikzcd`, which the example paper inputs beside the pullback. Its connecting morphism is one dashed arrow routed round the outside of the figure. The paper loads `amsmath`, for the `\coker` of `macros.tex`.
 - The settings and the bindings are now tables (`src/schema.js` and `Bindings.TABLE`) that readers naming nothing in them take as arguments, so adding a setting or a binding means editing a table. Nothing about the app changes.
 - A second test suite, `npm run test:fast`, checks the `.tikzcd` round trip, the parser, the export, the settings, and the keys file in about a second, with neither Electron nor a display, so a regression in them shows before the full suite starts.
 

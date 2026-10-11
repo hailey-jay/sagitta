@@ -93,7 +93,7 @@ const pending = [];
 
 {
     // The snake lemma example, which the paper `\input`s beside the pullback: a wider figure, with
-    // empty cells, a curved dashed arrow between non-adjacent cells, and labels that need the
+    // empty cells, a dashed arrow routed round the outside, and labels that need the
     // `\coker` of `examples/macros.tex`.
     const text = example("snake-lemma.tikzcd");
     const { ui, trusted, diagnostics } = load(text);
@@ -109,17 +109,22 @@ const pending = [];
             .map((cell) => `${cell.position.x}${cell.position.y}`).sort().join(" "),
         "01 02 10 11 12 13 20 21 22 23 30 31 32 33 41 42 43");
 
-    // The connecting morphism is one arrow across the whole figure, curved and dashed.
+    // The connecting morphism is one arrow round the whole figure, dashed: up from ker c, along
+    // above the kernels, down the left, and in to coker a.
     const [delta] = ui.quiver.all_cells().filter((cell) => cell.label === "\\delta");
     check("the connecting morphism runs from ker c to coker a",
         [`${delta.source.position.x}${delta.source.position.y}`,
             `${delta.target.position.x}${delta.target.position.y}`], ["30", "13"]);
-    check("and is drawn curved and dashed",
-        [delta.options.curve !== 0, delta.options.style.body.name], [true, "dashed"]);
+    check("and is routed round the figure and dashed",
+        [delta.options.route, delta.options.style.body.name],
+        [[[3, -1], [-1, -1], [-1, 3]], "dashed"]);
 
     // Its tikz-cd says so too, which is what LaTeX reads.
     check("the export says as much",
-        ui.text().includes('\\arrow["\\delta", curve={height=-6pt}, dashed, from=1-4, to=4-2]'),
+        ui.text().includes('\\arrow["\\delta"\'{pos=0.51}, to path={[rounded corners=6pt] '
+            + '-- (\\tikzcdmatrixname-1-5.center) -- (\\tikzcdmatrixname-1-1.center) \\tikztonodes '
+            + '-- (\\tikzcdmatrixname-5-1.center) -- (\\tikztotarget) [sharp corners]}, dashed, '
+            + 'from=2-5, to=5-3]'),
         true);
 
 }
