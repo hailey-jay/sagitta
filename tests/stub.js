@@ -3,9 +3,28 @@
 /// Nothing here draws or measures: the tikz-cd export is written from a cell's options alone, so
 /// every element below is somewhere for the cell to keep its own, and is never looked at again.
 
-/// One `querySelector` selector: a tag name, classes, or both (`kbd.queue`). Descendant selectors
-/// are not needed, and are not supported.
+/// One `querySelector` selector: a tag name, classes, or both (`kbd.queue`), or several of those
+/// separated by spaces, each a descendant of the one before (`.arrow-label div`).
 function matches(element, selector) {
+    const [last, ...ancestors] = selector.trim().split(/\s+/).reverse();
+    if (!matches_one(element, last)) {
+        return false;
+    }
+    let parent = element.parentElement;
+    for (const ancestor of ancestors) {
+        while (parent !== null && !matches_one(parent, ancestor)) {
+            parent = parent.parentElement;
+        }
+        if (parent === null) {
+            return false;
+        }
+        parent = parent.parentElement;
+    }
+    return true;
+}
+
+/// One part of a selector: a tag name, classes, or both.
+function matches_one(element, selector) {
     const tag = selector.match(/^[A-Za-z][\w-]*/);
     const classes = selector.match(/\.[\w-]+/g) ?? [];
     if (tag !== null && element.tagName !== tag[0].toUpperCase()) {
@@ -297,6 +316,10 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
         /// laid out, so there is nothing to resize and nothing to rerender.
         update_col_row_size: () => [],
         recode: () => {},
+        /// As `UI.restack`: the stacking is the canvas's, which nothing here draws.
+        restack: () => {},
+        /// As `UI.update_mark_region`, which only the canvas shows.
+        update_mark_region: () => {},
         /// As `UI.select` and `UI.deselect`, which are variadic, and where `deselect` with no
         /// argument clears the selection.
         select: (...cells) => {

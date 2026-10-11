@@ -60,7 +60,8 @@ class Bindings {
             shift = null;
         }
 
-        if (Bindings.RESERVED.has(key)) {
+        // Space keeps its meaning alone, but its chords are free (the mark has `C-SPC`).
+        if (Bindings.RESERVED.has(key) && !(key === " " && modifier)) {
             throw new Error(`"${text}": ${Keymap.key_name(key)} keeps its own meaning`);
         }
         if (layer) {
@@ -317,6 +318,21 @@ Bindings.DEFAULTS = {
     "align-source": ["; ["],
     "align-target": ["; ]"],
 
+    // Whether an arrow cuts a gap in the arrows it crosses.
+    "crossing-over": ["; x"],
+
+    // An arrow's route: a bend, then straight again, and a checkpoint at the focus point. The
+    // curve's key rounds a route's corners.
+    "route": ["; w"],
+    "checkpoint": ["; k"],
+    "move-checkpoint": ["; m"],
+    "rounding": [],
+
+    // The mark, a corner of a rectangle of cells to select. Shift with `mark`'s key adds the
+    // rectangle to the selection, as `mark-add` does.
+    "mark": ["C-SPC"],
+    "mark-add": [],
+
     // Colours, the selection, and the hint-code prompts.
     "colour": ["; c"],
     "label-colour": ["; C"],
@@ -373,6 +389,14 @@ Bindings.HANDLERS = {
         help: ["Chords", "cut"],
     },
     "paste": { press: (ui) => ui.keys.paste(), help: ["Chords", "paste"] },
+    "mark": {
+        press: (ui, event) => ui.keys.mark(event.shiftKey),
+        help: ["Typing", "mark a corner, then select to the focus point (with S-, add it)"],
+    },
+    "mark-add": {
+        press: (ui) => ui.keys.mark(true),
+        help: ["Typing", "mark a corner, then add up to the focus point to the selection"],
+    },
     "search": { press: (ui) => ui.keymap.search() },
     "select-at-focus": { press: (ui) => ui.keys.toggle_at_focus() },
     "toggle-selection": { press: (ui) => ui.keys.code_prompt("Toggle") },

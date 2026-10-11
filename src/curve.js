@@ -611,3 +611,226 @@ class Arc extends Curve {
         );
     }
 }
+
+/// A route: straight legs through a list of points, with each turn rounded into a circular arc of
+/// the given radius, as TikZ's `rounded corners` draws it (see `src/quiver.js`). `points` run from
+/// the source to the target, and are relative to `origin` before rotating by `angle`, as the other
+/// curves are, so that the arrow draws it in the same frame: the source at `(0, 0)` and the target
+/// on the positive x axis.
+///
+/// Like TikZ, a corner whose legs are too short for the radius is rounded less, so that no arc
+/// takes more than half a leg. The curve is parametrised by arc length, so `t` is the fraction of
+/// the way along.
+class Route extends Curve {
+    constructor(origin, points, radius, angle) {
+        super();
+        this.origin = origin;
+        this.angle = angle;
+        // Repeated points make legs of no length, which have no direction to turn from.
+        this.points = points.filter((point, i) => i === 0
+            || point.sub(points[i - 1]).length() > EPSILON);
+
+        // Each segment is a line `{ from, to }` or an arc `{ centre, radius, start, sweep }`, with
+        // its `length` and the arc length `before` it.
+        this.segments = [];
+        const add = (segment) => {
+            if (segment.length > EPSILON) {
+                this.segments.push(segment);
+            }
+        };
+        const line = (from, to) => ({ from, to, length: to.sub(from).length() });
+        let at = this.points[0];
+        for (let i = 1; i < this.points.length - 1; ++i) {
+            const [previous, corner, next] = this.points.slice(i - 1, i + 2);
+            const into = corner.sub(previous);
+            const out = next.sub(corner);
+            // The angle the route turns through, and which way.
+            const cross = into.x * out.y - into.y * out.x;
+            const turn = Math.abs(Math.atan2(cross, into.x * out.x + into.y * out.y));
+            // Going straight on needs no arc, and nor can doubling back be rounded.
+            if (turn < EPSILON || Math.PI - turn < EPSILON || radius <= 0) {
+                add(line(at, corner));
+                at = corner;
+                continue;
+            }
+            const tangent = Math.min(
+                radius * Math.tan(turn / 2),
+                into.length() / 2,
+                out.length() / 2,
+            );
+            const r = tangent / Math.tan(turn / 2);
+            const enter = corner.sub(into.mul(tangent / into.length()));
+            const leave = corner.add(out.mul(tangent / out.length()));
+            const side = Math.sign(cross);
+            const centre = enter.add(new Point(-into.y, into.x).mul(side * r / into.length()));
+            add(line(at, enter));
+            add({
+                centre,
+                radius: r,
+                start: enter.sub(centre).angle(),
+                sweep: side * turn,
+                length: r * turn,
+            });
+            at = leave;
+        }
+        add(line(at, this.points[this.points.length - 1]));
+
+        let before = 0;
+        for (const segment of this.segments) {
+            segment.before = before;
+            before += segment.length;
+        }
+        this.length = before;
+    }
+
+    /// The segment `t` falls in, and how far along it (from 0 to 1).
+    locate(t) {
+        const length = clamp(0, t, 1) * this.length;
+        let i = this.segments.findIndex((segment) => length <= segment.before + segment.length);
+        if (i === -1) {
+            i = this.segments.length - 1;
+        }
+        const segment = this.segments[i];
+        const along = segment.length > 0 ? (length - segment.before) / segment.length : 0;
+        return { segment, along };
+    }
+
+    /// Returns the (x, y)-point at t = `t`. This does not take `angle` into account.
+    point(t) {
+        if (this.segments.length === 0) {
+            return this.points[0];
+        }
+        const { segment, along } = this.locate(t);
+        if (segment.centre === undefined) {
+            return segment.from.lerp(segment.to, along);
+        }
+        return segment.centre
+            .add(Point.lendir(segment.radius, segment.start + segment.sweep * along));
+    }
+
+    /// Returns the angle of the tangent to the curve at t = `t`. This does not take `angle` into
+    /// account.
+    tangent(t) {
+        if (this.segments.length === 0) {
+            return 0;
+        }
+        const { segment, along } = this.locate(t);
+        if (segment.centre === undefined) {
+            return segment.to.sub(segment.from).angle();
+        }
+        return segment.start + segment.sweep * along + Math.sign(segment.sweep) * Math.PI / 2;
+    }
+
+    /// Returns the arc length of the route from t = 0 to t = `t`.
+    arc_length(t) {
+        return t * this.length;
+    }
+
+    /// Returns a function giving the parameter t of the point a given length along the route. If
+    /// `clamp` is true, we clamp any `t`s less than 0 or greater than 1. Otherwise, we throw an
+    /// error.
+    t_after_length(clamp = false) {
+        return (length) => {
+            if (length < 0 || length > this.length) {
+                if (!clamp) {
+                    throw new Error(`Length was ${
+                        length < 0 ? "less than 0" : "greater than the arc length"}.`);
+                }
+                return length < 0 ? 0 : 1;
+            }
+            return this.length > 0 ? length / this.length : 0;
+        };
+    }
+
+    /// The farthest the route strays from the line through its ends, on either side. The corners
+    /// bound the arcs that round them.
+    get height() {
+        return Math.max(0, ...this.points.map((point) => Math.abs(point.y)));
+    }
+
+    /// The width to draw the route in, centred on the middle of the line through its ends, as the
+    /// arrow centres every curve.
+    get width() {
+        const end = this.points[this.points.length - 1].x;
+        return Math.max(end, ...this.points.map((point) => Math.abs(2 * point.x - end)));
+    }
+
+    /// Intersect the route with the given rounded rectangle (approximated by a polygon, as for the
+    /// other curves). If the rectangle entirely contains the route, and `permit_containment` is
+    /// true, a single intersection point (the centre of the rectangle) is returned; otherwise, an
+    /// error is thrown.
+    intersections_with_rounded_rectangle(rect, permit_containment) {
+        const polygon = rect.points().map((p) => p.sub(this.origin).rotate(-this.angle));
+        const found = [];
+        const add = (segment, along) => {
+            const t = (segment.before + segment.length * along) / this.length;
+            if (!found.some((other) => Math.abs(other - t) <= EPSILON)) {
+                found.push(t);
+            }
+        };
+        for (let i = 0; i < polygon.length; ++i) {
+            const [p, q] = [polygon[i], polygon[(i + 1) % polygon.length]];
+            const edge = q.sub(p);
+            for (const segment of this.segments) {
+                if (segment.centre === undefined) {
+                    // Where the two lines cross, as a fraction along each.
+                    const direction = segment.to.sub(segment.from);
+                    const denominator = direction.x * edge.y - direction.y * edge.x;
+                    if (Math.abs(denominator) <= EPSILON) {
+                        continue;
+                    }
+                    const offset = p.sub(segment.from);
+                    const along = (offset.x * edge.y - offset.y * edge.x) / denominator;
+                    const across = (offset.x * direction.y - offset.y * direction.x) / denominator;
+                    if (along >= 0 && along <= 1 && across >= 0 && across <= 1) {
+                        add(segment, along);
+                    }
+                } else {
+                    // Where the polygon's edge meets the circle, then whether that is on the arc.
+                    const offset = p.sub(segment.centre);
+                    const a = edge.x ** 2 + edge.y ** 2;
+                    const b = 2 * (offset.x * edge.x + offset.y * edge.y);
+                    const c = offset.x ** 2 + offset.y ** 2 - segment.radius ** 2;
+                    const discriminant = b ** 2 - 4 * a * c;
+                    if (a <= EPSILON || discriminant < 0) {
+                        continue;
+                    }
+                    for (const sign of [1, -1]) {
+                        const across = (-b + sign * discriminant ** 0.5) / (2 * a);
+                        if (across < 0 || across > 1) {
+                            continue;
+                        }
+                        const angle = offset.add(edge.mul(across)).angle();
+                        const along = mod((angle - segment.start) * Math.sign(segment.sweep),
+                            2 * Math.PI) / Math.abs(segment.sweep);
+                        if (along <= 1 + EPSILON) {
+                            add(segment, Math.min(along, 1));
+                        }
+                    }
+                }
+            }
+        }
+
+        if (found.length === 0) {
+            return Curve.check_for_containment(this.origin, rect, permit_containment);
+        }
+        return found.map((t) => new CurvePoint(this.point(t), t, this.tangent(t)));
+    }
+
+    /// Render the route to an SVG path, from wherever the path is.
+    render(path) {
+        let at = this.points[0];
+        for (const segment of this.segments) {
+            if (segment.centre === undefined) {
+                path.line_by(segment.to.sub(at));
+                at = segment.to;
+            } else {
+                const end = segment.centre
+                    .add(Point.lendir(segment.radius, segment.start + segment.sweep));
+                path.arc_by(Point.diag(segment.radius), 0, false, segment.sweep > 0, end.sub(at));
+                at = end;
+            }
+        }
+        return path;
+    }
+}

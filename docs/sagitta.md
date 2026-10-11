@@ -54,7 +54,9 @@ The commands live one key away:
 - `C-arrows` move the selection; on arrows alone they bend or shift them, and on loops alone they resize or turn them.
 - `C-SPC` marks one corner of a rectangle of cells, as Emacs sets a mark: press it, move the focus point, and press it again to select every cell between the two corners, along with the arrows whose both ends are among them.
   `C-S-SPC` adds that rectangle to the selection rather than replacing it, and ESC lets go of the mark.
-  While there is a mark, the mode line shows `MARK`.
+  While there is a mark, the mode line shows `MARK`, and a dashed rectangle runs from it to the focus point, over the cells it would take.
+  `:mark` and `:mark-add` do the same from the command line.
+  The keys file can move it (`mark`, and `mark-add` for a key of its own that adds); Space alone cannot be bound, but its chords can.
 
 The mouse works too.
 Click a cell to select it, and again to edit its label; click an empty space twice for a new cell; drag from a cell to draw an arrow, by the edge of its space to move it, and an arrow's end to reconnect it.
@@ -113,7 +115,7 @@ The names and their defaults:
 | `centre-view`, `hide-grid` | `; z`, `; #` |
 | `zoom-out`, `zoom-in`, `reset-zoom` | `C--`, `C-=`, `C-0` |
 | `dark-mode`, `hide-mode-line`, `shortcuts`, `settings` | none, `C-\`, `C-/` `<f1>`, `C-,` |
-| `level`, `curve`, `offset`, `radius`, `length`, `position` | `; n`, `; b` (on loops alone, the radius), `; o`, none, `; l`, `; P` |
+| `level`, `curve`, `offset`, `radius`, `length`, `position` | `; n`, `; b` (on loops alone, the radius; on routes alone, the rounding), `; o`, none, `; l`, `; P` |
 | `tail`, `body`, `head` | `; t`, `; d`, `; h` |
 | `arrow`, `adjunction`, `corner` | `; a`, `; j`, `; p` |
 | `align`, then `l`, `r`, `c`, or `o` for left, right, centre, or over | `; A` |
@@ -121,11 +123,58 @@ The names and their defaults:
 | `plain`, `equals`, `inclusion`, `mono`, `epi` | `; !`, `; =`, `; (`, `; <`, `; >` |
 | `maps-to`, `dashed`, `dotted`, `squiggly` | `; \|`, `; -`, none, `; ~` |
 | `align-source`, `align-target` | `; [`, `; ]` |
+| `crossing-over` | `; x` |
+| `route`, `checkpoint`, `move-checkpoint`, `rounding` | `; w`, `; k`, `; m`, none |
+| `mark`, `mark-add` | `C-SPC` (with `S-`, adding), none |
 | `colour`, `label-colour` | `; c`, `; C` |
 | `select-at-focus`, `toggle-selection`, `create-arrows` | none (`S-SPC` does it), `; s`, `; e` |
 | `change-source`, `change-target` | `; ,`, `; .` |
 
 Any other command (Tab at `:` lists them) can be bound too, and its keys run it with no arguments.
+
+## Crossing over
+
+`; x`, or `:crossing-over`, makes the selected arrows cut a gap in the arrows they cross, as tikz-cd's `crossing over` does, and again turns it off.
+`:crossing-over on` brings them to the front even if they cross over already, and `:crossing-over off` turns it off.
+
+tikz-cd draws arrows in the order they are written, and an arrow crossing over cuts a gap only in those drawn before it, so the arrows crossing over stack in layers:
+
+- Each turned on goes on top of those already crossing over, so the last one pressed is above the rest.
+  Arrows brought to the front together share a layer, and among themselves the one whose source is lower, or further right, is above.
+- The export writes the plain arrows first, then each layer in turn, and the canvas stacks them in the same order, so it cuts the gaps the PDF does.
+- An arrow between arrows is drawn in the layer of the highest arrow it attaches to, since tikz-cd needs that arrow written first.
+- Hand-written `crossing over` is read back, each one above those written before it, and a paste lands on top.
+
+The gap also cuts any label it runs over, in the PDF as on the canvas, and the mode line says `crossing over`.
+Only an arrow has it: an adjunction or a corner draws no line for a gap to follow.
+Layers order arrows as a whole, so three arrows each crossing over the next, around a triangle, cannot be drawn.
+
+## Routes
+
+An arrow can be routed through cells instead of drawn as a curve: it runs straight from cell centre to cell centre, and each turn is rounded.
+
+- `; w`, or `:route`, bends the selected arrows round one corner, along the row first.
+  Again goes along the column first, and a third time straightens them.
+  `:route x`, `:route y`, and `:route none` name the step.
+- `; k`, or `:checkpoint`, adds the cell at the focus point to the selected arrows' routes, or takes it out if they already pass through it.
+  The arrow passes through its checkpoints in the order they were added.
+  A cell an arrow joins is no checkpoint.
+- `; m`, or `:move-checkpoint`, picks up the checkpoint at the focus point, which then follows the focus point.
+  RET puts it down, as one undo step, and ESC puts it back.
+  It skips over the arrow's own ends, and the mode line shows `CHECKPOINT` while one is carried.
+- `; b` rounds the corners of a route, from 0 (sharp) to 8, as `:rounding` does; it is 3 to begin with.
+
+A route takes the place of the arrow's curve and offset, which come back when it is straightened.
+Loops, and arrows with an arrow at an end, have no route.
+A route moves with its arrow when the whole arrow moves, and a gap opened across it moves the cells beyond the gap.
+Reversing an arrow passes through its route the other way.
+
+The export writes a route as a `to path` through the centres of the nodes in its cells, with `rounded corners`.
+An empty cell takes its centre from a node in its column and one in its row; a cell with neither is written out empty, and the diagram gets `nodes in empty cells`.
+tikz-cd puts all an arrow's labels on one leg of a route, so the label goes on the leg its position falls on, and `pos` is measured along that leg.
+A shortened route is written with `shorten` lengths, since quiver's `between` does not follow a `to path`.
+Routes written this way are read back from the picture alone; any other `to path` is reported and left out.
+quiver itself ignores a route, so the diagram opens there with straight arrows.
 
 ## Building a diagram outwards
 
@@ -143,8 +192,7 @@ A cell the staircase passes through that already holds something is joined to ra
 Cells already next to each other have no staircase, and nor does a loop.
 One undo puts the single arrow back.
 
-A single arrow with waypoints is the one thing that is not here: an arrow has one curve, and giving it a path would need a field that the quiver round trip has no room for.
-So a connecting morphism is either one curved arrow (`; b`, and `; -` for dashed, as `examples/snake-lemma.tikzcd` draws $\delta$) or a chain through empty cells, with a label on each step.
+A connecting morphism with one label is one arrow instead: curved (`; b`, and `; -` for dashed, as `examples/snake-lemma.tikzcd` draws $\delta$), or routed round the diagram (see Routes).
 
 ## Settings
 

@@ -105,6 +105,8 @@ class Keys {
                 ui.history.add(ui, actions);
             }
             ui.switch_mode(UIMode.default);
+        } else if (this.put_down(true)) {
+            // Enter puts down a carried checkpoint, rather than editing a label.
         } else {
             // Toggle the focus of the label input. Focusing edits the label in place (typing
             // a character instead replaces it: see `Keymap.after`).
@@ -266,8 +268,11 @@ class Keys {
             return;
         }
 
-        // Let go of the mark, before anything is deselected, so that one Escape cancels the
-        // region and the next clears the selection.
+        // Put a carried checkpoint back, and let go of the mark, before anything is deselected,
+        // so that one Escape cancels them and the next clears the selection.
+        if (this.put_down(false)) {
+            return;
+        }
         if (this.unmark()) {
             return;
         }
@@ -320,15 +325,16 @@ class Keys {
         }
     }
 
-    /// `C-SPC`: set the mark at the focus point, as a corner of a rectangle of cells to select;
-    /// with one already set, take the rectangle between it and the focus point, and let go of the
-    /// mark. Shift adds the rectangle to the selection rather than replacing it. Escape lets go of
-    /// the mark without selecting anything (see `escape`).
+    /// `mark` (`C-SPC`): set the mark at the focus point, as a corner of a rectangle of cells to
+    /// select; with one already set, take the rectangle between it and the focus point, and let go
+    /// of the mark. With `add` (`mark-add`, or Shift with `mark`'s key), add the rectangle to the
+    /// selection rather than replacing it. Escape lets go of the mark without selecting anything
+    /// (see `escape`).
     ///
     /// A rectangular block of a tikz-cd matrix is the unit a diagram is read in, and the keyboard
     /// had no way to take one: `select-all`, `select-connected`, `select-at-focus`, and `; s` take
     /// everything, a component, one cell, or cells by code.
-    mark(event) {
+    mark(add = false) {
         const ui = this.ui;
         // Holding Control is itself a binding, which pans, so the key arrives in the Pan mode as
         // often as in the default one.
@@ -337,6 +343,7 @@ class Keys {
         }
         if (ui.mark === null) {
             ui.mark = ui.focus_position;
+            ui.update_mark_region();
             // Show the focus point at the corner just marked, as the arrow keys do when they
             // first move it.
             if (!ui.focus_point.class_list.contains("focused")) {
@@ -350,7 +357,8 @@ class Keys {
         }
         const cells = Keys.cells_between(ui, ui.mark, ui.focus_position);
         ui.mark = null;
-        if (!event.shiftKey) {
+        ui.update_mark_region();
+        if (!add) {
             ui.deselect();
         }
         ui.select(...cells);
@@ -361,6 +369,88 @@ class Keys {
         return true;
     }
 
+    /// `move-checkpoint`: pick up the checkpoint at the focus point, in the routes of the selected
+    /// arrows that pass through it, so that it follows the focus point (see `carry_to`) until RET
+    /// puts it down (`put_down`) or ESC puts it back where it was. Pressed while carrying, it puts
+    /// the checkpoint down. The move is one step in the undo history.
+    carry() {
+        const ui = this.ui;
+        if (ui.carried !== null) {
+            this.put_down(true);
+            return;
+        }
+        const [x, y] = ui.focus_position.toArray();
+        const carried = Array.from(ui.selection)
+            .filter((cell) => cell.is_edge() && cell.is_routed())
+            .map((edge) => ({
+                edge,
+                from: edge.options.route,
+                index: edge.options.route.findIndex(([cx, cy]) => cx === x && cy === y),
+            }))
+            .filter(({ index }) => index !== -1);
+        if (carried.length === 0) {
+            throw new Error("There is no checkpoint of a selected arrow at the focus point: move"
+                + " the focus point onto one to pick it up.");
+        }
+        ui.carried = carried;
+        for (const { edge } of carried) {
+            edge.render(ui);
+        }
+        ui.mode_line.update(ui);
+        ui.mode_line.flash("move the focus point; RET puts the checkpoint down, ESC puts it back");
+    }
+
+    /// Move the carried checkpoint to `position`, the focus point's new cell. An arrow's own end
+    /// is no checkpoint, so there the checkpoint waits where it last was.
+    carry_to(position) {
+        const ui = this.ui;
+        if (ui.carried === null) {
+            return;
+        }
+        for (const { edge, index } of ui.carried) {
+            if ([edge.source, edge.target].some((end) => end.position.eq(position))) {
+                continue;
+            }
+            const route = Array.from(edge.options.route);
+            route[index] = position.toArray();
+            edge.options.route = route;
+            for (const cell of ui.quiver.transitive_dependencies([edge])) {
+                cell.render(ui);
+            }
+        }
+    }
+
+    /// Put the carried checkpoint down where it is (`keep`), recording the move, or back where it
+    /// was picked up. Returns whether one was being carried.
+    put_down(keep) {
+        const ui = this.ui;
+        if (ui.carried === null) {
+            return false;
+        }
+        const carried = ui.carried;
+        ui.carried = null;
+        if (keep) {
+            const routes = carried.map(({ edge, from }) => ({ edge, from, to: edge.options.route }))
+                .filter(({ from, to }) => JSON.stringify(from) !== JSON.stringify(to));
+            if (routes.length > 0) {
+                ui.history.add(ui, [{ kind: "route", routes }]);
+            }
+            for (const { edge } of carried) {
+                edge.render(ui);
+            }
+        } else {
+            for (const { edge, from } of carried) {
+                edge.options.route = from;
+                for (const cell of ui.quiver.transitive_dependencies([edge])) {
+                    cell.render(ui);
+                }
+            }
+        }
+        ui.mode_line.update(ui);
+        ui.mode_line.flash(keep ? "checkpoint moved" : "checkpoint put back");
+        return true;
+    }
+
     /// Let go of the mark, if there is one. Returns whether there was.
     unmark() {
         const ui = this.ui;
@@ -368,6 +458,7 @@ class Keys {
             return false;
         }
         ui.mark = null;
+        ui.update_mark_region();
         ui.mode_line.update(ui);
         ui.mode_line.flash("mark dropped");
         return true;

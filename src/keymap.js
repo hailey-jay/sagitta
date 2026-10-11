@@ -129,7 +129,7 @@ class Keymap {
             }
         }
         for (const type of ["keydown", "keyup"]) {
-            document.addEventListener(type, (event) => this.dispatch(type, event));
+            document.addEventListener(type, (event) => this.dispatch(type, Keymap.identify(event)));
         }
 
         ui.prompt.initialise();
@@ -190,6 +190,9 @@ class Keymap {
     /// Handle a key press or release (`type` is `keydown` or `keyup`). A key pressed while the
     /// command layer waits to list its keys ends the wait, unless it leaves something to finish.
     dispatch(type, event) {
+        // A pan whose key came up while the window did not have the focus ends with the next key,
+        // as it does with the next pointer move, rather than stealing the arrows until a click.
+        this.ui.pointer.stop_stale_pan(event);
         const waiting = type === "keydown" && this.active && !this.listed
             && !Keymap.MODIFIERS.has(event.key);
         this.handle(type, event);
@@ -253,6 +256,47 @@ class Keymap {
         if (type === "keydown") {
             this.after(event);
         }
+    }
+
+    /// `event`, with the key its physical key types in place of `Unidentified`, which a keyboard
+    /// layout may report for a chord it gives no character (Control with Space, in one), so that
+    /// the chord still matches its binding. Any other event is left as it is.
+    static identify(event) {
+        if (event.key !== "Unidentified") {
+            return event;
+        }
+        const key = Keymap.key_for_code(event.code, event.shiftKey);
+        if (key === null) {
+            return event;
+        }
+        return new Proxy(event, {
+            get: (target, property) => {
+                if (property === "key") {
+                    return key;
+                }
+                const value = target[property];
+                // The event's own methods must be called on the event itself.
+                return typeof value === "function" ? value.bind(target) : value;
+            },
+        });
+    }
+
+    /// The key the physical key `code` types on a US layout, for the keys whose answer does not
+    /// depend on the layout's punctuation, or `null`: a shifted digit types whatever the layout
+    /// puts above it, so it has no answer.
+    static key_for_code(code, shift) {
+        if (code === "Space") {
+            return " ";
+        }
+        const letter = /^Key([A-Z])$/.exec(code);
+        if (letter !== null) {
+            return shift ? letter[1] : letter[1].toLowerCase();
+        }
+        const digit = /^Digit([0-9])$/.exec(code);
+        if (digit !== null) {
+            return shift ? null : digit[1];
+        }
+        return Keymap.NAMED_CODES.has(code) ? code : null;
     }
 
     /// The Emacs-style name of `key` (e.g. `RET`, `a`), which `Bindings.parse` reads back.
@@ -567,6 +611,19 @@ class Keymap {
                             value = attached ? "centre" : "midpoint";
                         }
                         break;
+                    case "crossing":
+                        const crossing = options.crossing_over(ui);
+                        if (crossing !== null) {
+                            value = crossing ? "on" : "off";
+                        }
+                        break;
+                    case "route":
+                        const route = options.route(ui);
+                        if (route !== null) {
+                            value = route.length === 0 ? "none" : `${route.length} checkpoint${
+                                route.length === 1 ? "" : "s"}`;
+                        }
+                        break;
                     case "edge-type":
                         current = name.split("|").includes(options.edge_type(ui));
                         break;
@@ -814,12 +871,18 @@ class Keymap {
         this.render();
     }
 
-    /// The property a slider's key sets for the selection: a loop's radius in place of the curve
-    /// it does not take, while only loops are selected, as the arrow keys do.
+    /// The property a slider's key sets for the selection: a loop's radius, or a route's rounding,
+    /// in place of the curve it does not take, while only loops or only routes are selected, as
+    /// the arrow keys do.
     slider_property(property) {
         const edges = ArrowOptions.edges(this.ui);
-        return property === "curve" && edges.length > 0 && edges.every((edge) => edge.is_loop())
-            ? "radius" : property;
+        if (property !== "curve" || edges.length === 0) {
+            return property;
+        }
+        if (edges.every((edge) => edge.is_loop())) {
+            return "radius";
+        }
+        return edges.every((edge) => edge.is_routed()) ? "rounding" : property;
     }
 
     /// What the list of `component` (`tail`, `body`, `head`, or `align`, the label alignment)
@@ -990,6 +1053,13 @@ class Keymap {
 /// The modifier keys, which neither end nor restart the command layer's wait to list its keys.
 Keymap.MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta"]);
 
+/// The physical keys whose `code` is also the `key` they type (see `Keymap.key_for_code`).
+Keymap.NAMED_CODES = new Set([
+    "Enter", "Tab", "Escape", "Backspace", "Delete", "Insert", "Home", "End", "PageUp",
+    "PageDown", "ArrowLeft", "ArrowDown", "ArrowRight", "ArrowUp",
+    ...Array.from({ length: 12 }, (_, i) => `F${i + 1}`),
+]);
+
 /// Keys that keep their meaning in the base layer, rather than typing.
 Keymap.BASE_KEYS = new Set([" ", ";", ":", "/"]);
 
@@ -1028,18 +1098,9 @@ Keymap.CONTEXT = new Enum(
             press: (ui) => ui.keys.enter(),
             help: [["Typing", "edit the label in place"]],
         },
-        // Before the plain Space below, which takes the key with or without the modifier, and so
-        // would otherwise create a vertex instead of setting the mark.
+        // Without the modifier, which is the mark's (see `Bindings.DEFAULTS`).
         {
-            combinations: [{ key: " ", shift: null, modifier: true }],
-            press: (ui, event) => ui.keys.mark(event),
-            help: [
-                ["Typing", "mark a corner, then select to the focus point", "C-SPC"],
-                ["Typing", "and add that region to the selection", "C-S-SPC"],
-            ],
-        },
-        {
-            combinations: [{ key: " ", shift: null, modifier: null }],
+            combinations: [{ key: " ", shift: null, modifier: false }],
             press: (ui, event) => ui.keys.space(event),
             help: [
                 ["Typing", "create, connected to the selection", "SPC"],
@@ -1135,13 +1196,17 @@ Keymap.WHICH_KEY = [
         ["arrow", "arrow", "edge", "edge-type:arrow"],
         ["adjunction", "adjunction", "edge", "edge-type:adjunction"],
         ["corner", "pullback / pushout", "edge", "edge-type:corner|corner-inverse"],
+        ["crossing-over", "crossing over", "edge", "crossing:"],
+        ["route", "route: bend, then straighten", "edge", "route:"],
+        ["checkpoint", "checkpoint at focus", "edge"],
+        ["move-checkpoint", "move checkpoint (RET puts down)", "edge"],
         ["reverse", "reverse", "edge"],
         ["flip", "flip", "edge"],
         ["colour", "colour", "edge"],
     ]],
     ["Sliders (-0-9 RET)", [
         ["level", "level", "edge", "slider:level"],
-        ["curve", "curve (loops: radius)", "edge", "slider:curve"],
+        ["curve", "curve (loops: radius, routes: rounding)", "edge", "slider:curve"],
         ["offset", "offset", "edge", "slider:offset"],
         ["length", "length (again: end)", "edge", "slider:length"],
     ]],

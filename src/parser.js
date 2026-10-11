@@ -22,6 +22,10 @@ class Parser {
         this.y = 0;
         // The string used to demark a new column. This may be changed by `ampersand replacement`.
         this.col_delim = "&";
+        // The crossing rank of the last arrow read with `crossing over`, starting above any in the
+        // diagram already, so that what is imported lands on top.
+        this.crossing_rank = Math.max(0, ...ui.quiver.all_cells()
+            .filter((cell) => cell.is_edge()).map((edge) => edge.options.crossing_over));
     }
 
     /// The current position of the parser in the `source` code.
@@ -214,6 +218,14 @@ class Parser {
                 let target_cell = this.cells.get(`${target}`);
                 if (target_cell instanceof Parser.Edge) {
                     target_cell = edges.get(target_cell);
+                }
+                // The label's `pos` on a route is along the leg it is on (see `parse_route`).
+                if (edge.route_label_leg !== null) {
+                    const points = QuiverExport.route_points({
+                        source: source_cell, target: target_cell, options: edge.options,
+                    });
+                    edge.options.label_position = Math.round(100 * QuiverExport.route_fraction(
+                        points, edge.route_label_leg, edge.options.label_position / 100));
                 }
                 edges.set(edge, new Edge(
                     this.ui, edge.label, source_cell, target_cell, edge.options, edge.label_colour
@@ -469,6 +481,11 @@ class Parser {
             if (this.eat(/-?[0-9a-z\.]+/) === null) {
                 throw this.error("Expected separation amount.");
             }
+            return;
+        }
+        // Written for a route through a cell no node shares a row or column with, which needs
+        // nothing more than the route.
+        if (this.eat("nodes in empty cells")) {
             return;
         }
         if (this.eat("cramped")) {
@@ -783,6 +800,12 @@ class Parser {
                 return name;
             }
         };
+        // A route, as the export writes one (see `QuiverImportExport.tikz_cd`). No other `to path`
+        // is read.
+        if (this.check("to path")) {
+            this.parse_route(edge);
+            return;
+        }
         // Parse absolute source and target positioning.
         if (this.eat("from")) {
             edge.source = parse_coord();
@@ -1106,6 +1129,14 @@ class Parser {
             return;
         }
 
+        // Crossing over the arrows drawn before it (but not `crossing over clearance`, which we do
+        // not read).
+        if (this.eat(/^crossing over(?=\s*[,\]])/)) {
+            // Each one stacks above those written before it, as tikz-cd draws them.
+            edge.options.crossing_over = ++this.crossing_rank;
+            return;
+        }
+
         // The following options are deliberately ignored, because they are used by quiver in
         // tikz-cd export for convenience.
         if (this.eat("start anchor=center") || this.eat("end anchor=center")) {
@@ -1199,6 +1230,90 @@ class Parser {
     }
 };
 
+/// A route through cells, `to path={[rounded corners=Rpt] -- (P) ... -- (\tikztotarget)
+/// [sharp corners]}`, where each `P` is the centre of a node,
+/// `\tikzcdmatrixname-ROW-COLUMN.center`, or the column of one and the row of another, joined by
+/// `|-`. `\tikztonodes` follows the leg the labels go on.
+Parser.prototype.parse_route = function (edge) {
+    const start = this.position;
+    const unread = () => {
+        // Skip to the end of the braces, so that the arrow is read without its route.
+        let depth = 0;
+        while (!this.is_finished()) {
+            const character = this.code[0];
+            this.code = this.code.slice(1);
+            if (character === "{") {
+                ++depth;
+            } else if (character === "}" && --depth === 0) {
+                break;
+            }
+        }
+        this.log(this.warn(
+            ["Only routes written as sagitta writes them are read: this ",
+                new DOM.Code("to path"), " was left out."],
+            this.range_from(start),
+        ));
+    };
+    this.eat("to path", true);
+    this.eat_whitespace();
+    this.eat("=", true);
+    this.eat_whitespace();
+    const body = this.code.match(/^\{([^{}]*)\}/);
+    if (body === null) {
+        unread();
+        return;
+    }
+    let text = body[1].trim();
+    const take = (pattern) => {
+        const match = text.match(pattern);
+        if (match === null) {
+            return null;
+        }
+        text = text.slice(match[0].length).trim();
+        return match;
+    };
+    let rounding = 0;
+    const radius = take(/^\[rounded corners=([0-9.]+)pt\]/);
+    if (radius !== null) {
+        rounding = Math.round(parseFloat(radius[1]) / (CONSTANTS.ROUNDING
+            * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER));
+    }
+    const node = String.raw`\\tikzcdmatrixname-([0-9]+)-([0-9]+)\.center`;
+    const route = [];
+    let leg = null;
+    let target = false;
+    while (text.length > 0 && !target) {
+        if (take(/^--/) === null) {
+            break;
+        }
+        let match;
+        if (take(/^\(\\tikztotarget\)/) !== null) {
+            target = true;
+        } else if ((match = take(new RegExp(`^\\(${node}\\)`))) !== null) {
+            route.push([parseInt(match[2]) - 1, parseInt(match[1]) - 1]);
+        } else if ((match = take(new RegExp(`^\\(${node} \\|- ${node}\\)`))) !== null) {
+            route.push([parseInt(match[2]) - 1, parseInt(match[3]) - 1]);
+        } else {
+            break;
+        }
+        if (take(/^\\tikztonodes/) !== null) {
+            leg = route.length - (target ? 0 : 1);
+        }
+    }
+    take(/^\[sharp corners\]/);
+    if (take(/^\\tikztonodes/) !== null) {
+        leg = route.length;
+    }
+    if (!target || text.length > 0 || route.length === 0) {
+        unread();
+        return;
+    }
+    this.code = this.code.slice(body[0].length);
+    edge.options.route = route;
+    edge.options.rounding = rounding;
+    edge.route_label_leg = leg ?? route.length;
+};
+
 /// Represents the essential information about an edge.
 Parser.Edge = class {
     constructor(source, range) {
@@ -1223,6 +1338,8 @@ Parser.Edge = class {
         // and vice versa, but this is not currently allowed in the quiver UI.) This is tracked with
         // this flag.
         this.reverse = false;
+        // The leg of a route the labels are on (see `Parser.parse_route`).
+        this.route_label_leg = null;
     }
 };
 

@@ -496,6 +496,14 @@ class Edge extends Cell {
             // source/target edge (`true`), or to the midpoint of the source and target of the
             // source/target edge (`false`).
             edge_alignment: { source: true, target: true },
+            // Where the arrow stacks among those that cut a gap in the arrows they cross (tikz-cd's
+            // `crossing over`), from 1 at the bottom, or 0 if it cuts none (see `crossing_rank`).
+            crossing_over: 0,
+            // The cells, as `[x, y]`, that the arrow passes through on its way from source to
+            // target, turning at each, or none for an arrow drawn as a curve (see `is_routed`).
+            route: [],
+            // How much the corners of a route are rounded, in steps of `CONSTANTS.ROUNDING`.
+            rounding: 3,
             // For historical reasons, the following options are in a `style` subobject. Originally,
             // these were those pertaining to the edge style. However, options such as `curve` and
             // `level` also pertain to the edge style (and can only be set for arrows), but are not
@@ -517,7 +525,11 @@ class Edge extends Cell {
             }
 
             for (const [key, value] of Object.entries(source)) {
-                if (typeof value === "object") {
+                if (Array.isArray(value)) {
+                    // A route is replaced, rather than merged with the default, and copied, so
+                    // that edges never share one.
+                    target[key] = JSON.parse(JSON.stringify(value));
+                } else if (typeof value === "object") {
                     target[key] = target[key] || {};
                     deep_assign(target[key], value);
                 } else {
@@ -548,21 +560,18 @@ class Edge extends Cell {
         switch (options.style.name) {
             case "arrow":
                 style.level = options.level;
-                // `shorten` is interpreted with respect to the arc length of the arrow.
-                const curve = arrow.curve();
-                try {
-                    const [start, end] = arrow.find_endpoints();
-                    const arc_length = curve.arc_length(end.t) - curve.arc_length(start.t);
-                    style.shorten.tail = arc_length * options.shorten.source / 100;
-                    style.shorten.head = arc_length * options.shorten.target / 100;
-                } catch (_) {
-                    // If we can't find the endpoints, the arrow isn't being drawn, so we don't
-                    // need to bother trying to shorten it.
-                }
+                style.crossing_over = Edge.crossing_rank_for_options(options) > 0;
 
-                // Shape.
+                // Shape. A route takes the place of the curve, and of the offset, which would
+                // have to move each leg its own way.
                 switch (options.shape) {
                     case "bezier":
+                        if (Edge.is_routed_for_options(options)) {
+                            style.shape = CONSTANTS.ARROW_SHAPE.ROUTE;
+                            style.rounding = options.rounding * CONSTANTS.ROUNDING;
+                            style.shift = 0;
+                            break;
+                        }
                         style.shape = CONSTANTS.ARROW_SHAPE.BEZIER;
                         style.curve = options.curve * CONSTANTS.CURVE_HEIGHT * 2;
                         break;
@@ -572,6 +581,23 @@ class Edge extends Cell {
                         style.curve = radius * Math.sign(options.radius) * CONSTANTS.LOOP_HEIGHT;
                         style.angle = deg_to_rad(options.angle);
                         break;
+                }
+
+                // `shorten` is interpreted with respect to the arc length of the arrow, in the
+                // shape just worked out, rather than the one it was last drawn in.
+                const drawn = arrow.style;
+                arrow.style = style;
+                try {
+                    const curve = arrow.curve();
+                    const [start, end] = arrow.find_endpoints();
+                    const arc_length = curve.arc_length(end.t) - curve.arc_length(start.t);
+                    style.shorten.tail = arc_length * options.shorten.source / 100;
+                    style.shorten.head = arc_length * options.shorten.target / 100;
+                } catch (_) {
+                    // If we can't find the endpoints, the arrow isn't being drawn, so we don't
+                    // need to bother trying to shorten it.
+                } finally {
+                    arrow.style = drawn;
                 }
 
                 // Body style.
@@ -750,6 +776,40 @@ class Edge extends Cell {
 
             return !exceeded_max_level;
         }
+    }
+
+    /// The rank of an edge with `options` among those crossing over others, or 0 if it does not:
+    /// only an arrow that draws something has a gap to cut, and the export writes none for
+    /// anything else.
+    static crossing_rank_for_options(options) {
+        if (options.style.name !== "arrow" || ["tail", "body", "head"]
+            .every((component) => options.style[component].name === "none")) {
+            return 0;
+        }
+        return options.crossing_over;
+    }
+
+    /// Whether an edge with `options` is drawn through the cells of its route rather than as a
+    /// curve. A loop has no route.
+    static is_routed_for_options(options) {
+        return options.shape !== "arc" && options.route.length > 0;
+    }
+
+    /// Whether this edge is drawn through the cells of its route.
+    is_routed() {
+        return !this.is_loop() && Edge.is_routed_for_options(this.options);
+    }
+
+    /// The rank of this edge among those crossing over others, or 0 if it does not.
+    crossing_rank() {
+        return Edge.crossing_rank_for_options(this.options);
+    }
+
+    /// The layer the edge is drawn in: its own crossing rank, or, if higher, that of an edge it
+    /// attaches to, since tikz-cd needs that one written first (see `Quiver.drawing_groups`).
+    drawing_rank() {
+        return Math.max(this.crossing_rank(), ...[this.source, this.target]
+            .filter((cell) => cell.is_edge()).map((edge) => edge.drawing_rank()));
     }
 
     /// Creates a new edge.
@@ -1025,6 +1085,9 @@ class Edge extends Cell {
             }
         }
 
+        this.arrow.route = this.options.route
+            .map(([x, y]) => ui.grid.centre_offset_from_position(new Position(x, y)));
+        this.arrow.carried = ui.carried?.find(({ edge }) => edge === this)?.index ?? null;
         Edge.update_style(this.arrow, this.options);
         this.arrow.redraw();
 
@@ -1146,6 +1209,9 @@ class Edge extends Cell {
         if (this.is_loop()) {
             this.options.angle = mod(this.options.angle + 360, 360) - 180;
         }
+        // A route is passed through the other way. It is replaced rather than reversed in place,
+        // as the history may hold the old one.
+        this.options.route = Array.from(this.options.route).reverse();
         // Reverse the label alignment and edge offset as well as any oriented styles.
         // Flipping the label will also cause a rerender.
         // Note that since we do this, the position of the edge will remain the same, which

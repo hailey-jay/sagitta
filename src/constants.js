@@ -17,6 +17,8 @@ Object.assign(CONSTANTS, {
     EDGE_OFFSET_DISTANCE: 8,
     /// How many pixels each unit of curve height corresponds to.
     CURVE_HEIGHT: 24,
+    /// How many pixels each unit of a route's rounding corresponds to.
+    ROUNDING: 8,
     /// How many pixels each unit of loop radius corresponds to.
     LOOP_HEIGHT: 16,
     /// How many pixels of padding to place around labels on edges.

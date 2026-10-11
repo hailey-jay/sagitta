@@ -53,7 +53,7 @@ class ArrowOptions {
             return false;
         }
         const { only = null, arrow_only = false } = ArrowOptions.PROPERTIES[property];
-        if (only !== null && !edges.some((edge) => edge.is_loop() === (only === "loop"))) {
+        if (only !== null && !edges.some(ArrowOptions.KINDS[only])) {
             return false;
         }
         return !arrow_only || edges.every((edge) => edge.options.style.name === "arrow");
@@ -67,7 +67,7 @@ class ArrowOptions {
         }
         const { only = null } = ArrowOptions.PROPERTIES[property];
         return ArrowOptions.common(ArrowOptions.edges(ui), (edge) => {
-            if (only !== null && edge.is_loop() !== (only === "loop")) {
+            if (only !== null && !ArrowOptions.KINDS[only](edge)) {
                 return undefined;
             }
             if (property === "length") {
@@ -109,7 +109,7 @@ class ArrowOptions {
             kind: property,
             value,
             cells: ArrowOptions.edges(ui)
-                .filter((edge) => only === null || edge.is_loop() === (only === "loop"))
+                .filter((edge) => only === null || ArrowOptions.KINDS[only](edge))
                 .map((edge) => ({
                     edge,
                     from: property !== "length" ? edge.options[property]
@@ -131,14 +131,21 @@ class ArrowOptions {
     /// Nudge the selected edges with an arrow key. For arrows, `↑`/`↓` bend them toward their
     /// left/right (curve), which for a left-to-right arrow is up/down, and `←`/`→` shift them to
     /// their left/right (offset). For loops, `↑`/`↓` grow and shrink them (radius), and `←`/`→`
-    /// turn them (angle, which wraps around). Loops take the loop properties only when no other
-    /// arrow is selected.
+    /// turn them (angle, which wraps around). For routes, `↑`/`↓` round their corners more and
+    /// less. Loops and routes take their own properties only when nothing else is selected.
     nudge(ui, position_delta) {
         const edges = ArrowOptions.edges(ui);
         const loops_only = edges.length > 0 && edges.every((edge) => edge.is_loop());
-        const [property, delta] = loops_only
-            ? position_delta.x !== 0 ? ["angle", position_delta.x] : ["radius", -position_delta.y]
-            : position_delta.x !== 0 ? ["offset", position_delta.x] : ["curve", position_delta.y];
+        const routes_only = edges.length > 0 && edges.every((edge) => edge.is_routed());
+        let [property, delta] = position_delta.x !== 0
+            ? ["offset", position_delta.x] : ["curve", position_delta.y];
+        if (loops_only) {
+            [property, delta] = position_delta.x !== 0
+                ? ["angle", position_delta.x] : ["radius", -position_delta.y];
+        } else if (routes_only && property === "curve") {
+            // `↑` rounds a route's corners more. A route has no offset, so `←`/`→` do nothing.
+            [property, delta] = ["rounding", -position_delta.y];
+        }
         if (!this.applies(ui, property)) {
             return;
         }
@@ -281,6 +288,51 @@ class ArrowOptions {
         ui.history.add(ui, [{ kind: "edge_alignment", cells, end }], true);
     }
 
+    /// Whether the selected edges cross over the arrows drawn before them, or `null` if they
+    /// disagree or are not all arrows, as only an arrow is drawn to cut a gap.
+    crossing_over(ui) {
+        const edges = ArrowOptions.edges(ui);
+        if (edges.length === 0 || !edges.every((edge) => edge.options.style.name === "arrow")) {
+            return null;
+        }
+        return ArrowOptions.common(edges, (edge) => edge.options.crossing_over > 0);
+    }
+
+    /// Bring the selected edges to the front of those crossing over others (`value` `true`), or
+    /// stop them crossing over (`false`). With `value` `null`, bring them to the front unless
+    /// every one crosses over already, in which case stop them. Brought to the front together,
+    /// they share a rank, and stack among themselves as the export orders them.
+    set_crossing_over(ui, value = null) {
+        const edges = ArrowOptions.edges(ui);
+        const on = value ?? !edges.every((edge) => edge.options.crossing_over > 0);
+        const front = Math.max(0, ...ui.quiver.all_cells()
+            .filter((cell) => cell.is_edge()).map((edge) => edge.options.crossing_over)) + 1;
+        const rank = on ? front : 0;
+        ui.history.add(ui, [{
+            kind: "crossing_over",
+            crossings: edges.filter((edge) => edge.options.crossing_over !== rank)
+                .map((edge) => ({ edge, from: edge.options.crossing_over, to: rank })),
+        }], true);
+    }
+
+    /// The route across the selection, as a list of `[x, y]` cells, or `null` if the selected
+    /// edges disagree.
+    route(ui) {
+        return ArrowOptions.common(ArrowOptions.edges(ui), (edge) => edge.options.route);
+    }
+
+    /// Set the route of each selected edge, other than loops, to what `route` gives for it.
+    set_route(ui, route) {
+        ui.history.add(ui, [{
+            kind: "route",
+            routes: ArrowOptions.edges(ui).filter((edge) => !edge.is_loop()).map((edge) => ({
+                edge,
+                from: edge.options.route,
+                to: route(edge),
+            })).filter(({ from, to }) => JSON.stringify(from) !== JSON.stringify(to)),
+        }], true);
+    }
+
     /// The label alignment across the selection, or `null` if the selected edges disagree.
     label_alignment(ui) {
         return ArrowOptions.common(
@@ -361,14 +413,16 @@ ArrowOptions.EDGE_TYPES = [
     ["corner-inverse", "corner (var)"],
 ];
 
-/// The numeric arrow options, with the range each takes. `only` limits a property to loops or to
-/// non-loops; `arrow_only` marks those that mean nothing to an adjunction or a corner; `wraps`
-/// marks the one that turns rather than stopping at its ends; `spacing` is the least gap between a
-/// pair of values; and `default` is what the palette reports for a selection that has no value.
+/// The numeric arrow options, with the range each takes. `only` limits a property to one of
+/// `ArrowOptions.KINDS`; `arrow_only` marks those that mean nothing to an adjunction or a corner;
+/// `wraps` marks the one that turns rather than stopping at its ends; `spacing` is the least gap
+/// between a pair of values; and `default` is what the palette reports for a selection that has
+/// no value.
 ArrowOptions.PROPERTIES = {
     label_position: { min: 0, max: 100, step: 10, thumbs: 1, default: 50 },
-    offset: { min: -5, max: 5, step: 1, thumbs: 1, default: 0 },
-    curve: { min: -5, max: 5, step: 1, thumbs: 1, default: 0, only: "nonloop", arrow_only: true },
+    offset: { min: -5, max: 5, step: 1, thumbs: 1, default: 0, only: "unrouted" },
+    rounding: { min: 0, max: 8, step: 1, thumbs: 1, default: 3, only: "routed", arrow_only: true },
+    curve: { min: -5, max: 5, step: 1, thumbs: 1, default: 0, only: "curved", arrow_only: true },
     radius: { min: -5, max: 5, step: 2, thumbs: 1, default: 0, only: "loop", arrow_only: true },
     angle: {
         min: -180, max: 180, step: 45, thumbs: 1, default: 0,
@@ -381,4 +435,13 @@ ArrowOptions.PROPERTIES = {
         min: 1, max: CONSTANTS.MAXIMUM_CELL_LEVEL, step: 1, thumbs: 1, default: 1,
         arrow_only: true,
     },
+};
+
+/// The kinds of edge a property may be limited to (see `ArrowOptions.PROPERTIES`): a route has no
+/// curve or offset, and only a route has corners to round.
+ArrowOptions.KINDS = {
+    loop: (edge) => edge.is_loop(),
+    curved: (edge) => !edge.is_loop() && !edge.is_routed(),
+    routed: (edge) => edge.is_routed(),
+    unrouted: (edge) => !edge.is_routed(),
 };

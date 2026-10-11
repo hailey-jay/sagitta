@@ -165,6 +165,25 @@ kbd {
     visibility: visible;
 }
 
+/* The rectangle from the mark to the focus point, and the cells it would take. */
+.mark-region {
+    position: absolute;
+    margin-left: 1px; margin-top: 1px;
+    box-sizing: border-box;
+    border: var(--ui-focus) 2px dashed;
+    background: var(--ink-faint);
+    pointer-events: none;
+    transition: left 0.1s, top 0.1s, width 0.1s, height 0.1s;
+}
+
+.mark-region.hidden {
+    display: none;
+}
+
+.vertex.in-mark:not(.selected) .content {
+    background: var(--cell-hover);
+}
+
 /* Vertices */
 
 .vertex {
@@ -549,11 +568,39 @@ label input[type="checkbox"]:checked::before {
     z-index: 4;
 }
 
+/* An arrow crossing over others is drawn above them, and the band under it, in the canvas colour,
+   cuts the gap in them. */
+.arrow.crossing-over > svg:nth-child(2) {
+    z-index: 5;
+}
+
+.arrow path.arrow-crossing {
+    stroke: var(--canvas);
+}
+
+/* A route's checkpoints: a ring at each while the arrow is selected, filled while one is carried
+   with the focus point (see `Keys.carry`). */
+.arrow .arrow-checkpoint {
+    display: none;
+    fill: var(--canvas);
+    stroke: var(--ui-focus);
+    stroke-width: 1.5;
+    pointer-events: none;
+}
+
+.arrow.selected .arrow-checkpoint {
+    display: inline;
+}
+
+.arrow .arrow-checkpoint.carried {
+    fill: var(--ui-focus);
+}
+
 .arrow:not(.reconnecting) > svg:first-child > .arrow-background {
     pointer-events: stroke;
 }
 
-.arrow:not(.target):not(.selected) > svg:first-child:not(:hover) > .arrow-background,
+.arrow:not(.target):not(.selected):not(.in-mark) > svg:first-child:not(:hover) > .arrow-background,
 .ui.connect .cell:not(.target):not(.selected) > svg:first-child:hover > .arrow-background,
 .ui.pointer-move .cell:not(.selected) > svg:first-child:hover > .arrow-background {
     opacity: 0;

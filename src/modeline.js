@@ -225,13 +225,16 @@ class ModeLine {
                     return;
                 }
                 const loops = ui.quiver.all_cells().filter((cell) => cell.is_loop());
+                const displacements = vertices.map((vertex) => ({
+                    vertex,
+                    from: vertex.position,
+                    to: move(bounding_rect, vertex.position),
+                }));
                 ui.history.add(ui, [{
                     kind: "move",
-                    displacements: vertices.map((vertex) => ({
-                        vertex,
-                        from: vertex.position,
-                        to: move(bounding_rect, vertex.position),
-                    })),
+                    displacements,
+                    routes: ui.quiver.moved_routes(
+                        displacements, (position) => move(bounding_rect, position)),
                 }, ...edges(loops)], true);
             }, () => ui.in_mode(...default_pan) && any_cells());
         };
@@ -441,8 +444,10 @@ class ModeLine {
         if (ui.keymap.active) {
             return [...ui.keymap.describe_layer(), "layer"];
         }
-        // A mark waiting for its other corner is state the user cannot otherwise see.
-        return ["TYPE", ui.mark !== null ? "MARK" : null, "type"];
+        // A mark waiting for its other corner, or a checkpoint being carried, is state the user
+        // cannot otherwise see.
+        return ["TYPE", ui.mark !== null ? "MARK" : ui.carried !== null ? "CHECKPOINT" : null,
+            "type"];
     }
 
     /// The option value for an arrow component (e.g. `top-hook`), as in `Commands.STYLES`.
@@ -492,6 +497,12 @@ class ModeLine {
             }
             if (edges[0].is_loop()) {
                 parts.push(`radius ${options.radius}`, `angle ${options.angle}`);
+            } else if (edges[0].is_routed()) {
+                const count = options.route.length;
+                parts.push(`route via ${count} cell${count === 1 ? "" : "s"}`);
+                if (options.rounding !== Edge.default_options().rounding) {
+                    parts.push(`rounding ${options.rounding}`);
+                }
             } else if (options.curve !== 0) {
                 parts.push(`curve ${options.curve}`);
             }
@@ -500,8 +511,11 @@ class ModeLine {
                 parts.push(`length ${source},${100 - target}`);
             }
         }
-        if (options.offset !== 0) {
+        if (options.offset !== 0 && !edges[0].is_routed()) {
             parts.push(`offset ${options.offset}`);
+        }
+        if (style.name === "arrow" && options.crossing_over > 0) {
+            parts.push("crossing over");
         }
         if (options.label_position !== 50) {
             parts.push(`position ${options.label_position}`);

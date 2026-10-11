@@ -188,6 +188,25 @@ class History {
                     )) {
                         cells.delete(cell);
                     }
+                    // The routes that move with the vertices (see `Quiver.moved_routes`).
+                    for (const route of action.routes ?? []) {
+                        route.edge.options.route = route[to];
+                        cells.add(route.edge);
+                    }
+                    break;
+                case "route":
+                    for (const route of action.routes) {
+                        route.edge.options.route = route[to];
+                        cells.add(route.edge);
+                    }
+                    update_selection = true;
+                    break;
+                case "rounding":
+                    for (const rounding of action.roundings) {
+                        rounding.edge.options.rounding = rounding[to];
+                        cells.add(rounding.edge);
+                    }
+                    update_selection = true;
                     break;
                 case "create":
                     for (const cell of action.cells) {
@@ -336,6 +355,13 @@ class History {
                     update_selection = true;
                     update_colours = true;
                     break;
+                case "crossing_over":
+                    for (const crossing of action.crossings) {
+                        crossing.edge.options.crossing_over = crossing[to];
+                        cells.add(crossing.edge);
+                    }
+                    update_selection = true;
+                    break;
                 case "edge_alignment":
                     for (const cell of action.cells) {
                         cell.options.edge_alignment[action.end] =
@@ -350,6 +376,9 @@ class History {
             }
         }
 
+        // A change of rank, of the arrows' ends, or of where they lie may change the stacking.
+        ui.restack();
+        ui.update_mark_region();
         if (update_selection) {
             ui.update_selection();
             ui.hide_if_unselected();
@@ -364,6 +393,8 @@ class History {
     }
 
     undo(ui) {
+        // A checkpoint being carried goes back first, so that the history is not undone under it.
+        ui.keys?.put_down(false);
         if (this.present > 0) {
             --this.present;
             this.permanentise();
@@ -389,6 +420,7 @@ class History {
     }
 
     redo(ui) {
+        ui.keys?.put_down(false);
         if (this.present < this.actions.length) {
             // Trigger the next action.
             const update_selection = this.effect(ui, this.actions[this.present], false);

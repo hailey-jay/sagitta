@@ -16,6 +16,8 @@ const CONSTANTS = {
     BACKGROUND_PADDING: 16,
     /// The opacity (0 to 1) of the background.
     BACKGROUND_OPACITY: 0.2,
+    /// The gap (in pixels) an arrow drawn crossing over others cuts on either side of itself.
+    CROSSING_PADDING: 5,
     /// How much padding (in pixels) to give to masks to ensure they crop sufficiently.
     MASK_PADDING: 4,
     /// How much spacing (in pixels) to leave between arrowheads of the same type.
@@ -29,6 +31,8 @@ const CONSTANTS = {
     ADJUNCTION_LINE_LENGTH: 16,
     /// The length of the line segments in a corner (i.e. a pullback or pushout).
     CORNER_LINE_LENGTH: 12,
+    /// The radius of the mark at each checkpoint of a selected route.
+    CHECKPOINT_RADIUS: 4,
     /// The radius of the handle for dragging an edge.
     HANDLE_RADIUS: 14,
     /// Constants handling the behaviour of loops.
@@ -46,6 +50,8 @@ const CONSTANTS = {
         "BEZIER",
         // Arc (used for loops).
         "ARC",
+        // Straight legs through checkpoints, with rounded corners (see `Route`).
+        "ROUTE",
     ),
     /// The possible styles for an edge.
     ARROW_BODY_STYLE: new Enum(
@@ -142,6 +148,10 @@ class ArrowStyle {
         this.tails = CONSTANTS.ARROW_HEAD_STYLE.NONE;
         // The colour of the arrow.
         this.colour = Colour.black().css();
+        // Whether the arrow is drawn above the others, cutting a gap in those it crosses.
+        this.crossing_over = false;
+        // The radius (in pixels) of the corners of a route.
+        this.rounding = 0;
     }
 }
 
@@ -194,6 +204,11 @@ class Arrow {
         this.svg = new DOM.SVGElement("svg").add_to(this.element);
         // The mask to be used for any edges having this edge as a source or target.
         this.mask = new DOM.SVGElement("svg");
+        // The checkpoints a route passes through between the source and target, as offsets on the
+        // canvas, which the shape `ROUTE` draws.
+        this.route = [];
+        // Which checkpoint is being moved with the focus point, if one is (see `Keys.carry`).
+        this.carried = null;
     }
 
     /// Returns the source and target origins, adjusting for zero-length edges.
@@ -242,6 +257,15 @@ class Arrow {
                     return new Arc(origin, length, true, this.style.curve, angle);
                 }
                 return this.arc_for_chord(origin, length, this.style.curve, angle);
+            case CONSTANTS.ARROW_SHAPE.ROUTE: {
+                // The checkpoints are where they are on the canvas, so they are put in the frame
+                // of the line from source to target, as the other curves are drawn.
+                const { source, target } = this.origin();
+                const frame = this.angle();
+                const points = [source, ...this.route, target]
+                    .map((point) => point.sub(source).rotate(-frame));
+                return new Route(origin, points, this.style.rounding, angle);
+            }
         }
     }
 
@@ -565,6 +589,42 @@ class Arrow {
                 width: svg_width,
                 height: svg_height,
                 fill: "white",
+            });
+        }
+
+        // The gap an arrow crossing over others cuts in them: a band of the canvas colour under
+        // the edge, from endpoint to endpoint, as the background is. It is always there, and
+        // hidden unless wanted, so that it comes before the edge whenever the edge is drawn.
+        const crossing = this.requisition_element(this.svg, "path.arrow-crossing", {
+            fill: "none",
+            stroke: "white",
+        });
+        if (this.style.crossing_over) {
+            const from = arclen_to_start + this.style.shorten.tail;
+            const to = arclen_to_end - this.style.shorten.head;
+            crossing.set_attributes({
+                d: `${ curve.render(new Path().move_to(offset)) }`,
+                "stroke-width": edge_width + CONSTANTS.CROSSING_PADDING * 2,
+                "stroke-dasharray": `0 ${from} ${Math.max(to - from, 0)} ${Math.ceil(arclen - to)}`,
+            });
+            crossing.remove_attributes("display");
+        } else {
+            crossing.set_attributes({ display: "none" });
+        }
+
+        // A route's checkpoints, which the style sheet shows only while the arrow is selected, so
+        // that one can be found to move. They are redrawn whole, as there may be more or fewer.
+        this.svg.query_selector_all(".arrow-checkpoint").forEach((element) => element.remove());
+        if (this.style.shape === CONSTANTS.ARROW_SHAPE.ROUTE) {
+            const source = this.origin().source;
+            this.route.forEach((point, index) => {
+                const centre = point.sub(source).rotate(-angle).add(offset);
+                new DOM.SVGElement("circle", {
+                    class: `arrow-checkpoint${index === this.carried ? " carried" : ""}`,
+                    cx: centre.x,
+                    cy: centre.y,
+                    r: CONSTANTS.CHECKPOINT_RADIUS,
+                }).add_to(this.svg);
             });
         }
 
@@ -1422,6 +1482,10 @@ class Arrow {
         // want to adjust the label in the direct of the normal to the centre point of the label.
         if (this.style.shape === CONSTANTS.ARROW_SHAPE.ARC) {
             offset_angle = curve.tangent(this.style.label_position);
+        }
+        // A route turns, so the label is pushed off the leg it is on.
+        if (this.style.shape === CONSTANTS.ARROW_SHAPE.ROUTE) {
+            offset_angle = curve.tangent(start.t + (end.t - start.t) * this.style.label_position);
         }
 
         // For Bézier curves, we simply adjust up or down.

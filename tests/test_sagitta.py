@@ -129,11 +129,57 @@ def _diagram(directory, text=SQUARE, name="square.tikzcd"):
     (["squiggly"], '\\arrow["f", squiggly, from=1-1'),
     (["align right"], '\\arrow["f"\', from=1-1'),
     (["align center"], '\\arrow["f"{description}, from=1-1'),
+    (["crossing-over"], '\\arrow["f", crossing over, from=1-1'),
+    (["crossing-over off", "cross on"], '\\arrow["f", crossing over, from=1-1'),
 ])
 def test_commands_change_the_arrows(sagitta, home, commands, expected):
     diagram = _diagram(home / "paper")
     sagitta("commands", diagram, json.dumps(commands))
     assert expected in diagram.read_text()
+
+
+@pytest.mark.parametrize("commands", [
+    ["crossing-over", "crossing-over"],
+    ["crossing-over", "undo"],
+    ["crossing-over on", "crossing-over off"],
+])
+def test_crossing_over_turns_off_again(sagitta, home, commands):
+    diagram = _diagram(home / "paper")
+    sagitta("commands", diagram, json.dumps(commands))
+    assert "crossing over" not in diagram.read_text()
+
+
+def test_crossing_over_draws_the_gap(sagitta, home):
+    diagram = _diagram(home / "paper")
+    before = sagitta("drawn", diagram, json.dumps([]))
+    after = sagitta("drawn", diagram, json.dumps(["crossing-over"]))
+    assert [b["crossing"] for b in before] == [False] * 4
+    assert [a["crossing"] for a in after] == [True] * 4
+
+
+CROSSED = """\
+\\begin{tikzcd}
+\tA \\arrow[ddrr, "f", crossing over] & B \\arrow[dd, "g"] & C \\arrow[ddll, "h", crossing over] \\\\
+\t&& \\\\
+\tD & E & F
+\\end{tikzcd}
+"""
+
+
+def test_the_canvas_stacks_crossing_arrows_as_the_export_does(sagitta, home):
+    diagram = _diagram(home / "paper", CROSSED, "crossed.tikzcd")
+    opened = sagitta("stacking", diagram, json.dumps({}))
+    assert opened["stacked"] == opened["written"] == ["f", "h"]
+    # Bringing `f` to the front puts it above `h`, and so does turning `g` on, above both.
+    raised = sagitta("stacking", diagram, json.dumps(
+        {"select": ["f"], "commands": ["crossing-over on"]}))
+    assert raised["stacked"] == raised["written"] == ["h", "f"]
+    toggled = sagitta("stacking", diagram, json.dumps({"select": ["g"], "commands": ["cross"]}))
+    assert toggled["stacked"] == toggled["written"] == ["f", "h", "g"]
+    # Undoing it lowers `g` again.
+    undone = sagitta("stacking", diagram, json.dumps(
+        {"select": ["g"], "commands": ["cross", "undo"]}))
+    assert undone["stacked"] == undone["written"] == ["f", "h"]
 
 
 def test_styling_the_arrows_redraws_them(sagitta, home):
@@ -171,6 +217,7 @@ def test_aligning_the_labels_redraws_them(sagitta, home, alignment):
     ([["a", ["shift"]], "Right", "Right", "Right"], '\\arrow["f"{description}, from=1-1'),
     ([["a", ["shift"]], "r"], '\\arrow["f"\', from=1-1'),
     (["p"], '"\\lrcorner"{anchor=center, pos=0.125, rotate=45}, draw=none'),
+    (["x"], '\\arrow["f", crossing over, from=1-1'),
     # Pressing a component's key again lets go of it, so `n` chooses the level, not no tail.
     (["t", "t", "n", "2", "Enter"], '\\arrow["f", Rightarrow, from=1-1'),
 ])
@@ -410,8 +457,8 @@ def test_the_command_layer_lists_shifted_letters_as_capitals(sagitta, home):
 
 @pytest.mark.parametrize("steps,expected", [
     ([["entry", "dashed"]], '\\arrow["f", dashed, from=1-1'),
-    ([["step", "curve (loops: radius)", "+"]], '\\arrow["f", curve={height=6pt}, from=1-1'),
-    ([["step", "curve (loops: radius)", "+"], ["step", "curve (loops: radius)", "+"]], '\\arrow["f", curve={height=12pt}, from=1-1'),
+    ([["step", "curve (loops: radius, routes: rounding)", "+"]], '\\arrow["f", curve={height=6pt}, from=1-1'),
+    ([["step", "curve (loops: radius, routes: rounding)", "+"], ["step", "curve (loops: radius, routes: rounding)", "+"]], '\\arrow["f", curve={height=12pt}, from=1-1'),
     ([["entry", "reverse"]], '\\arrow["f"\', from=1-2, to=1-1]'),
     ([["entry", "alignment"], ["entry", "over the arrow"]],
      '\\arrow["f"{marking, allow upside down}, from=1-1'),
@@ -499,6 +546,14 @@ def test_removing_a_cell_frees_its_code(sagitta, home):
     assert restored == (["A", "D", "F", "S"], ["AD", "AS", "DF", "SF"])
 
 
+def test_a_key_press_ends_a_pan_whose_key_was_released_unseen(sagitta, home):
+    result = sagitta("stale_pan", _diagram(home / "paper"))
+    assert result["stuck"] == "pan"
+    assert result["after"] == "default"
+    # `A`, `B`, and the arrow between them.
+    assert result["counts"]["selected"] == 3, result
+
+
 def test_only_the_cell_tab_goes_to_next_is_marked(sagitta, home):
     """Space from the selected `A` to an empty cell queues an arrow `AG` and a vertex `G`, with
     `G` selected; Tab then goes to the arrow, and back to the vertex."""
@@ -547,6 +602,22 @@ def test_a_chord_in_the_keys_file_takes_the_key_from_its_default(sagitta, home):
     assert "dashed" in diagram.read_text()
     help = dict(sagitta("help", _diagram(home / "other")))
     assert ["C-r", "reverse"] not in help["Chords"]
+
+
+def test_the_keys_file_rebinds_the_mark(sagitta, home):
+    _keys(home, "mark C-q\nmark-add C-j\n")
+    # The top row with the new key, then the bottom row added with the other.
+    rebound = sagitta("pressed", _diagram(home / "rebound"), json.dumps([
+        ["q", ["control"]], ["Right"], ["q", ["control"]],
+        ["Down"], ["j", ["control"]], ["Left"], ["j", ["control"]],
+    ]))
+    # Each row's two vertices and its arrow; the arrows down the sides have their ends in
+    # different rectangles, so neither takes them.
+    assert rebound["counts"]["selected"] == 6, rebound
+    # `C-SPC` is free now, and does nothing: no mark, and no vertex made by the Space in it.
+    freed = sagitta("pressed", _diagram(home / "freed"), json.dumps([["Space", ["control"]]]))
+    assert "MARK" not in freed["mode_line"]
+    assert freed["counts"] == {"vertices": 4, "edges": 4, "selected": 0}
 
 
 def test_a_chord_choosing_a_slider_enters_the_command_layer(sagitta, home):
@@ -754,6 +825,12 @@ def test_the_mark_selects_a_rectangle_of_cells(sagitta, home):
     steps = sagitta("mark", _diagram(home / "paper"))
     assert "MARK" in steps["mark at A"]["mode_line"]
     assert steps["mark at A"]["counts"]["selected"] == 0
+    # The rectangle shows from the mark, with `A` marked as one it would take, and grows to `B`,
+    # taking `B` and the arrow between them, before anything is selected.
+    assert steps["mark at A"]["region"] == {"shown": True, "size": [1, 1], "inside": 1}
+    assert steps["towards B"]["region"] == {"shown": True, "size": [2, 1], "inside": 3}
+    assert steps["towards B"]["counts"]["selected"] == 0
+    assert steps["top row"]["region"] == {"shown": False, "size": None, "inside": 0}
     # `A`, `B`, and the arrow between them.
     assert steps["top row"]["counts"]["selected"] == 3
     assert "MARK" not in steps["top row"]["mode_line"]
@@ -763,6 +840,7 @@ def test_the_mark_selects_a_rectangle_of_cells(sagitta, home):
     assert steps["adding the row"]["counts"]["selected"] == 8
     # A mark dropped with Escape selects nothing, and leaves the selection as it was.
     assert "MARK" not in steps["mark dropped"]["mode_line"]
+    assert not steps["mark dropped"]["region"]["shown"]
     assert steps["mark dropped"]["counts"]["selected"] == 8
     # Nothing was created or deleted along the way.
     for step in steps.values():
@@ -929,6 +1007,136 @@ def test_snake_refuses_what_has_no_staircase(sagitta, home):
     """Neighbours are already joined, so there is nothing to put between them."""
     sagitta("snake", _diagram(home / "paper"), None,
             expected_error="Select one arrow to draw as a staircase.")
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("commands,expected", [
+    (["route x"], "to path={[rounded corners=6pt] -- (\\tikzcdmatrixname-2-2.center |- "
+     "\\tikzcdmatrixname-1-1.center) \\tikztonodes -- (\\tikztotarget) [sharp corners]}"),
+    (["route y"], "to path={[rounded corners=6pt] -- (\\tikzcdmatrixname-1-1.center |- "
+     "\\tikzcdmatrixname-2-2.center) -- (\\tikztotarget) \\tikztonodes [sharp corners]}"),
+    (["route"], "-- (\\tikzcdmatrixname-2-2.center |- \\tikzcdmatrixname-1-1.center)"),
+    (["route", "route"], "-- (\\tikzcdmatrixname-1-1.center |- \\tikzcdmatrixname-2-2.center)"),
+    (["route x", "rounding 0"], "to path={-- (\\tikzcdmatrixname-2-2.center"),
+    (["route x", "rounding 8"], "to path={[rounded corners=16pt] --"),
+    (["route x", "squiggly"], "[sharp corners]}, squiggly, from=1-1, to=2-2]"),
+])
+def test_route_commands_write_a_to_path(sagitta, home, commands, expected):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    sagitta("commands", diagram, json.dumps(commands))
+    assert expected in diagram.read_text()
+
+
+@pytest.mark.parametrize("commands", [
+    ["route x", "route none"],
+    ["route", "route", "route"],
+    ["route x", "undo"],
+])
+def test_a_route_straightens_again(sagitta, home, commands):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    sagitta("commands", diagram, json.dumps(commands))
+    assert "to path" not in diagram.read_text()
+    assert '\\arrow["c", from=1-1, to=2-2]' in diagram.read_text()
+
+
+def test_a_route_is_drawn_round_its_corner(sagitta, home):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    [p, q] = sagitta("route", diagram, json.dumps([]))["vertices"]
+    straight = sagitta("route", diagram, json.dumps([]))["edges"][0]
+    assert straight["arcs"] == 0
+    routed = sagitta("route", diagram, json.dumps(["route x"]))
+    [edge] = routed["edges"]
+    assert edge["drawn"] and edge["arcs"] == 1
+    # Along the row first: it leaves `P` heading right, level with it, and comes down into `Q`.
+    assert abs(edge["source"][1] - p[1]) <= 1 and edge["source"][0] > p[0]
+    assert abs(edge["target"][0] - q[0]) <= 1 and edge["target"][1] < q[1]
+    down = sagitta("route", diagram, json.dumps(["route y"]))["edges"][0]
+    assert abs(down["source"][0] - p[0]) <= 1 and down["source"][1] > p[1]
+    assert abs(down["target"][1] - q[1]) <= 1 and down["target"][0] < q[0]
+
+
+def test_checkpoints_are_added_at_the_focus_point(sagitta, home):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    result = sagitta("route", diagram, json.dumps([[0, 2], "checkpoint", [1, 2], "checkpoint"]))
+    [edge] = result["edges"]
+    assert edge["route"] == [[0, 2], [1, 2]]
+    assert edge["drawn"] and edge["arcs"] == 2
+    saved = diagram.read_text()
+    # Row 3 holds no vertex, so its cells are written out, empty, to have nodes to pass through.
+    assert "[nodes in empty cells]" in saved
+    assert "-- (\\tikzcdmatrixname-3-1.center) -- (\\tikzcdmatrixname-3-2.center)" in saved
+    # Again at the same cell takes it out.
+    again = sagitta("route", diagram, json.dumps([[1, 2], "checkpoint"]))
+    assert again["edges"][0]["route"] == [[0, 2]]
+
+
+def test_checkpoint_has_a_key_in_the_layer(sagitta, home):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    result = sagitta("route", diagram, json.dumps(
+        [[1, 0], {"keys": [[";"], ["k"], ["b"], ["5"], ["Enter"], ["Escape"]]}]))
+    # The curve's key rounds a route instead.
+    assert result["edges"][0]["route"] == [[1, 0]]
+    assert "[rounded corners=10pt]" in diagram.read_text()
+
+
+@pytest.mark.parametrize("keys,route", [
+    # Picked up, carried up a row, and put down.
+    ([[";"], ["m"], ["Escape"], ["Up"], ["Enter"]], [[1, -1]]),
+    # Put back where it was.
+    ([[";"], ["m"], ["Escape"], ["Up"], ["Escape"]], [[1, 0]]),
+    # Onto the arrow's own end it does not go: it waits, and follows on past it.
+    ([[";"], ["m"], ["Escape"], ["Down"], ["Down"], ["Enter"]], [[1, 2]]),
+])
+def test_a_checkpoint_is_carried_with_the_focus_point(sagitta, home, keys, route):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    result = sagitta("route", diagram, json.dumps(["route x", [1, 0], {"keys": keys}]))
+    assert result["edges"][0]["route"] == route
+    assert result["edges"][0]["drawn"]
+
+
+def test_checkpoints_are_marked_while_the_arrow_is_selected(sagitta, home):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    result = sagitta("route", diagram, json.dumps(["route x"]))
+    [p, q] = result["vertices"]
+    [mark] = result["edges"][0]["checkpoints"]
+    # In the cell the route turns in: `Q`'s column, `P`'s row.
+    assert mark["shown"] and not mark["carried"]
+    assert abs(mark["centre"][0] - q[0]) <= 1 and abs(mark["centre"][1] - p[1]) <= 1
+    carried = sagitta("route", diagram, json.dumps(["route x", [1, 0], "move-checkpoint"]))
+    assert carried["edges"][0]["checkpoints"][0]["carried"]
+    hidden = sagitta("route", diagram, json.dumps(["route x", {"keys": [["Escape"]]}]))
+    assert not hidden["edges"][0]["checkpoints"][0]["shown"]
+
+
+def test_carrying_a_checkpoint_undoes_in_one_step(sagitta, home):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    result = sagitta("route", diagram, json.dumps(
+        ["route x", [1, 0], "move-checkpoint", {"keys": [["Up"], ["Up"], ["Enter"]]}, "undo"]))
+    assert result["edges"][0]["route"] == [[1, 0]]
+
+
+def test_carrying_needs_a_checkpoint_at_the_focus_point(sagitta, home):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    sagitta("route", diagram, json.dumps(["route x", [0, 1], "move-checkpoint"]),
+            expected_error="There is no checkpoint of a selected arrow at the focus point")
+
+
+def test_a_route_moves_with_its_arrow(sagitta, home):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    moved = sagitta("route", diagram, json.dumps(
+        ["route x", {"keys": [["Down", ["control"]]]}]))
+    assert moved["edges"][0]["route"] == [[1, 1]]
+    # A gap opened across the route moves the cells beyond it on. The file was saved moved, and
+    # opens with `P` back at the top left.
+    opened = sagitta("route", diagram, json.dumps([[1, 0], "insert-column-left"]))
+    assert opened["edges"][0]["route"] == [[2, 0]]
+
+
+def test_a_route_is_refused_where_there_is_no_corner(sagitta, home):
+    sagitta("commands", _diagram(home / "paper"), json.dumps(["route x"]),
+            expected_error="The arrow is already straight")
 
 
 def test_a_changed_setting_is_written_to_the_settings_file(sagitta, home):

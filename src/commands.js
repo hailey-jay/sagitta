@@ -108,13 +108,17 @@ class Commands {
                 axis === "x" ? "column" : "row"} ${index + 1} to move.`);
         }
         const delta = axis === "x" ? new Position(1, 0) : new Position(0, 1);
+        const move = (position) => position[axis] >= index ? position.add(delta) : position;
+        const displacements = beyond.map((vertex) => ({
+            vertex,
+            from: vertex.position,
+            to: move(vertex.position),
+        }));
         ui.history.add(ui, [{
             kind: "move",
-            displacements: beyond.map((vertex) => ({
-                vertex,
-                from: vertex.position,
-                to: vertex.position.add(delta),
-            })),
+            displacements,
+            // A route's cells beyond the gap move on with the vertices there.
+            routes: ui.quiver.moved_routes(displacements, move),
         }], true);
     }
 
@@ -193,6 +197,82 @@ class Commands {
             axis = axis === "x" ? "y" : "x";
         }
         return corners;
+    }
+
+    /// The selected edges a route can be given: not loops, and only those with a vertex at each
+    /// end, since a route is a path between cells. Throws if there are none.
+    routable() {
+        this.require_edges();
+        const edges = ArrowOptions.edges(this.ui)
+            .filter((edge) => !edge.is_loop()
+                && edge.source.is_vertex() && edge.target.is_vertex());
+        if (edges.length === 0) {
+            throw new Error("A route runs between two cells: select an arrow that is not a loop,"
+                + " and whose ends are not arrows.");
+        }
+        return edges;
+    }
+
+    /// Route the selected arrows round one corner, going along `first` (`"x"` or `"y"`) and then
+    /// the other axis, or straighten them again (`first` `null`). An arrow whose ends share a row
+    /// or a column has no corner to turn, and is left alone.
+    route(first) {
+        const ui = this.ui;
+        const edges = new Set(this.routable());
+        const corner = (edge) => {
+            const { source: { position: source }, target: { position: target } } = edge;
+            return first === "x" ? [target.x, source.y] : [source.x, target.y];
+        };
+        const bends = (edge) => edge.source.position.x !== edge.target.position.x
+            && edge.source.position.y !== edge.target.position.y;
+        if (first !== null && !Array.from(edges).some(bends)) {
+            throw new Error("The arrow is already straight along a row or a column, so it has no"
+                + " corner to turn: add checkpoints for a route round something.");
+        }
+        ui.arrow_options.set_route(ui, (edge) => !edges.has(edge) ? edge.options.route
+            : first === null ? [] : bends(edge) ? [corner(edge)] : edge.options.route);
+    }
+
+    /// The next route `route` with no argument gives: a straight arrow bends along a row first,
+    /// that bend goes along a column first instead, and any other route is straightened.
+    next_route() {
+        const edges = this.routable();
+        const route = ArrowOptions.common(edges, (edge) => edge.options.route);
+        if (route === null || route.length === 0) {
+            return "x";
+        }
+        if (route.length === 1 && edges.every((edge) => JSON.stringify(edge.options.route)
+            === JSON.stringify([[edge.target.position.x, edge.source.position.y]]))
+        ) {
+            return "y";
+        }
+        return null;
+    }
+
+    /// Add the cell at the focus point to the routes of the selected arrows, as their last
+    /// checkpoint before the target, or take it out of the routes that already pass through it.
+    checkpoint() {
+        const ui = this.ui;
+        const edges = this.routable();
+        const at = ui.focus_position.toArray();
+        const has = (edge) => edge.options.route.some(([x, y]) => x === at[0] && y === at[1]);
+        const ends = (edge) => [edge.source, edge.target]
+            .some((end) => end.position.x === at[0] && end.position.y === at[1]);
+        if (edges.every(ends)) {
+            throw new Error("The focus point is on an end of the arrow: move it to a cell the"
+                + " arrow should pass through.");
+        }
+        const remove = edges.every((edge) => has(edge) || ends(edge));
+        const routing = new Set(edges);
+        ui.arrow_options.set_route(ui, (edge) => {
+            if (!routing.has(edge) || ends(edge)) {
+                return edge.options.route;
+            }
+            return remove
+                ? edge.options.route.filter(([x, y]) => x !== at[0] || y !== at[1])
+                : has(edge) ? edge.options.route : [...edge.options.route, at];
+        });
+        ui.mode_line.flash(remove ? "checkpoint removed" : "checkpoint added");
     }
 
     /// Apply an arrow preset to the selected arrows, or, with none selected, make it the preset
@@ -274,7 +354,7 @@ for (const component of ["tail", "body", "head"]) {
     };
 }
 
-for (const property of ["level", "curve", "offset", "radius", "angle", "length"]) {
+for (const property of ["level", "curve", "offset", "radius", "angle", "length", "rounding"]) {
     Commands.TABLE[property] = {
         arguments: true,
         run: (commands, values) => {
@@ -394,6 +474,68 @@ Commands.TABLE["snake"] = {
     },
 };
 
+/// `route x` and `route y` bend the selected arrows round one corner, going along a row or a column
+/// first, and `route none` straightens them. With nothing, it steps through those three.
+Commands.TABLE["route"] = {
+    arguments: true,
+    completions: ["x", "y", "none"],
+    run: (commands, [first]) => {
+        commands.require_edges();
+        if (first === undefined) {
+            commands.route(commands.next_route());
+            return;
+        }
+        const values = { x: "x", y: "y", none: null };
+        if (!Object.hasOwn(values, first.toLowerCase())) {
+            throw new Error(`"${first}" is not x, y, or none, which route takes, or nothing.`);
+        }
+        commands.route(values[first.toLowerCase()]);
+    },
+};
+
+/// `checkpoint` adds the cell at the focus point to the selected arrows' routes, or takes it out.
+Commands.TABLE["checkpoint"] = {
+    run: (commands) => {
+        commands.checkpoint();
+    },
+};
+
+/// `move-checkpoint` picks up the checkpoint at the focus point, which then follows the focus point
+/// until RET puts it down or ESC puts it back (see `Keys.carry`). Again puts it down.
+Commands.TABLE["move-checkpoint"] = {
+    run: (commands) => commands.ui.keys.carry(),
+};
+
+/// `mark` and `mark-add` do what their keys do (see `Keys.mark`), from the command line.
+for (const [name, add] of [["mark", false], ["mark-add", true]]) {
+    Commands.TABLE[name] = {
+        run: (commands) => {
+            const ui = commands.ui;
+            if (!ui.keys.mark(add)) {
+                throw new Error(`The mark cannot be set in the ${ui.mode.name} mode.`);
+            }
+        },
+    };
+}
+
+/// `crossing-over` toggles whether the selected arrows cut a gap in the arrows they cross, and
+/// `crossing-over on` or `off` sets it.
+Commands.TABLE["crossing-over"] = {
+    arguments: true,
+    completions: ["on", "off"],
+    run: (commands, [value]) => {
+        const ui = commands.ui;
+        commands.require_edges();
+        const values = { on: true, off: false };
+        if (value !== undefined && !Object.hasOwn(values, value.toLowerCase())) {
+            throw new Error(`"${value}" is not on or off: crossing-over takes on, off, or nothing.`);
+        }
+        commands.ensure_arrow();
+        ui.arrow_options.set_crossing_over(
+            ui, value === undefined ? null : values[value.toLowerCase()]);
+    },
+};
+
 Commands.TABLE["align"] = {
     arguments: true,
     completions: ["left", "centre", "over", "right"],
@@ -458,6 +600,8 @@ Commands.ALIASES = {
     "len": "length",
     "color": "colour",
     "label-color": "label-colour",
+    "cross": "crossing-over",
+    "waypoint": "checkpoint",
     "pullback": "corner",
     "pushout": "corner",
     "eq": "equals",

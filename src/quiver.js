@@ -116,6 +116,39 @@ class Quiver {
         return Array.from(this.dependencies.keys()).filter((cell) => !this.deleted.has(cell));
     }
 
+    /// The edges in the order they are drawn, as runs of one layer and one level: by layer (see
+    /// `Edge.drawing_rank`), then level, then source (top to bottom, then left to right), then
+    /// target, where an edge's source or target is the vertex its arrows lead back to. tikz-cd
+    /// draws the arrows in the order they are written, and an arrow crossing over others cuts a
+    /// gap only in those drawn before it, so the export writes them in this order, and the canvas
+    /// stacks the raised ones in it (see `UI.restack`).
+    drawing_groups() {
+        const compare_cell_position = (a, b) => a.position.y - b.position.y
+            || a.position.x - b.position.x;
+        const find_vertex = (cell, choose) => cell.is_edge()
+            ? find_vertex(choose(cell), choose) : cell;
+        const edges = this.cells.slice(1).flatMap((cells) => Array.from(cells))
+            .map((edge) => ({ edge, rank: edge.drawing_rank() }));
+        edges.sort((a, b) => a.rank - b.rank
+            || a.edge.level - b.edge.level
+            || compare_cell_position(
+                find_vertex(a.edge, (cell) => cell.source),
+                find_vertex(b.edge, (cell) => cell.source))
+            || compare_cell_position(
+                find_vertex(a.edge, (cell) => cell.target),
+                find_vertex(b.edge, (cell) => cell.target)));
+        const groups = [];
+        let previous = null;
+        for (const { edge, rank } of edges) {
+            if (previous === null || previous.rank !== rank || previous.level !== edge.level) {
+                groups.push([]);
+                previous = { rank, level: edge.level };
+            }
+            groups[groups.length - 1].push(edge);
+        }
+        return groups;
+    }
+
     /// Returns whether a cell exists in the quiver (i.e. hasn't been deleted).
     contains_cell(cell) {
         return this.all_cells().includes(cell);
@@ -137,6 +170,39 @@ class Quiver {
             [Math.min(...xs), Math.min(...ys)],
             [Math.max(...xs), Math.max(...ys)],
         ];
+    }
+
+    /// The routes that go with moving vertices, as `{ edge, from, to }` for a `move` history
+    /// action (see `History.effect`). With `map`, a function from a cell to where it goes, every
+    /// route goes through the cells `map` takes its own to, as when the diagram is flipped or a gap
+    /// opened. Otherwise, a route goes with its arrow only when every vertex the arrow hangs from
+    /// moves, and by the same step, as when a part of the diagram is dragged; an arrow stretched by
+    /// the move keeps its route where it was.
+    moved_routes(displacements, map = null) {
+        const steps = new Map(displacements.map(({ vertex, from, to }) => [vertex, to.sub(from)]));
+        const vertices = (cell) => cell.is_vertex() ? [cell]
+            : [...vertices(cell.source), ...vertices(cell.target)];
+        const routes = [];
+        for (const edge of this.all_cells().filter((cell) => cell.is_edge()
+            && cell.options.route.length > 0)
+        ) {
+            let to;
+            if (map !== null) {
+                to = edge.options.route.map(([x, y]) => map(new Position(x, y)).toArray());
+            } else {
+                const moves = vertices(edge).map((vertex) => steps.get(vertex));
+                const [step] = moves;
+                if (step === undefined || !moves.every((other) => other !== undefined
+                    && other.eq(step))) {
+                    continue;
+                }
+                to = edge.options.route.map(([x, y]) => [x + step.x, y + step.y]);
+            }
+            if (JSON.stringify(to) !== JSON.stringify(edge.options.route)) {
+                routes.push({ edge, from: edge.options.route, to });
+            }
+        }
+        return routes;
     }
 
     /// Returns whether the quiver is empty.
@@ -308,9 +374,56 @@ QuiverExport.tikz_multiplier = (angle) => {
         / Math.hypot(horizontal * Math.sin(angle), vertical * Math.cos(angle));
 };
 
+/// The cells a route passes through, from the source to the target, as points: an end on an arrow
+/// is taken at the middle of that arrow's ends.
+QuiverExport.route_points = (edge) => {
+    const position = (cell) => cell.is_vertex() ? cell.position
+        : position(cell.source).add(position(cell.target)).div(2);
+    return [position(edge.source), ...edge.options.route.map(([x, y]) => new Position(x, y)),
+        position(edge.target)];
+};
+
+/// The lengths of the legs of a route through `points`, measured as tikz-cd lays a diagram out,
+/// wider than it is tall. Only their proportions matter: they say which leg a label is on.
+QuiverExport.route_lengths = (points) => {
+    const { TIKZ_HORIZONTAL_MULTIPLIER: horizontal, TIKZ_VERTICAL_MULTIPLIER: vertical }
+        = QuiverExport.CONSTANTS;
+    return points.slice(1).map((point, i) => {
+        const leg = point.sub(points[i]);
+        return Math.hypot(leg.x * horizontal, leg.y * vertical);
+    });
+};
+
+/// The leg of a route through `points` that is `fraction` of the way along, and how far along that
+/// leg it is (`pos`, to three places). TikZ puts an arrow's labels on one leg of a route (where
+/// the export writes `\tikztonodes`), and measures their `pos` along that leg alone.
+QuiverExport.route_leg = (points, fraction) => {
+    const lengths = QuiverExport.route_lengths(points);
+    const total = lengths.reduce((a, b) => a + b, 0);
+    let before = 0;
+    for (const [leg, length] of lengths.entries()) {
+        if (fraction * total < before + length || leg === lengths.length - 1) {
+            const pos = length > 0 ? clamp(0, (fraction * total - before) / length, 1) : 0.5;
+            return { leg, pos: Number(pos.toFixed(3)) };
+        }
+        before += length;
+    }
+};
+
+/// The inverse of `route_leg`: how far along a route through `points` the point `pos` of the way
+/// along its leg `leg` is.
+QuiverExport.route_fraction = (points, leg, pos) => {
+    const lengths = QuiverExport.route_lengths(points);
+    const total = lengths.reduce((a, b) => a + b, 0);
+    leg = clamp(0, leg, lengths.length - 1);
+    const before = lengths.slice(0, leg).reduce((a, b) => a + b, 0);
+    return total > 0 ? (before + pos * lengths[leg]) / total : 0.5;
+};
+
 QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
     export(quiver, settings, options, definitions) {
         let output = "";
+        let nodes_in_empty_cells = false;
 
         // Wrap tikz-cd code with `\begin{tikzcd} ... \end{tikzcd}`.
         const wrap_boilerplate = (output) => {
@@ -322,6 +435,10 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
             // Cramped.
             if (settings.get("export.cramped")) {
                 diagram_options.push("cramped");
+            }
+            // A route through a cell with no node to take its centre from (see `checkpoint`).
+            if (nodes_in_empty_cells) {
+                diagram_options.push("nodes in empty cells");
             }
             // Column and row separation.
             const sep = {
@@ -422,12 +539,33 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
         let offset = new Position(Infinity, Infinity);
         // Construct a grid for the vertices.
         const rows = new Map();
-        for (const vertex of quiver.cells[0]) {
-            if (!rows.has(vertex.position.y)) {
-                rows.set(vertex.position.y, new Map());
+        const place = (x, y, vertex) => {
+            if (!rows.has(y)) {
+                rows.set(y, new Map());
             }
-            rows.get(vertex.position.y).set(vertex.position.x, vertex);
-            offset = offset.min(vertex.position);
+            rows.get(y).set(x, vertex);
+            offset = offset.min(new Position(x, y));
+        };
+        for (const vertex of quiver.cells[0]) {
+            place(vertex.position.x, vertex.position.y, vertex);
+        }
+        // The cells routes pass through. A checkpoint is the centre of the node in its cell, or,
+        // for an empty cell, the column of a node in the same column and the row of one in the
+        // same row. Failing that, the cell is written out empty, and `nodes in empty cells` gives
+        // it a node, which is a last resort, since an empty node takes up a little room.
+        const occupied = (x, y) => rows.has(y) && rows.get(y).get(x) instanceof Vertex;
+        const vertices = Array.from(quiver.cells[0]);
+        const in_column = (x) => vertices.find((vertex) => vertex.position.x === x);
+        const in_row = (y) => vertices.find((vertex) => vertex.position.y === y);
+        const routes = quiver.all_cells().filter((cell) => cell.is_edge() && cell.is_routed());
+        for (const edge of routes) {
+            for (const [x, y] of edge.options.route) {
+                if (!occupied(x, y) && (in_column(x) === undefined || in_row(y) === undefined)) {
+                    place(x, y, null);
+                    nodes_in_empty_cells = true;
+                }
+                offset = offset.min(new Position(x, y));
+            }
         }
         // Iterate through the rows and columns in order, outputting the tikz-cd code.
         const prev = new Position(offset.x, offset.y);
@@ -439,6 +577,15 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
             // a leading space on a line, which makes things prettier.
             let first_in_row = true;
             for (const [x, vertex] of Array.from(row).sort(([x1,], [x2,]) => x1 - x2)) {
+                if (vertex === null) {
+                    // An empty cell a route passes through: only the separators that make it.
+                    if (x - prev.x > 0) {
+                        output += `${!first_in_row ? " " : ""}${ampersand.repeat(x - prev.x)}`;
+                        first_in_row = false;
+                    }
+                    prev.x = x;
+                    continue;
+                }
                 if (x - prev.x > 0) {
                     output += `${!first_in_row ? " " : ""}${ampersand.repeat(x - prev.x)} `;
                 }
@@ -471,6 +618,15 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                 return `${names.get(cell)}${phantom ? "p" : ""}`;
             }
         };
+        // The centre of the cell `[x, y]` a route passes through (see `place`, above).
+        const checkpoint = ([x, y]) => {
+            const node = (x, y) =>
+                `\\tikzcdmatrixname-${y - offset.y + 1}-${x - offset.x + 1}.center`;
+            if (occupied(x, y) || rows.has(y) && rows.get(y).get(x) === null) {
+                return `(${node(x, y)})`;
+            }
+            return `(${node(x, in_column(x).position.y)} |- ${node(in_row(y).position.x, y)})`;
+        };
 
         // quiver can draw more complex arrows than tikz-cd, and in some cases we are currently
         // unable to export faithfully to tikz-cd. In this case, we issue a warning to alert the
@@ -487,45 +643,10 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
             dependencies.get(dependency).add(reason);
         };
 
-        // Output the edges, i.e. 1-cells and above.
-        for (let level = 1; level < quiver.cells.length; ++level) {
-            if (quiver.cells[level].size > 0) {
-                output += "\n";
-            }
-
-            // Sort the edges so that we iterate through based on source (top-to-bottom,
-            // left-to-right), and then target.
-            const edges = [...quiver.cells[level]];
-            const compare_cell_position = (a, b) => {
-                if (a.position.y < b.position.y) {
-                    return -1;
-                }
-                if (a.position.y > b.position.y) {
-                    return 1;
-                }
-                if (a.position.x < b.position.x) {
-                    return -1;
-                }
-                if (a.position.x > b.position.x) {
-                    return 1;
-                }
-                return 0;
-            }
-            edges.sort((a, b) => {
-                const find_vertex = (cell, choose) => {
-                    if (cell.is_edge()) {
-                        return find_vertex(choose(cell), choose);
-                    }
-                    return cell;
-                };
-                return compare_cell_position(
-                    find_vertex(a, (cell) => cell.source),
-                    find_vertex(b, (cell) => cell.source),
-                ) || compare_cell_position(
-                    find_vertex(a, (cell) => cell.target),
-                    find_vertex(b, (cell) => cell.target),
-                );
-            });
+        // Output the edges, i.e. 1-cells and above, in the order tikz-cd should draw them (see
+        // `Quiver.drawing_groups`).
+        for (const edges of quiver.drawing_groups()) {
+            output += "\n";
 
             for (const edge of edges) {
                 // The parameters pertinent to the entire arrow. TikZ is quite flexible in
@@ -628,7 +749,42 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
 
                 const multiplier = QuiverExport.tikz_multiplier(edge.angle());
 
-                if (edge.options.curve !== 0) {
+                // A route takes the place of the curve and the offset (see `Edge.is_routed`).
+                const routed = edge.is_routed();
+                // The leg of the route the labels go on, and where on it the label goes.
+                const route_label = routed
+                    ? QuiverExport.route_leg(QuiverExport.route_points(edge),
+                        edge.options.label_position / 100)
+                    : null;
+                // Where on that leg a point `fraction` of the way along the route goes, kept to the
+                // leg, since every label goes on the same one.
+                const on_label_leg = (fraction) => {
+                    const { leg, pos } = QuiverExport.route_leg(
+                        QuiverExport.route_points(edge), fraction);
+                    return leg === route_label.leg ? pos : leg < route_label.leg ? 0 : 1;
+                };
+                if (routed) {
+                    delete label.pos;
+                    if (route_label.pos !== 0.5) {
+                        label.pos = route_label.pos;
+                    }
+                    delete parameters["shift left"];
+                    delete parameters["shift right"];
+                    delete phantom_parameters["shift left"];
+                    delete phantom_parameters["shift right"];
+                    const legs = edge.options.route.map((cell) => `-- ${checkpoint(cell)}`)
+                        .concat(["-- (\\tikztotarget)"]);
+                    legs[route_label.leg] += " \\tikztonodes";
+                    const radius = edge.options.rounding * CONSTANTS.ROUNDING
+                        * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER;
+                    // The corners are rounded only while the route is built: rounded corners
+                    // still in force when a squiggly arrow is drawn round every zigzag too.
+                    parameters["to path"] = `{${radius > 0 ? `[rounded corners=${radius}pt] ` : ""
+                        }${legs.join(" ")}${radius > 0 ? " [sharp corners]" : ""}}`;
+                    phantom_parameters["to path"] = parameters["to path"];
+                }
+
+                if (edge.options.curve !== 0 && !routed) {
                     parameters.curve = `{height=${
                         // Using a fixed multiplier for curves of any angle tends to work better
                         // in the examples I tested.
@@ -638,9 +794,32 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                     phantom_parameters.curve = parameters.curve;
                 }
 
-                // Shortened edges. This may only be set for the `arrow` style.
-                if (!edge_is_empty
-                    && (edge.options.shorten.source !== 0 || edge.options.shorten.target !== 0)) {
+                // Crossing over the arrows drawn before it.
+                if (edge.crossing_rank() > 0) {
+                    parameters["crossing over"] = "";
+                }
+
+                // Shortened edges. This may only be set for the `arrow` style. quiver's `between`
+                // does not follow a route, so a route is shortened by lengths instead, which the
+                // parser reads back against the route's own length.
+                const shortened = !edge_is_empty
+                    && (edge.options.shorten.source !== 0 || edge.options.shorten.target !== 0);
+                if (shortened && routed) {
+                    try {
+                        const curve = edge.arrow.curve();
+                        const [start, end] = edge.arrow.find_endpoints();
+                        const length = (curve.arc_length(end.t) - curve.arc_length(start.t))
+                            * QuiverExport.tikz_multiplier(edge.angle());
+                        for (const [end, side] of [["source", "<"], ["target", ">"]]) {
+                            if (edge.options.shorten[end] !== 0) {
+                                parameters[`shorten ${side}`]
+                                    = `${Math.round(length * edge.options.shorten[end] / 100)}pt`;
+                            }
+                        }
+                    } catch (_) {
+                        // An arrow that cannot be drawn has no length to shorten by.
+                    }
+                } else if (shortened) {
                     parameters['between'] = `{${
                         edge.options.shorten.source / 100
                     }}{${
@@ -679,6 +858,9 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
 
                         const midpoint = (edge.options.shorten.source
                             + (100 - edge.options.shorten.target)) / (2 * 100);
+                        // On a route, the decoration goes on the label's leg, as every label does.
+                        const decoration_pos = routed
+                            ? Number(on_label_leg(midpoint).toFixed(3)) : midpoint;
 
                         // Body styles.
                         switch (edge.options.style.body.name) {
@@ -702,8 +884,8 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                                 labels.push(decoration);
                                 decoration.content = "\\bullet";
                                 decoration.marking = "";
-                                if (midpoint !== 0.5) {
-                                    decoration.pos = midpoint;
+                                if (decoration_pos !== 0.5) {
+                                    decoration.pos = decoration_pos;
                                 }
                                 decoration.text
                                     = "\\pgfkeysvalueof{/tikz/commutative diagrams/background color}";
@@ -721,8 +903,8 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                                     "bullet hollow": "\\circ",
                                 }[edge.options.style.body.name];
                                 decoration.marking = "";
-                                if (midpoint !== 0.5) {
-                                    decoration.pos = midpoint;
+                                if (decoration_pos !== 0.5) {
+                                    decoration.pos = decoration_pos;
                                 }
                                 if (edge.options.colour.is_not_black()) {
                                     decoration.text
@@ -1011,6 +1193,13 @@ QuiverImportExport.base64 = new class extends QuiverImportExport {
         const cells = [];
         const indices = new Map();
 
+        // The crossing ranks of the selected arrows, numbered from 1 without gaps, so that the line
+        // is the same however the arrows came to be stacked so.
+        const ranks = Array.from(new Set(quiver.all_cells()
+            .filter((cell) => cell.is_edge() && selection.has(cell))
+            .map((edge) => edge.options.crossing_over).filter((rank) => rank > 0)))
+            .sort((a, b) => a - b);
+
         let offset = new Position(Infinity, Infinity);
         // We want to ensure that the top-left cell is in position (0, 0), so we need
         // to work out where the top-left cell actually is, to compute an offset.
@@ -1046,6 +1235,9 @@ QuiverImportExport.base64 = new class extends QuiverImportExport {
                     continue;
                 }
                 const { label, label_colour, options: { label_alignment, ...options } } = edge;
+                options.crossing_over = ranks.indexOf(options.crossing_over) + 1;
+                // A route's cells are counted from the top-left cell, as the vertices are.
+                options.route = options.route.map(([x, y]) => [x - offset.x, y - offset.y]);
                 const [source, target] = [indices.get(edge.source), indices.get(edge.target)];
                 indices.set(edge, cells.length);
                 const cell = [source, target];
@@ -1073,7 +1265,14 @@ QuiverImportExport.base64 = new class extends QuiverImportExport {
                     const delta = {};
                     for (const [key, value] of Object.entries(object)) {
                         const default_value = base[key];
-                        if (default_value instanceof Encodable && value instanceof Encodable) {
+                        const encodable = default_value instanceof Encodable
+                            && value instanceof Encodable;
+                        if (Array.isArray(value)) {
+                            // Arrays (a route) are written whole, or not at all.
+                            if (JSON.stringify(value) !== JSON.stringify(default_value)) {
+                                delta[key] = value;
+                            }
+                        } else if (encodable) {
                             if (!default_value.eq(value)) {
                                 delta[key] = value;
                             }
@@ -1101,7 +1300,12 @@ QuiverImportExport.base64 = new class extends QuiverImportExport {
                         break;
                     case "arc":
                         delete delta["curve"];
+                        delete delta["route"];
                         break;
+                }
+                // The rounding means nothing without a route.
+                if (options.route.length === 0) {
+                    delete delta["rounding"];
                 }
 
                 if (end.length > 0 || Object.keys(delta).length > 0) {
@@ -1147,6 +1351,11 @@ QuiverImportExport.base64 = new class extends QuiverImportExport {
         } catch (_) {
             throw new Error("invalid base64 or JSON");
         }
+
+        // Arrows that cross over others keep their order among themselves, above any already in
+        // the diagram, as a paste lands on top. Opening a file starts from an empty diagram.
+        const base_rank = Math.max(0, ...ui.quiver.all_cells()
+            .filter((cell) => cell.is_edge()).map((edge) => edge.options.crossing_over));
 
         // Helper functions for dealing with bad input.
 
@@ -1311,6 +1520,24 @@ QuiverImportExport.base64 = new class extends QuiverImportExport {
                         assert_kind(options.colour, "colour");
                         // Colour is encoded as an array, so we have to convert it to a `Colour`.
                         options.colour = new Colour(...options.colour);
+                    }
+                    if (options.hasOwnProperty("crossing_over")) {
+                        assert_kind(options.crossing_over, "natural");
+                        if (options.crossing_over > 0) {
+                            options.crossing_over += base_rank;
+                        }
+                    }
+                    if (options.hasOwnProperty("route")) {
+                        assert_kind(options.route, "array");
+                        options.route = options.route.map((cell) => {
+                            assert_kind(cell, "array");
+                            assert(cell.length === 2, "invalid route");
+                            cell.forEach((coordinate) => assert_kind(coordinate, "integer"));
+                            return [cell[0] + origin.x, cell[1] + origin.y];
+                        });
+                    }
+                    if (options.hasOwnProperty("rounding")) {
+                        assert_kind(options.rounding, "natural");
                     }
                     if (options.hasOwnProperty("edge_alignment")) {
                         if (options.edge_alignment.hasOwnProperty("source")) {

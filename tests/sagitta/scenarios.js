@@ -92,8 +92,9 @@ module.exports = {
 
     /// Select every cell, run each command in `argument` (a JSON list) through the command line,
     /// and report what the arrows draw: each edge path's dash array, how many heads (tails
-    /// included) each arrow has, and where its label's centre is, to the pixel. The saved file can
-    /// be right while the drawing is stale.
+    /// included) each arrow has, where its label's centre is, to the pixel, and whether it draws
+    /// the gap it cuts crossing over others, above them. The saved file can be right while the
+    /// drawing is stale.
     drawn: async (ctx) => {
         await ctx.press("a", ["control"]);
         for (const command of JSON.parse(ctx.argument)) {
@@ -103,7 +104,10 @@ module.exports = {
             .map((svg) => {
                 const label = svg.closest(".arrow").querySelector(".arrow-label");
                 const rect = label === null ? null : label.getBoundingClientRect();
+                const crossing = svg.querySelector("path.arrow-crossing");
                 return {
+                    crossing: crossing !== null && crossing.getAttribute("display") !== "none"
+                        && getComputedStyle(svg).zIndex === "5",
                     dashes: svg.querySelector("path.arrow-edge").getAttribute("stroke-dasharray"),
                     heads: svg.querySelectorAll(".arrow-head").length,
                     label: rect === null ? null : [
@@ -111,6 +115,25 @@ module.exports = {
                     ],
                 };
             })`);
+    },
+
+    /// Select the arrows labelled as `argument.select` says, run each of `argument.commands`
+    /// through the command line, and report the labels of the arrows raised for crossing over, in
+    /// the order they are stacked on the canvas, with the order the export writes them.
+    stacking: async (ctx) => {
+        const { select = [], commands = [] } = JSON.parse(ctx.argument);
+        await ctx.js(`ui.select(...ui.quiver.all_cells()
+            .filter((cell) => cell.is_edge() && ${JSON.stringify(select)}.includes(cell.label)))`);
+        for (const command of commands) {
+            await ctx.command(command);
+        }
+        return ctx.js(`({
+            stacked: Array.from(document.querySelectorAll(".arrow.crossing-over"))
+                .map((arrow) => ui.quiver.all_cells()
+                    .find((cell) => cell.is_edge() && cell.element.element === arrow).label),
+            written: Array.from(ui.quiver.drawing_groups().flat())
+                .filter((edge) => edge.drawing_rank() > 0).map((edge) => edge.label),
+        })`);
     },
 
     /// Select every cell, then press each key in `argument` (a JSON list of keys, or of `[key,
@@ -332,18 +355,37 @@ module.exports = {
 
     /// The mark (`C-SPC`): on the square `A B / C D`, with the focus point on `A`, take the top
     /// row, then the whole square, then add the row again to show Shift adds rather than replaces,
-    /// and finally drop a mark with Escape. Returns the counts and the mode line after each step.
+    /// and finally drop a mark with Escape. Returns the counts and the mode line after each step,
+    /// with whether the rectangle from the mark is shown, its size in cells, and how many cells it
+    /// marks as those it would take.
     mark: async (ctx) => {
         const steps = {};
+        const region = () => ctx.js(`(() => {
+            const region = document.querySelector(".mark-region");
+            const shown = !region.classList.contains("hidden");
+            const cell = ui.grid.column_width(0);
+            return {
+                shown,
+                size: shown ? [Math.round(region.offsetWidth / cell),
+                    Math.round(region.offsetHeight / cell)] : null,
+                inside: document.querySelectorAll(".cell.in-mark").length,
+            };
+        })()`);
         const step = async (name, ...keys) => {
             for (const [key, modifiers = []] of keys) {
                 await ctx.press(key, modifiers);
             }
-            steps[name] = { counts: await ctx.counts(), mode_line: await ctx.mode_line() };
+            steps[name] = {
+                counts: await ctx.counts(),
+                mode_line: await ctx.mode_line(),
+                region: await region(),
+            };
         };
         // `A` and `B`, and the arrow between them.
         await step("mark at A", ["Space", ["control"]]);
-        await step("top row", ["Right"], ["Space", ["control"]]);
+        // Before the mark is used, the rectangle grows with the focus point.
+        await step("towards B", ["Right"]);
+        await step("top row", ["Space", ["control"]]);
         // The whole square, from `A` again: four vertices and all four arrows.
         await step("square", ["Left"], ["Space", ["control"]],
             ["Right"], ["Down"], ["Space", ["control"]]);
@@ -353,6 +395,33 @@ module.exports = {
         // A mark dropped with Escape selects nothing, and the selection is left alone.
         await step("mark dropped", ["Space", ["control"]], ["Escape"]);
         return steps;
+    },
+
+    /// Press each key in `argument` (a JSON list of `[key, modifiers]`), with nothing selected
+    /// first and nothing saved after, and report the counts and the mode line.
+    pressed: async (ctx) => {
+        for (const [key, modifiers = []] of JSON.parse(ctx.argument)) {
+            await ctx.press(key, modifiers);
+        }
+        return { counts: await ctx.counts(), mode_line: await ctx.mode_line() };
+    },
+
+    /// A Control key whose release the window never sees, as when a file dialog or another window
+    /// takes the focus while it is held: Control goes down and stays down as far as the page knows,
+    /// which pans. Then plain keys, with Control up, as the next real key press reports: Right
+    /// moves the focus point from `A`, and `C-SPC` twice takes the top row. Returns the mode after
+    /// the stuck key, after Right, and the counts at the end.
+    stale_pan: async (ctx) => {
+        ctx.contents.sendInputEvent({ type: "keyDown", keyCode: "Control", modifiers: ["control"] });
+        await ctx.wait(50);
+        const stuck = await ctx.js("ui.mode.name");
+        await ctx.press("Right");
+        const after = await ctx.js("ui.mode.name");
+        await ctx.press("Left");
+        await ctx.press("Space", ["control"]);
+        await ctx.press("Right");
+        await ctx.press("Space", ["control"]);
+        return { stuck, after, counts: await ctx.counts() };
     },
 
     /// `:set` for each of `argument` (a JSON list of command lines), returning the mode line after
@@ -478,6 +547,55 @@ module.exports = {
         await ctx.press("z", ["control"]);
         steps.undone = await ctx.counts();
         return steps;
+    },
+
+    /// Routes: select every cell, then take each step of `argument` (a JSON list): a string runs
+    /// through the command line, `[x, y]` moves the focus point to that cell, and `{ keys }` presses
+    /// each `[key, modifiers]`. Then save, and report each arrow's route as its options hold it,
+    /// whether it is drawn, how many arcs its line turns through, where on the screen its ends,
+    /// label, and checkpoint marks are, and whether each mark shows and is carried, beside the
+    /// centres of the vertices.
+    route: async (ctx) => {
+        await ctx.press("a", ["control"]);
+        for (const step of JSON.parse(ctx.argument)) {
+            if (typeof step === "string") {
+                await ctx.command(step);
+            } else if (Array.isArray(step)) {
+                await ctx.js(`ui.reposition_focus_point(new Position(${step[0]}, ${step[1]}))`);
+            } else {
+                for (const [key, modifiers = []] of step.keys) {
+                    await ctx.press(key, modifiers);
+                }
+            }
+        }
+        await ctx.save();
+        const vertices = await ctx.vertices();
+        const edges = await ctx.js(`[...ui.quiver.all_cells()].filter((cell) => cell.is_edge())
+            .map((edge) => {
+                const centre = (element) => {
+                    const rect = element.getBoundingClientRect();
+                    return [Math.round(rect.x + rect.width / 2), Math.round(rect.y + rect.height / 2)];
+                };
+                const arrow = edge.element.element;
+                const line = arrow.querySelector("path.arrow-edge");
+                const label = arrow.querySelector(".arrow-label");
+                return {
+                    route: edge.options.route,
+                    drawn: !arrow.classList.contains("invalid")
+                        && !arrow.querySelector("svg:has(path.arrow-edge)").classList.contains("invalid"),
+                    arcs: (line.getAttribute("d").match(/^a /gm) ?? []).length,
+                    source: centre(arrow.querySelector(".arrow-endpoint.source")),
+                    target: centre(arrow.querySelector(".arrow-endpoint.target")),
+                    label: label === null ? null : centre(label),
+                    checkpoints: [...arrow.querySelectorAll(".arrow-checkpoint")]
+                        .map((checkpoint) => ({
+                            shown: getComputedStyle(checkpoint).display !== "none",
+                            carried: checkpoint.classList.contains("carried"),
+                            centre: centre(checkpoint),
+                        })),
+                };
+            })`);
+        return { vertices, edges };
     },
 
     /// The value of the JavaScript expression `argument`, evaluated in the page.

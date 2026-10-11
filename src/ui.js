@@ -47,8 +47,13 @@ class UI {
         // `null` if there is none. The mode line shows `MARK` while there is one.
         this.mark = null;
 
+        // The checkpoint being moved with the focus point, as `{ edge, from, index }` for each
+        // selected arrow whose route it is in, or `null` (see `Keys.carry`).
+        this.carried = null;
+
         // The element associated with the focus position.
         this.focus_point = null;
+        this.mark_region = null;
 
         // The size of the view (i.e. the document body dimensions).
         this.dimensions = new Dimensions(document.body.offsetWidth, document.body.offsetHeight);
@@ -472,8 +477,10 @@ class UI {
         // Reset the mode.
         this.switch_mode(UIMode.default);
 
-        // The mark belongs to the diagram it was set in.
+        // The mark, and a carried checkpoint, belong to the diagram they were set in.
         this.mark = null;
+        this.carried = null;
+        this.update_mark_region();
 
         // Clear the quiver and update associated UI elements.
         this.clear_quiver();
@@ -545,6 +552,8 @@ class UI {
         // Add the focus point for new nodes.
         this.focus_point = new DOM.Div({ class: "focus-point focused smooth" })
             .add_to(this.canvas);
+        // The rectangle from the mark to the focus point (see `update_mark_region`).
+        this.mark_region = new DOM.Div({ class: "mark-region hidden" }).add_to(this.canvas);
         this.mode_line.update(this);
 
         // The canvas is only as big as the window, so we need to resize it when the window resizes.
@@ -842,13 +851,15 @@ class UI {
                 this.positions.set(`${vertex.position}`, vertex);
             }
             if (all_new_positions_free) {
+                const displacements = vertices.map((vertex) => ({
+                    vertex,
+                    from: vertex.position,
+                    to: vertex.position.add(position_delta.mul(distance)),
+                }));
                 this.history.add(this, [{
                     kind: "move",
-                    displacements: vertices.map((vertex) => ({
-                        vertex,
-                        from: vertex.position,
-                        to: vertex.position.add(position_delta.mul(distance)),
-                    })),
+                    displacements,
+                    routes: this.quiver.moved_routes(displacements),
                 }], true);
                 return distance;
             }
@@ -875,7 +886,43 @@ class UI {
             height: `${height}px`,
             "padding-top": `${height / 2}px`,
         });
+        this.update_mark_region();
+        if (update_focus_position) {
+            this.keys.carry_to(position);
+        }
     };
+
+    /// Show the rectangle the mark would take if it were used now, from the mark to the focus
+    /// point, and mark the cells inside it, as they would be selected (see `Keys.cells_between`);
+    /// or, without a mark, hide it. The focus point's moves, the mark's setting and dropping, and
+    /// every change to the diagram (which may resize the grid, or add or take away cells) call it.
+    update_mark_region() {
+        if (this.mark_region === null) {
+            return;
+        }
+        const inside = this.mark === null ? new Set()
+            : new Set(Keys.cells_between(this, this.mark, this.focus_position));
+        for (const cell of this.quiver.all_cells()) {
+            cell.element.class_list.toggle("in-mark", inside.has(cell));
+        }
+        this.mark_region.class_list.toggle("hidden", this.mark === null);
+        if (this.mark === null) {
+            return;
+        }
+        const from = new Position(Math.min(this.mark.x, this.focus_position.x),
+            Math.min(this.mark.y, this.focus_position.y));
+        const to = new Position(Math.max(this.mark.x, this.focus_position.x),
+            Math.max(this.mark.y, this.focus_position.y));
+        const start = this.grid.offset_from_position(from);
+        const end = this.grid.offset_from_position(to)
+            .add(new Offset(this.grid.column_width(to.x), this.grid.row_height(to.y)));
+        this.mark_region.set_style({
+            left: `${start.x}px`,
+            top: `${start.y}px`,
+            width: `${end.x - start.x - CONSTANTS.GRID_BORDER_WIDTH}px`,
+            height: `${end.y - start.y - CONSTANTS.GRID_BORDER_WIDTH}px`,
+        });
+    }
 
     /// Returns the cell under the focus point, if the focus point is active and such a cell exists.
     /// Otherwise, returns `null`.
@@ -970,9 +1017,32 @@ class UI {
         if (cell.is_vertex()) {
             this.positions.set(`${cell.position}`, cell);
             cell.recalculate_size(this);
+        } else {
+            this.restack();
         }
         this.recode();
         this.colour_picker.update_diagram_colours(this);
+    }
+
+    /// Raise the edges that cross over others, and those attached to them, above the rest, and
+    /// stack them among themselves in the order the export draws them (see
+    /// `Quiver.drawing_groups`), so that the canvas cuts the same gaps as the PDF. The rest need no
+    /// order: none of them cuts a gap. Elements are moved only when the order is wrong, so that
+    /// most changes move none.
+    restack() {
+        const raised = this.quiver.drawing_groups().flat()
+            .filter((edge) => edge.drawing_rank() > 0);
+        for (const edge of this.quiver.all_cells().filter((cell) => cell.is_edge())) {
+            edge.element.class_list.toggle("crossing-over", raised.includes(edge));
+        }
+        const elements = raised.map((edge) => edge.element.element);
+        const stacked = Array.from(this.canvas.element.children)
+            .filter((element) => elements.includes(element));
+        if (stacked.some((element, i) => element !== elements[i])) {
+            for (const edge of raised) {
+                this.canvas.add(edge.element);
+            }
+        }
     }
 
     /// Removes a cell.

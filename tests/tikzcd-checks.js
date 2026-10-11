@@ -190,6 +190,76 @@ const pending = [];
 }
 
 {
+    // An arrow crossing over another: `A` to `D` passes over `B` to `C`. tikz-cd only cuts a gap
+    // in the arrows drawn before the crossing one, so it is written last, though it would sort
+    // first by its source.
+    const crossed = parse("\\begin{tikzcd}\n"
+        + "\tA \\arrow[dr, crossing over] & B \\arrow[dl] \\\\\n\tC & D\n\\end{tikzcd}\n");
+    check("crossing over reads", crossed.diagnostics.length, 0);
+    const crossing = (ui) => ui.quiver.all_cells().filter((cell) => cell.is_edge())
+        .map((edge) => `${edge.source.label}${edge.target.label} ${edge.options.crossing_over}`)
+        .sort();
+    check("as a rank of that arrow alone", crossing(crossed.ui), ["AD 1", "BC 0"]);
+    const text = crossed.ui.text();
+    check("and is written last", text.indexOf("from=1-2, to=2-1") < text.indexOf("crossing over"),
+        true);
+    check("as crossing over", text.includes("\\arrow[crossing over, from=1-1, to=2-2]"), true);
+    const reloaded = load(text);
+    check("its own line is trusted", reloaded.trusted, true);
+    check("and keeps it", crossing(reloaded.ui), ["AD 1", "BC 0"]);
+    check("so saving writes the same bytes", reloaded.ui.text(), text);
+    check("and the picture alone keeps it too",
+        crossing(parse(text.replace(/^%.*\n/, "")).ui), ["AD 1", "BC 0"]);
+
+    // The clearance is tikz-cd's to set, and we do not read it.
+    const clearance = parse("\\begin{tikzcd}\n"
+        + "\tA \\arrow[r, crossing over clearance=2ex] & B\n\\end{tikzcd}\n");
+    check("crossing over clearance is a diagnostic",
+        [crossing(clearance.ui), clearance.diagnostics.length > 0], [["AB 0"], true]);
+
+    // Only an arrow cuts a gap: an adjunction draws nothing for the gap to follow.
+    const [adjoint] = crossed.ui.quiver.all_cells()
+        .filter((cell) => cell.is_edge() && cell.options.crossing_over > 0);
+    adjoint.options.style = { name: "adjunction" };
+    check("an adjunction does not cross over", crossed.ui.text().includes("crossing over"), false);
+}
+
+{
+    // Several arrows crossing over stack by rank, whatever their positions: the one written later
+    // in hand-written tikz-cd is above, and is written later again.
+    const stacked = parse("\\begin{tikzcd}\n"
+        + "\tA \\arrow[ddrr, crossing over] & B \\arrow[dd] & C \\arrow[ddll, crossing over] \\\\\n"
+        + "\t&& \\\\\n\tD & E & F\n\\end{tikzcd}\n");
+    const ranks = (ui) => Object.fromEntries(ui.quiver.all_cells().filter((cell) => cell.is_edge())
+        .map((edge) => [`${edge.source.label}${edge.target.label}`, edge.options.crossing_over]));
+    check("crossing arrows rank in the order they are written", ranks(stacked.ui),
+        { AF: 1, BE: 0, CD: 2 });
+    const order = (ui) => (ui.text().match(/from=\d-\d, to=\d-\d/g) ?? []).join(" ");
+    check("and are written plain first, then by rank", order(stacked.ui),
+        "from=1-2, to=3-2 from=1-1, to=3-3 from=1-3, to=3-1");
+
+    // The ranks are written without gaps, so a line does not depend on how they came about.
+    const [af] = stacked.ui.quiver.all_cells().filter((cell) => cell.label === ""
+        && cell.is_edge() && cell.options.crossing_over === 1);
+    af.options.crossing_over = 7;
+    const reranked = load(stacked.ui.text());
+    check("ranks are written without gaps", ranks(reranked.ui), { AF: 2, BE: 0, CD: 1 });
+    check("so the order they stack in survives", order(reranked.ui),
+        "from=1-2, to=3-2 from=1-3, to=3-1 from=1-1, to=3-3");
+
+    // A 2-cell on an arrow that crosses over is drawn in its layer, after it, as tikz-cd needs the
+    // arrow's name written first.
+    const two = parse("\\begin{tikzcd}\n"
+        + "\tA \\arrow[r, \"\"{name=0, anchor=center, inner sep=0}, crossing over] "
+        + "\\arrow[r, \"\"'{name=1, anchor=center, inner sep=0}, bend right] & B\n"
+        + "\t\\arrow[Rightarrow, from=0, to=1]\n\\end{tikzcd}\n");
+    check("a 2-cell on a crossing arrow reads", counts(two.ui), [2, 3]);
+    const written = two.ui.text();
+    check("and is written after it",
+        written.indexOf("crossing over") < written.indexOf("Rightarrow"), true);
+}
+
+{
     // Exporting what the settings ask for.
     const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
     QuiverImportExport.base64.import(ui,
@@ -554,6 +624,231 @@ const pending = [];
 }
 
 {
+    // A route's geometry: straight legs, with each turn rounded into an arc of the radius asked
+    // for, or less where the legs are too short for it, as TikZ's `rounded corners` does.
+    const round = (point) => [point.x, point.y].map((value) => Math.round(value * 100) / 100);
+    const ell = new Route(Point.zero(),
+        [new Point(0, 0), new Point(100, 0), new Point(100, 100)], 10, 0);
+    check("a route is its legs and the arcs between them",
+        Math.round(ell.length * 100) / 100, Math.round((180 + 5 * Math.PI) * 100) / 100);
+    check("it starts and ends where its points do", [round(ell.point(0)), round(ell.point(1))],
+        [[0, 0], [100, 100]]);
+    check("and halfway round the corner is halfway along the arc",
+        round(ell.point(0.5)), round(new Point(90, 10).add(Point.lendir(10, -Math.PI / 4))));
+    check("where it is heading diagonally", Math.round(ell.tangent(0.5) * 1000) / 1000,
+        Math.round(Math.PI / 4 * 1000) / 1000);
+    const tight = new Route(Point.zero(),
+        [new Point(0, 0), new Point(10, 0), new Point(10, 10)], 100, 0);
+    check("a corner on short legs is rounded only as far as half a leg",
+        Math.round(tight.segments.find((segment) => segment.centre !== undefined).radius), 5);
+    const sharp = new Route(Point.zero(),
+        [new Point(0, 0), new Point(100, 0), new Point(100, 100)], 0, 0);
+    check("and a radius of nothing leaves it sharp",
+        sharp.segments.every((segment) => segment.centre === undefined), true);
+    const [hit] = ell.intersections_with_rounded_rectangle(
+        new RoundedRectangle(new Point(100, 100), new Point(20, 20), 0), false);
+    check("it meets a cell at its edge", round(hit), [100, 90]);
+    check("and the point knows how far along it is", Math.round(hit.t * ell.length), 186);
+}
+
+{
+    // `:route` bends an arrow round one corner, along a row or a column first, and is written as a
+    // `to path` through the centre of the cell it turns in.
+    const diagonal = () => {
+        const ui = parse(
+            "\\begin{tikzcd}\n\tA \\arrow[dr, \"f\"] & B \\\\\n\t& C\n\\end{tikzcd}\n").ui;
+        ui.unqueue_selected = () => {};
+        ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
+        return ui;
+    };
+    const route = (ui) => ui.quiver.all_cells().filter((cell) => cell.is_edge())
+        .map((edge) => JSON.stringify(edge.options.route)).join(" ");
+    const path = (ui) => (ui.text().match(/to path=\{(.*)\}, from/) ?? [null, null])[1];
+
+    let ui = diagonal();
+    let commands = new Commands(ui);
+    commands.route("x");
+    check("a route along the row first turns under B", route(ui), "[[1,0]]");
+    check("and is written through B's centre", path(ui),
+        "[rounded corners=6pt] -- (\\tikzcdmatrixname-1-2.center) \\tikztonodes "
+        + "-- (\\tikztotarget) [sharp corners]");
+    check("with the label on the leg it falls on", ui.text().includes("\"f\"{pos=0.833}"), true);
+    commands.route("y");
+    check("a route along the column first turns in an empty cell", route(ui), "[[0,1]]");
+    check("whose centre is A's column and C's row", path(ui),
+        "[rounded corners=6pt] -- (\\tikzcdmatrixname-1-1.center |- "
+        + "\\tikzcdmatrixname-2-2.center) -- (\\tikztotarget) \\tikztonodes [sharp corners]");
+    check("which needs no empty nodes", ui.text().includes("nodes in empty cells"), false);
+
+    // The file keeps the route, and the picture alone gives it back.
+    let text = ui.text();
+    let reloaded = load(text);
+    check("a routed arrow's own line is trusted", reloaded.trusted, true);
+    check("and keeps the route", route(reloaded.ui), "[[0,1]]");
+    check("so saving writes the same bytes", reloaded.ui.text(), text);
+    const pictured = parse(text.replace(/^%.*\n/, ""));
+    check("the picture alone reads the route back",
+        [route(pictured.ui), pictured.diagnostics.length], ["[[0,1]]", 0]);
+    check("with the label where it was", pictured.ui.quiver.all_cells()
+        .filter((cell) => cell.is_edge()).map((edge) => edge.options.label_position), [50]);
+
+    // With no argument, `route` steps from straight, to along the row, to along the column, and
+    // back to straight, where the curve and offset it had are still waiting.
+    ui = diagonal();
+    commands = new Commands(ui);
+    const steps = [];
+    for (let i = 0; i < 3; ++i) {
+        Commands.TABLE["route"].run(commands, []);
+        steps.push(route(ui));
+    }
+    check("route steps through both bends and back", steps, ["[[1,0]]", "[[0,1]]", "[]"]);
+    ui.history.undo(ui);
+    check("each step undoes on its own", route(ui), "[[0,1]]");
+
+    // An arrow along a row has no corner to turn.
+    ui = parse("\\begin{tikzcd}\n\tA \\arrow[r] & B\n\\end{tikzcd}\n").ui;
+    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
+    let refused = "";
+    try {
+        new Commands(ui).route("x");
+    } catch (error) {
+        refused = error.message;
+    }
+    check("a straight arrow along a row is refused a bend", refused.startsWith("The arrow is"),
+        true);
+    refused = "";
+    try {
+        Commands.TABLE["route"].run(new Commands(ui), ["z"]);
+    } catch (error) {
+        refused = error.message;
+    }
+    check("and route takes x, y, or none", refused,
+        '"z" is not x, y, or none, which route takes, or nothing.');
+}
+
+{
+    // `:checkpoint` adds the cell at the focus point to the route, or takes it out again, and a
+    // cell no node shares a row or a column with is written out as an empty cell to route through.
+    const ui = parse("\\begin{tikzcd}\n\tA \\arrow[dr, \"f\"] & B \\\\\n\t& C\n\\end{tikzcd}\n").ui;
+    ui.unqueue_selected = () => {};
+    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
+    const [edge] = ui.quiver.all_cells().filter((cell) => cell.is_edge());
+    const commands = new Commands(ui);
+    ui.focus_position = new Position(1, 0);
+    commands.checkpoint();
+    ui.focus_position = new Position(2, 0);
+    commands.checkpoint();
+    check("checkpoints are passed through in the order they are added",
+        edge.options.route, [[1, 0], [2, 0]]);
+    let text = ui.text();
+    check("a cell in an empty column takes empty nodes", text.includes("[nodes in empty cells]"),
+        true);
+    check("and the row is written out to it", text.includes("\tA & B & \\\\\n"), true);
+    check("so the cell has a name", text.includes("-- (\\tikzcdmatrixname-1-3.center)"), true);
+    check("and the picture alone reads it back", [parse(text.replace(/^%.*\n/, "")).ui.quiver
+        .all_cells().filter((cell) => cell.is_edge()).map((edge) => edge.options.route),
+        parse(text.replace(/^%.*\n/, "")).diagnostics.length], [[[[1, 0], [2, 0]]], 0]);
+
+    // Above everything, the matrix grows a row, and the cells are counted from there.
+    ui.focus_position = new Position(1, -1);
+    commands.checkpoint();
+    text = ui.text();
+    check("a cell above the diagram adds a row", text.includes("\t& \\\\\n\tA & B & \\\\\n"), true);
+    check("so the arrow's ends are a row lower", text.includes("from=2-1, to=3-2"), true);
+    check("and it reads back where it was", load(text).ui.quiver.all_cells()
+        .filter((cell) => cell.is_edge()).map((edge) => edge.options.route),
+    [[[1, 0], [2, 0], [1, -1]]]);
+
+    ui.focus_position = new Position(2, 0);
+    commands.checkpoint();
+    check("a checkpoint already there is taken out", edge.options.route, [[1, 0], [1, -1]]);
+    ui.focus_position = new Position(1, 1);
+    let refused = "";
+    try {
+        commands.checkpoint();
+    } catch (error) {
+        refused = error.message;
+    }
+    check("an end of the arrow is no checkpoint",
+        refused.startsWith("The focus point is on an end"), true);
+}
+
+{
+    // A route goes where its cells go: it moves with an arrow moved whole, follows a gap opened
+    // across it, and is passed through the other way when the arrow is reversed.
+    const make = () => {
+        const ui = parse("\\begin{tikzcd}\n\tA \\arrow[dr] & B \\\\\n\t& C\n\\end{tikzcd}\n").ui;
+        ui.unqueue_selected = () => {};
+        const [edge] = ui.quiver.all_cells().filter((cell) => cell.is_edge());
+        ui.select(edge);
+        new Commands(ui).route("x");
+        return [ui, edge];
+    };
+    let [ui, edge] = make();
+    new Commands(ui).insert("x", 1);
+    check("a gap opened across a route moves the cells beyond it", edge.options.route, [[2, 0]]);
+    ui.history.undo(ui);
+    check("and undoing the gap puts them back", edge.options.route, [[1, 0]]);
+    new Commands(ui).insert("y", 1);
+    check("a gap beyond the route leaves it", edge.options.route, [[1, 0]]);
+
+    [ui, edge] = make();
+    const vertices = ui.quiver.all_cells().filter((cell) => cell.is_vertex());
+    const whole = vertices.map((vertex) => ({
+        vertex, from: vertex.position, to: vertex.position.add(new Position(0, 2)),
+    }));
+    check("a route moves with an arrow moved whole",
+        ui.quiver.moved_routes(whole).map(({ to }) => to), [[[1, 2]]]);
+    const part = whole.filter(({ vertex }) => vertex === edge.source);
+    check("but not with an arrow stretched", ui.quiver.moved_routes(part).length, 0);
+
+    [ui, edge] = make();
+    ui.focus_position = new Position(1, 1);
+    edge.options.route = [[1, 0], [2, 0], [2, 1]];
+    edge.reverse(ui);
+    check("a reversed arrow's route is passed through the other way",
+        edge.options.route, [[2, 1], [2, 0], [1, 0]]);
+
+    // A paste lands its routes where it lands its cells.
+    [ui, edge] = make();
+    const copied = QuiverImportExport.base64
+        .export_selection(ui.quiver, new Set(ui.quiver.all_cells()));
+    ui.reset();
+    QuiverImportExport.base64.import(ui, copied, new Position(3, 4));
+    check("a pasted route lands with its cells", ui.quiver.all_cells()
+        .filter((cell) => cell.is_edge()).map((edge) => edge.options.route), [[[4, 4]]]);
+}
+
+{
+    // What a route does to the rest of the arrow's export: the curve and the offset are not
+    // written, the corners are sharp without rounding, and a shortened route is shortened by
+    // lengths, since quiver's `between` does not follow a `to path`.
+    const ui = parse("\\begin{tikzcd}\n"
+        + "\tA \\arrow[dr, curve={height=12pt}, shift left=2] & B \\\\\n\t& C\n\\end{tikzcd}\n").ui;
+    ui.unqueue_selected = () => {};
+    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
+    const commands = new Commands(ui);
+    commands.route("x");
+    check("a route writes neither the curve nor the offset",
+        ["curve", "shift"].map((word) => ui.text().includes(word)), [false, false]);
+    commands.slide("rounding", [0]);
+    check("a route rounded by nothing is written sharp", ui.text().includes("corners"), false);
+    commands.slide("length", [20, 80]);
+    check("and is shortened by lengths, not between",
+        [/shorten <=\d+pt, shorten >=\d+pt/.test(ui.text()), ui.text().includes("between")],
+        [true, false]);
+    commands.route(null);
+    check("straightened, it has its curve and offset again",
+        ["curve", "shift"].map((word) => ui.text().includes(word)), [true, true]);
+
+    // A route that is not as the export writes it is left out, and says so.
+    const foreign = parse("\\begin{tikzcd}\n"
+        + "\tA \\arrow[r, to path={|- (\\tikztotarget)}] & B\n\\end{tikzcd}\n");
+    check("a to path we do not write is a diagnostic, and the arrow is kept",
+        [foreign.diagnostics.length, counts(foreign.ui)], [1, [2, 1]]);
+}
+
+{
     // The reader names no setting: given another schema, the same class reads, parses, checks, and
     // reports for it. This is what lets another kind of diagram keep the file handling and `:set`.
     const schema = {
@@ -719,4 +1014,32 @@ const pending = [];
     check("the diagram's table is what resolve takes without one",
         Bindings.resolve(null).keys.has("save"), true);
     check("and the other table knows nothing of it", resolve(null).keys.has("save"), false);
+
+    // Space keeps its meaning alone, but its chords are free, and the mark has one.
+    const signatures = (text, name) => (Bindings.resolve(text).keys.get(name) ?? [])
+        .map((combination) => Bindings.signature(combination));
+    check("the mark is C-SPC by default", signatures(null, "mark"), ["C- "]);
+    check("and may be rebound", signatures("mark C-q", "mark"), ["C-q"]);
+    check("as may the mark that adds", signatures("mark-add C-S-q", "mark-add"), ["C-S-q"]);
+    check("but Space alone is still refused", Bindings.resolve("mark SPC").problems,
+        ['line 1: "SPC": SPC keeps its own meaning']);
+
+    // A layout may report a chord it gives no character as `Unidentified`; the physical key
+    // stands in for it, so the chord still matches its binding.
+    const pressed = (key, code, shiftKey = false) => {
+        let prevented = false;
+        const event = { key, code, shiftKey, ctrlKey: true, preventDefault() {
+            prevented = this === event;
+        } };
+        const identified = Keymap.identify(event);
+        identified.preventDefault();
+        return [identified.key, identified.ctrlKey, prevented];
+    };
+    check("an unidentified Space is Space", pressed("Unidentified", "Space"), [" ", true, true]);
+    check("an unidentified letter is its letter", pressed("Unidentified", "KeyQ"),
+        ["q", true, true]);
+    check("and its capital with Shift", pressed("Unidentified", "KeyQ", true), ["Q", true, true]);
+    check("a shifted digit is left unidentified", pressed("Unidentified", "Digit2", true)[0],
+        "Unidentified");
+    check("and an identified key is left alone", pressed("x", "KeyQ"), ["x", true, true]);
 }

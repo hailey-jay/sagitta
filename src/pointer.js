@@ -11,6 +11,13 @@ class Pointer {
         const ui = this.ui;
         window.addEventListener("wheel", (event) => this.scroll(event), { passive: false });
         document.addEventListener("pointermove", (event) => this.stop_stale_pan(event));
+        // A file dialog, or another window, can take the key's release with the focus, so a pan
+        // held by a key ends when the window loses the focus.
+        window.addEventListener("blur", () => {
+            if (ui.in_mode(UIMode.Pan) && ui.mode.key !== null) {
+                ui.switch_mode(UIMode.default);
+            }
+        });
         document.addEventListener("pointerup", (event) => this.release(event));
         ui.element.listen("pointerdown", (event) => this.press(event));
         ui.element.listen("pointermove", (event) => this.move(event));
@@ -66,19 +73,25 @@ class Pointer {
         const ui = this.ui;
         if (!ui.mode.previous.sub(ui.mode.origin).is_zero()) {
             // We only want to commit the move event if it actually did moved things.
+            const displacements = Array.from(ui.mode.selection).map((vertex) => ({
+                vertex,
+                from: vertex.position.sub(ui.mode.previous.sub(ui.mode.origin)),
+                to: vertex.position,
+            }));
+            // The routes have already moved with the drag, so the move back says where they were.
+            const back = displacements
+                .map(({ vertex, from, to }) => ({ vertex, from: to, to: from }));
             ui.history.add(ui, [{
                 kind: "move",
-                displacements: Array.from(ui.mode.selection).map((vertex) => ({
-                    vertex,
-                    from: vertex.position.sub(ui.mode.previous.sub(ui.mode.origin)),
-                    to: vertex.position,
-                })),
+                displacements,
+                routes: ui.quiver.moved_routes(back)
+                    .map(({ edge, from, to }) => ({ edge, from: to, to: from })),
             }]);
         }
     }
 
     /// Stop panning if the key that started it is no longer held, which happens when it was
-    /// released while the window did not have the focus.
+    /// released while the window did not have the focus. Every pointer move and key asks.
     stop_stale_pan(event) {
         const ui = this.ui;
         if (ui.in_mode(UIMode.Pan)) {
@@ -368,6 +381,13 @@ class Pointer {
                 // We'll need to move all of the edges connected to the moved vertices,
                 // so we keep track of the root vertices in `moved.`
                 const moved = new Set();
+                const displacements = Array.from(ui.mode.selection)
+                    .filter((cell) => cell.is_vertex())
+                    .map((vertex) => ({ vertex, from: vertex.position, to: new_position(vertex) }));
+                // Routes go with the arrows they belong to, when those move whole.
+                for (const { edge, to } of ui.quiver.moved_routes(displacements)) {
+                    edge.options.route = to;
+                }
                 // Move all the selected vertices.
                 for (const cell of ui.mode.selection) {
                     if (cell.is_vertex()) {
