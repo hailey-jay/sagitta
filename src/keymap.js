@@ -97,8 +97,10 @@ class Keymap {
 
         // Every named action is also a command, and has a named binding, if only to no keys.
         for (const name of ui.mode_line.actions.keys()) {
-            if (!Object.hasOwn(Bindings.DEFAULTS, name)) {
-                console.error(`the action "${name}" is missing from Bindings.DEFAULTS`);
+            // `this.keys` holds every name the bindings table has, so this is the table's own
+            // answer rather than a second reach for it.
+            if (!this.keys.has(name)) {
+                console.error(`the action "${name}" is missing from the bindings table`);
             }
             if (!Object.hasOwn(Commands.TABLE, name)) {
                 Commands.TABLE[name] = {

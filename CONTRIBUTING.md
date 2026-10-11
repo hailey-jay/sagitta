@@ -62,6 +62,16 @@ Both run on GitHub for every push and pull request.
 A change in behaviour comes with a test, and a new key, command, or setting with a line in `docs/sagitta.md`.
 Anything that can be checked without the app belongs in the fast suite.
 
+## Tables and readers
+
+Two files hold tables and nothing else, and the code that reads them names nothing in them:
+
+- `src/schema.js` is every setting and what each may hold. `src/settings.js` reads, writes, parses, checks, and reports without naming a setting: it takes the schema in its constructor.
+- `Bindings.TABLE`, at the foot of `src/bindings.js`, is what there is to bind and its default keys. `Bindings.resolve` takes it as an argument, so the notation, the overriding, and the problem reporting know nothing of this diagram.
+
+Adding a setting or a binding means editing the table, not the reader.
+The fast suite builds each reader over an invented table and checks that its words come back, which is what keeps the two apart.
+
 ## Releasing
 
 1. Set `version` in `package.json`, and add a `## <version>` section at the top of `CHANGELOG.md` saying what changed.

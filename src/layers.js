@@ -564,12 +564,12 @@ Layer.Settings = class extends Layer {
     /// (as never) is, one step below its least value.
     step(setting, delta) {
         const ui = this.ui;
-        const [least, most] = Settings.RANGES[setting];
+        const [least, most] = ui.settings.range(setting);
         const current = ui.settings.get(setting);
         let value;
         if (current === null) {
             value = delta > 0 ? least : null;
-        } else if (delta < 0 && current === least && Settings.NULLABLE.has(setting)) {
+        } else if (delta < 0 && current === least && ui.settings.nullable(setting)) {
             value = null;
         } else {
             value = clamp(least, current + Layer.Settings.STEPS[setting] * delta, most);
@@ -582,7 +582,7 @@ Layer.Settings = class extends Layer {
     apply_count() {
         const setting = this.chosen;
         const value = Number(this.count);
-        const [least, most] = Settings.RANGES[setting];
+        const [least, most] = this.ui.settings.range(setting);
         this.chosen = null;
         this.count = "";
         if (value >= least && value <= most) {

@@ -346,10 +346,10 @@ Commands.TABLE["save"] = {
 /// are not part of the diagram, so a change here is not undoable, as it is not in the layer.
 Commands.TABLE["set"] = {
     arguments: true,
-    completions: (commands) => Object.keys(commands.ui.settings.data).sort(),
+    completions: (commands) => commands.ui.settings.names().sort(),
     run: (commands, [setting, ...words]) => {
         const ui = commands.ui;
-        if (setting === undefined || !Object.hasOwn(ui.settings.data, setting)) {
+        if (setting === undefined || !ui.settings.has(setting)) {
             throw new Error(`Unknown setting "${setting ?? ""}". Press Tab for a list.`);
         }
         if (words.length === 0) {

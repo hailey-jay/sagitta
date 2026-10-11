@@ -89,13 +89,14 @@ With a mouse, right-click or the `; commands` button opens the command layer, an
 
 ### In a paper
 
-`examples/` contains a diagram, its macros, and a paper:
+`examples/` contains two diagrams, their macros, and a paper:
 
 ```
 examples/
-├── macros.tex        \newcommand{\pr}{\mathrm{pr}}
-├── pullback.tikzcd   the diagram, as Sagitta saves it
-└── paper.tex         \usepackage{quiver}, \input{macros}, \input{pullback.tikzcd}
+├── macros.tex          \pr and \coker, which both the diagrams and the paper use
+├── pullback.tikzcd     a pullback square, as Sagitta saves it
+├── snake-lemma.tikzcd  the snake lemma, with a curved dashed connecting morphism
+└── paper.tex           \usepackage{quiver}, \input{macros}, then each diagram
 ```
 
 Open the diagram with `sagitta examples/pullback.tikzcd`.

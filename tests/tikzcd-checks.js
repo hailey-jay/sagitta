@@ -5,7 +5,7 @@
 /// encoded first line is trusted while it still reproduces the file's `tikzcd` environment, and
 /// otherwise the tikz-cd is parsed, so that a hand edit wins.
 function load(text) {
-    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
     DiagramFile.restore_sep(ui, text);
     const encoding = text.match(/^%(?:.*#q=|\s*)([A-Za-z0-9+/=]{8,})\s*$/m);
     let trusted = false;
@@ -29,7 +29,7 @@ function load(text) {
 
 /// A diagram parsed from tikz-cd alone, with no encoded line.
 function parse(code) {
-    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
     const { diagnostics } = ui.quiver.import(ui, "tikz-cd", code, ui.settings);
     return { ui, diagnostics };
 }
@@ -42,6 +42,10 @@ const counts = (ui) => [
 
 /// Every label, in the order the cells were made.
 const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
+
+/// Checks that cannot finish at once, because reading a settings file is asynchronous as the shell
+/// does it. `tests/tikzcd.js` waits for these before it counts the failures.
+const pending = [];
 
 {
     // The round trip a paper depends on: the example opens from its own encoded line, and saving
@@ -79,7 +83,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
     // the picture.
     const swapped = text.replace(/^%#q=\S+$/m, `%#q=${
         QuiverImportExport.base64.export(parse("\\begin{tikzcd}\n\tA \\\\\n\tB\n\\end{tikzcd}\n")
-            .ui.quiver, new Settings(), {}).data}`);
+            .ui.quiver, new Settings(SETTINGS), {}).data}`);
     check("a line for another diagram is distrusted", load(swapped).trusted, false);
     check("so the picture is what is read", counts(load(swapped).ui), [4, 5]);
 }
@@ -120,7 +124,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
 {
     // The `tikzcd` environment's options carry the separations, which the encoding does not.
     const sep = (options) => {
-        const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
+        const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
         DiagramFile.restore_sep(ui, `\\begin{tikzcd}${options}\nA\n\\end{tikzcd}\n`);
         return [ui.sep.column, ui.sep.row];
     };
@@ -140,7 +144,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
         ["a bare line", `% ${encoded}`],
         ["our own line", `%#q=${encoded}`],
     ]) {
-        const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
+        const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
         const match = line.match(/^%(?:.*#q=|\s*)([A-Za-z0-9+/=]{8,})\s*$/m);
         check(`${name} is read`, match !== null, true);
         QuiverImportExport.base64.import(ui, match[1]);
@@ -187,7 +191,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
 
 {
     // Exporting what the settings ask for.
-    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
     QuiverImportExport.base64.import(ui,
         example("pullback.tikzcd").match(/^%#q=(\S+)$/m)[1]);
     const text = () => ui.text();
@@ -227,7 +231,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
     check("except where the other axis differs", written(1.8, 3.6), "[row sep=huge]");
     check("and every one reads back", (() => {
         ui.sep = { column: 2.7, row: 0.45 };
-        const read = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
+        const read = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
         DiagramFile.restore_sep(read, ui.text());
         return [read.sep.column, read.sep.row];
     })(), [2.7, 0.45]);
@@ -235,7 +239,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
 
 {
     // `:set`, which parses a value for a setting and says what the setting may be.
-    const settings = new Settings();
+    const settings = new Settings(SETTINGS);
     check("true and false are spelt several ways", [
         settings.parse("ui.dark_mode", "true"), settings.parse("ui.dark_mode", "on"),
         settings.parse("ui.dark_mode", "yes"), settings.parse("ui.dark_mode", "false"),
@@ -309,7 +313,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
 
 {
     // A preset with nothing selected sets the preset new arrows take, rather than being refused.
-    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
     const commands = new Commands(ui);
     check("new arrows are plain to begin with",
         ui.settings.get("diagram.arrow_preset"), "plain");
@@ -346,7 +350,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
 
 {
     // `:set`, as the command line runs it.
-    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
     const commands = new Commands(ui);
     const set = (...words) => {
         try {
@@ -536,7 +540,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
 
 {
     // `:snake` through the command line, which is how the manual spells it.
-    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
     const commands = new Commands(ui);
     let refused = "";
     try {
@@ -547,4 +551,172 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
     check("an axis that is not one is refused",
         refused, '"z" is not an axis: snake takes x, y, or nothing.');
     check("and x and y are what it offers", Commands.TABLE["snake"].completions, ["x", "y"]);
+}
+
+{
+    // The reader names no setting: given another schema, the same class reads, parses, checks, and
+    // reports for it. This is what lets another kind of diagram keep the file handling and `:set`.
+    const schema = {
+        defaults: { "a.flag": true, "a.count": 3, "a.name": "x", "a.maybe": 1 },
+        ranges: { "a.count": [1, 10], "a.maybe": [0, 5] },
+        nullable: new Set(["a.maybe"]),
+        checks: {
+            "a.name": [(value) => /^[a-z]$/.test(value), "one lower-case letter"],
+        },
+    };
+    for (const [setting, [least, most]] of Object.entries(schema.ranges)) {
+        const nullable = schema.nullable.has(setting);
+        schema.checks[setting] = [
+            (value) => nullable && value === null || value >= least && value <= most,
+            `a number from ${least} to ${most}${nullable ? ", or null" : ""}`,
+        ];
+    }
+    const other = new Settings(schema);
+
+    check("another schema's settings are the ones it has",
+        other.names(), ["a.flag", "a.count", "a.name", "a.maybe"]);
+    check("and nothing else is a setting",
+        [other.has("a.flag"), other.has("ui.zoom")], [true, false]);
+    check("its defaults are what it starts at",
+        [other.get("a.flag"), other.get("a.count"), other.get("a.name")], [true, 3, "x"]);
+    check("booleans are spelt the same way", other.parse("a.flag", "off"), false);
+    check("its ranges are enforced",
+        [other.allows("a.count", 5), other.allows("a.count", 50)], [true, false]);
+    check("and said in its own words", other.expected("a.count"), "a number from 1 to 10");
+    check("its own checks are asked", [
+        other.allows("a.name", "q"), other.allows("a.name", "Q"),
+    ], [true, false]);
+    check("with its own words", other.expected("a.name"), "one lower-case letter");
+    check("null is allowed where it says so",
+        [other.allows("a.maybe", null), other.allows("a.count", null)], [true, false]);
+    check("the range and nullability are what the layer steps by",
+        [other.range("a.count"), other.nullable("a.maybe")], [[1, 10], true]);
+    check("a setting it does not have has no range", other.range("ui.zoom"), undefined);
+
+    // And the diagram's own schema is untouched by any of that.
+    check("the two do not share a table",
+        [new Settings(SETTINGS).get("ui.zoom"), other.get("a.count")], [100, 3]);
+    other.set("a.count", 7);
+    check("nor their values", new Settings(SETTINGS).get("ui.zoom"), 100);
+}
+
+{
+    // Reading a settings file: a value the schema allows is taken, and anything else is left at
+    // its default and reported, setting by setting, for the mode line.
+    //
+    // These share the one stub shell, so they run one after another rather than at once.
+    const read = async (text) => {
+        host.settings_text = text;
+        host.written = [];
+        const settings = new Settings(SETTINGS);
+        await settings.load();
+        return settings;
+    };
+
+    pending.push((async () => {
+        let settings = await read(null);
+        check("no file leaves every default", settings.get("ui.zoom"), 100);
+        check("and nothing to report", settings.problems, []);
+
+        settings = await read('{"ui.zoom": 150, "ui.dark_mode": true}');
+        check("a file's values are taken",
+            [settings.get("ui.zoom"), settings.get("ui.dark_mode")], [150, true]);
+        check("with nothing to report", settings.problems, []);
+
+        settings = await read(
+            '{"ui.zoom": 500, "diagram.arrow_preset": "fancy", "ui.dark_mode": "yes"}');
+        check("a value out of range is left at its default", settings.get("ui.zoom"), 100);
+        check("as is one that is not in the list", settings.get("diagram.arrow_preset"), "plain");
+        check("and one of the wrong kind", settings.get("ui.dark_mode"), false);
+        check("each is reported in the schema's own words", settings.problems, [
+            "ui.zoom should be a number from 20 to 200",
+            "diagram.arrow_preset should be one of plain, equals, inclusion, mono, epi, maps-to,"
+                + " dashed, dotted, squiggly",
+            "ui.dark_mode should be true or false",
+        ]);
+
+        settings = await read("{not json");
+        check("a malformed file leaves the defaults", settings.get("ui.zoom"), 100);
+        check("says so once", settings.problems,
+            ["not valid JSON, so ignored, and left alone until it is fixed"]);
+        check("and is not overwritten", settings.writable, false);
+        settings.set("ui.zoom", 150);
+        await settings.write();
+        check("so a change writes nothing", host.written.length, 0);
+
+        settings = await read('{"ui.gone": 1, "ui.zoom": 120}');
+        check("a setting the app no longer has is ignored",
+            [settings.has("ui.gone"), settings.get("ui.zoom")], [false, 120]);
+        check("without being reported", settings.problems, []);
+        await settings.write();
+        check("and the next write drops it",
+            Object.hasOwn(JSON.parse(host.written.at(-1)), "ui.gone"), false);
+    })());
+}
+
+{
+    // The keys loader names nothing of this diagram either: given another table, the same loader
+    // reads the same notation, overrides the same way, and reports the same kinds of problem.
+    const table = {
+        defaults: { "walk": ["C-w"], "run": ["; r", "C-S-r"], "stop": [] },
+        contexts: { "walk": Keymap.CONTEXT.Defer },
+        known: (name) => Object.hasOwn(table.defaults, name) || name === "jump",
+        canonical: (word) => ({ "w": "walk" })[word] ?? word,
+    };
+    const resolve = (text) => Bindings.resolve(text, table);
+    const of = (keys, name) => (keys.get(name) ?? []).map((combination) =>
+        Bindings.signature(combination)).join(" ");
+
+    let { keys, problems } = resolve(null);
+    check("another table's defaults are what it starts with",
+        [of(keys, "walk"), of(keys, "run"), of(keys, "stop")], ["C-w", ";r C-S-r", ""]);
+    check("with nothing to report", problems, []);
+    check("a name's context comes from the table",
+        keys.get("walk")[0].context, Keymap.CONTEXT.Defer);
+    check("and a chord with none is always live",
+        keys.get("run")[1].context, Keymap.CONTEXT.Always);
+
+    ({ keys, problems } = resolve("run ; k"));
+    check("a line replaces all of a name's defaults", of(keys, "run"), ";k");
+    check("and nothing is reported", problems, []);
+
+    // A key a line binds is taken from whatever held it by default.
+    ({ keys, problems } = resolve("run C-w"));
+    check("a key is taken from whatever held it",
+        [of(keys, "walk"), of(keys, "run")], ["", "C-w"]);
+    check("with nothing to report", problems, []);
+
+    // Two lines claiming the same key is a mistake in the file, not a silent preference for the
+    // later one, so the second line is skipped and said.
+    ({ keys, problems } = resolve("walk C-w\nrun C-w"));
+    check("two lines claiming one key is reported",
+        problems, ["line 2: C-w is already bound on line 1"]);
+    check("and the skipped line changes nothing",
+        [of(keys, "walk"), of(keys, "run")], ["C-w", ";r C-S-r"]);
+
+    ({ keys } = resolve("w ; j"));
+    check("the table says what a word is short for", of(keys, "walk"), ";j");
+
+    ({ keys, problems } = resolve("stop"));
+    check("a name alone unbinds it", of(keys, "stop"), "");
+    ({ keys } = resolve("unbind C-w"));
+    check("and unbind frees a key from whatever has it", of(keys, "walk"), "");
+
+    // The problems are the loader's own, in its own words, for names it has never heard of.
+    check("a word the table does not know is reported",
+        resolve("wiggle C-q").problems, ['line 1: nothing is called "wiggle"']);
+    check("a name the table knows but has no defaults for is bound",
+        of(resolve("jump C-j").keys, "jump"), "C-j");
+    check("a key that would type is refused",
+        resolve("walk q").problems,
+        ['line 1: "q" would type: use "; q" for the command layer, or a chord']);
+    check("a reserved key is refused", resolve("walk RET").problems,
+        ['line 1: "RET": RET keeps its own meaning']);
+    check("and the same name twice is refused",
+        resolve("walk C-q\nwalk C-p").problems, ["line 2: walk is already bound on line 1"]);
+
+    // This diagram's own table is untouched by any of that, and is the default.
+    check("the diagram's table is what resolve takes without one",
+        Bindings.resolve(null).keys.has("save"), true);
+    check("and the other table knows nothing of it", resolve(null).keys.has("save"), false);
 }

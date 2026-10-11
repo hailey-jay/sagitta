@@ -1,37 +1,16 @@
 /// The user settings, held as JSON in `~/.config/sagitta/settings.json`, which the shell names
 /// and this class is the only writer of. `load` reads the file; every `set` rewrites it in full.
+///
+/// Which settings there are, and what each may hold, comes from the schema it is given
+/// (`src/schema.js`): nothing below names a setting, so another kind of diagram keeps all of this
+/// by passing its own table.
 class Settings {
-    constructor() {
-        this.data = {
-            // Whether to wrap the `tikz-cd` output in `\[ \]`.
-            "export.centre_diagram": true,
-            // Whether to use `\&` instead of `&` for column separators in `tikz-cd` output.
-            "export.ampersand_replacement": false,
-            // Whether to export diagrams with the `cramped` option.
-            "export.cramped": false,
-            // Whether to wrap the `tikz-cd` output in a standalone LaTeX document.
-            "export.standalone": false,
-            // Which variant of the corner to use for pullbacks/pushouts.
-            "diagram.var_corner": false,
-            // The preset new arrows take (see `Commands.PRESETS` and `Edge.suggested_options`).
-            "diagram.arrow_preset": "plain",
-            // Whether the canvas is grey, with the default colour drawn in white (see `main.css`).
-            "ui.dark_mode": false,
-            // The zoom the view starts at, and that `reset-zoom` returns to, in percent.
-            "ui.zoom": 100,
-            // The width and height of an empty column or row, in pixels, which they grow from.
-            "ui.cell_size": 128,
-            // The size of the labels, in pixels.
-            "ui.label_size": 26,
-            // How long the command layer waits for a key before listing its keys, in milliseconds,
-            // or `null` to list them only on `?` (see `Keymap.enter`).
-            "ui.which_key_delay": 300,
-            // Whether the command layer lists only its keys and their values, without what they do.
-            "ui.which_key_compact": false,
-            // The characters of the codes that select cells, in the order they are given out (see
-            // `UI.recode`): the keyboard's home row, then the bottom row, the top, and the digits.
-            "ui.hint_characters": "ASDFGHJKLZXCVBNMQWERTYUIOP1234567890",
-        };
+    /// `schema` is `{ defaults, ranges, nullable, checks }`, as `src/schema.js` describes.
+    constructor(schema) {
+        this.schema = schema;
+
+        // The current value of every setting, starting from the schema's defaults.
+        this.data = Object.assign({}, schema.defaults);
 
         // What was wrong with the file, setting by setting, for the mode line (see
         // `UI.report_problems`).
@@ -43,7 +22,7 @@ class Settings {
     }
 
     /// Read the saved settings over the defaults. A malformed file is ignored, and left alone, and
-    /// so is any setting of the wrong kind, or outside what `Settings.CHECKS` allows.
+    /// so is any setting of the wrong kind, or outside what the schema's checks allow.
     async load() {
         const text = await host.read_settings();
         if (text === null) {
@@ -75,10 +54,31 @@ class Settings {
         return this.data[setting];
     }
 
+    /// Whether this is a setting at all, which `:set` asks before anything else.
+    has(setting) {
+        return Object.hasOwn(this.data, setting);
+    }
+
+    /// Every setting's name, for `:set`'s completions and for the file.
+    names() {
+        return Object.keys(this.data);
+    }
+
     /// Saves a user setting. The file is rewritten as a whole, and the write is not waited on.
     set(setting, value) {
         this.data[setting] = value;
         this.write();
+    }
+
+    /// The numbers a numeric setting may be, as `[least, most]`, or `undefined` if it is not one.
+    /// The settings layer steps a number within this (see `Layer.Settings.step`).
+    range(setting) {
+        return this.schema.ranges[setting];
+    }
+
+    /// Whether a setting may also be `null`, which the layer shows as never.
+    nullable(setting) {
+        return this.schema.nullable.has(setting);
     }
 
     /// The value a string means for a setting, or `undefined` if it means nothing for it. This is
@@ -89,8 +89,8 @@ class Settings {
             return ["true", "on", "yes"].includes(text) ? true
                 : ["false", "off", "no"].includes(text) ? false : undefined;
         }
-        if (typeof held === "number" || Settings.NULLABLE.has(setting)) {
-            if (text === "null" && Settings.NULLABLE.has(setting)) {
+        if (typeof held === "number" || this.nullable(setting)) {
+            if (text === "null" && this.nullable(setting)) {
                 return null;
             }
             const value = parseFloat(text);
@@ -101,15 +101,15 @@ class Settings {
 
     /// Whether a value is one this setting may hold, as `load` asks of the file's.
     allows(setting, value) {
-        const [check] = Settings.CHECKS[setting] ?? [(value) => typeof value === "boolean"];
-        const typed = value === null ? Settings.NULLABLE.has(setting)
-            : typeof value === typeof this.data[setting];
+        const [check] = this.schema.checks[setting] ?? [(value) => typeof value === "boolean"];
+        const typed = value === null ? this.nullable(setting)
+            : typeof value === typeof this.schema.defaults[setting];
         return typed && check(value);
     }
 
     /// What a setting may be, in words, for the message that refuses a value.
     expected(setting) {
-        const [, expected] = Settings.CHECKS[setting] ?? [null, "true or false"];
+        const [, expected] = this.schema.checks[setting] ?? [null, "true or false"];
         return typeof expected === "function" ? expected() : expected;
     }
 
@@ -119,35 +119,4 @@ class Settings {
             await host.write_settings(`${JSON.stringify(this.data, null, 4)}\n`);
         }
     }
-}
-
-/// The numbers a numeric setting may be, as `[least, most]`.
-Settings.RANGES = {
-    "ui.zoom": [20, 200],
-    "ui.cell_size": [48, 512],
-    "ui.label_size": [8, 72],
-    "ui.which_key_delay": [0, 5000],
-};
-
-/// The settings that may also be `null`.
-Settings.NULLABLE = new Set(["ui.which_key_delay"]);
-
-/// What each setting that is not true or false may be, as `[check, description]`, where the
-/// description may be a function returning it.
-Settings.CHECKS = {
-    "diagram.arrow_preset": [
-        (value) => Object.hasOwn(Commands.PRESETS, value),
-        () => `one of ${Object.keys(Commands.PRESETS).join(", ")}`,
-    ],
-    "ui.hint_characters": [
-        (value) => /^[A-Z0-9]{2,}$/.test(value) && new Set(value).size === value.length,
-        "at least two different capital letters or digits",
-    ],
-};
-for (const [setting, [least, most]] of Object.entries(Settings.RANGES)) {
-    const nullable = Settings.NULLABLE.has(setting);
-    Settings.CHECKS[setting] = [
-        (value) => nullable && value === null || value >= least && value <= most,
-        `a number from ${least} to ${most}${nullable ? ", or null" : ""}`,
-    ];
 }

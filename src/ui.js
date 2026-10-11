@@ -98,7 +98,7 @@ class UI {
         this.sizing_labels = false;
 
         // The user settings, kept in `~/.config/sagitta/settings.json` (see `Settings`).
-        this.settings = new Settings();
+        this.settings = new Settings(SETTINGS);
 
         // The arrow options of the selection, and the edits the palette makes to them.
         this.arrow_options = new ArrowOptions();

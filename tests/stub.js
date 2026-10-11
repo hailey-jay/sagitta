@@ -211,6 +211,22 @@ const window = {
     removeEventListener: () => {},
 };
 
+/// The desktop shell, as the page reaches it: `src/settings.js` and `src/file.js` call it to read
+/// and write. Here it is a pair of strings, so that reading a settings file and writing one back
+/// can be checked without a disk.
+const host = {
+    /// What `read_settings` hands over: `null` for no file, as the real shell says when there is
+    /// none. A check sets this before calling `load`.
+    settings_text: null,
+    /// Every settings file written, in order, so a check can see what a `set` wrote.
+    written: [],
+
+    read_settings: async () => host.settings_text,
+    write_settings: async (text) => {
+        host.written.push(text);
+    },
+};
+
 /// A `UI` as the diagram sees it: the quiver, the grid, the settings, and the handful of methods
 /// `Parser`, `Cell`, and `QuiverImportExport` call on the way through. The view, the selection, the
 /// mode line, and the history are stubbed out, since a parse neither reads nor needs them.
@@ -220,12 +236,12 @@ const window = {
 ///
 /// `make_ui` builds one once the sources have been loaded into the context, which is why it takes
 /// the classes rather than naming them.
-function make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions }) {
+function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions }) {
     const focus_point = { class_list: new StubClassList() };
     const ui = {
         quiver: new Quiver(),
         grid: new Grid(),
-        settings: new Settings(),
+        settings: new Settings(SETTINGS),
         macros: new Map(),
         colours: new Map(),
         sep: { column: 1.8, row: 1.8 },
@@ -327,4 +343,4 @@ function make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions })
     return ui;
 }
 
-module.exports = { document, window, make_ui, StubElement, StubClassList };
+module.exports = { document, window, host, make_ui, StubElement, StubClassList };

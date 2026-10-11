@@ -26,6 +26,7 @@ const SOURCES = [
     "src/parser.js",
     "src/quiver.js",
     "src/settings.js",
+    "src/schema.js",
     "src/delimiters.js",
     "src/history.js",
     "src/colours.js",
@@ -33,6 +34,8 @@ const SOURCES = [
     "src/options.js",
     "src/commands.js",
     "src/keys.js",
+    "src/keymap.js",
+    "src/bindings.js",
     "src/file.js",
 ];
 
@@ -64,7 +67,12 @@ vm.createContext(context);
 /// The checks, as a function compiled in the context, so that they are ordinary source rather
 /// than a template literal (and so may hold backticks and `${}`).
 const checks = fs.readFileSync(path.join(__dirname, "tikzcd-checks.js"), "utf8");
-vm.runInContext(`${source}\n${checks}`, context, { filename: "tests/tikzcd.js" });
-
-process.stdout.write(`${failures.length === 0 ? "all ok" : `${failures.length} failures`}\n`);
-process.exit(failures.length === 0 ? 0 : 1);
+// The checks hand back the ones that cannot finish at once (reading a settings file is
+// asynchronous), which are waited for before the failures are counted.
+Promise.all(vm.runInContext(`${source}\n${checks}\npending`, context,
+    { filename: "tests/tikzcd.js" }))
+    .then(() => {
+        process.stdout.write(
+            `${failures.length === 0 ? "all ok" : `${failures.length} failures`}\n`);
+        process.exit(failures.length === 0 ? 0 : 1);
+    });

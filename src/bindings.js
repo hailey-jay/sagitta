@@ -1,6 +1,11 @@
 /// The named bindings: every key a user may rebind, by the name of what it does, with its defaults,
 /// and the keys file (`~/.config/sagitta/keys`) that overrides them.
 ///
+/// The loader (`parse`, `words`, `resolve`, and the notation around them) names nothing of this
+/// diagram: what there is to bind arrives as a table (`Bindings.TABLE`, which `Bindings.DEFAULTS`
+/// and `Bindings.CONTEXTS` below fill in). Another kind of diagram passes its own table and keeps
+/// the notation, the overriding, and the problem reporting as they are.
+///
 /// A name is a named action (see `ModeLine.define_actions`), one of `Bindings.HANDLERS`, or any
 /// other command (see `Commands.TABLE`), which a key runs with no arguments. Keys are written as
 /// the help shows them: `C-s` and `C-S-z` are chords, `; b` is `b` in the command layer, and
@@ -78,16 +83,10 @@ class Bindings {
     }
 
     /// When the binding of `combination` to `name` runs while a text field has the focus (see
-    /// `Keymap.CONTEXT`): as `Bindings.CONTEXTS` says, and otherwise, for chords, always.
-    static context(name, combination) {
+    /// `Keymap.CONTEXT`): as the table says, and otherwise, for chords, always.
+    static context(table, name, combination) {
         const { Always, Conservative } = Keymap.CONTEXT;
-        return Bindings.CONTEXTS[name] ?? (combination.modifier ? Always : Conservative);
-    }
-
-    /// Whether `name` is something a key can be bound to.
-    static known(name) {
-        return Object.hasOwn(Bindings.DEFAULTS, name)
-            || Object.hasOwn(Commands.TABLE, Commands.canonical(name));
+        return table.contexts[name] ?? (combination.modifier ? Always : Conservative);
     }
 
     /// The words of a line of the keys file, with `; x` joined into one, and comments (from a word
@@ -112,9 +111,9 @@ class Bindings {
     }
 
     /// The bindings, as `{ keys, problems }`: `keys` maps each name to its combinations, which are
-    /// the defaults overridden by the keys file's `text` (or none, if `null`), and `problems` lists
-    /// what was wrong with the file, line by line.
-    static resolve(text) {
+    /// `table`'s defaults overridden by the keys file's `text` (or none, if `null`), and `problems`
+    /// lists what was wrong with the file, line by line.
+    static resolve(text, table = Bindings.TABLE) {
         const keys = new Map();
         // The name each signature is bound to.
         const owners = new Map();
@@ -134,7 +133,7 @@ class Bindings {
                 owners.delete(signature);
             }
         };
-        for (const [name, notations] of Object.entries(Bindings.DEFAULTS)) {
+        for (const [name, notations] of Object.entries(table.defaults)) {
             bind(name, notations.map((notation) => Bindings.parse(notation)));
         }
 
@@ -150,7 +149,7 @@ class Bindings {
                     continue;
                 }
                 const [word, ...notations] = words;
-                const name = Object.hasOwn(Bindings.DEFAULTS, word) ? word : Commands.canonical(word);
+                const name = Object.hasOwn(table.defaults, word) ? word : table.canonical(word);
                 const combinations = notations.map((notation) => Bindings.parse(notation));
                 if (name === "unbind") {
                     for (const combination of combinations) {
@@ -159,7 +158,7 @@ class Bindings {
                     }
                     continue;
                 }
-                if (!Bindings.known(name)) {
+                if (!table.known(name)) {
                     throw new Error(`nothing is called "${word}"`);
                 }
                 if (named.has(name)) {
@@ -194,7 +193,7 @@ class Bindings {
         for (const [name, combinations] of keys) {
             keys.set(name, combinations.map((combination) => ({
                 ...combination,
-                context: Bindings.context(name, combination),
+                context: Bindings.context(table, name, combination),
             })));
         }
         return { keys, problems };
@@ -348,6 +347,18 @@ Bindings.DEFAULTS = {
         "change-target": Defer,
     };
 }
+
+/// This diagram's table, which is all the loader knows of it: what there is to bind and its default
+/// keys, which names act on a text field, whether a word names anything at all, and the canonical
+/// spelling of a word (`Bindings.ALIASES` is the commands'). At the `core/` split this is the piece
+/// that stays behind with the diagram; everything above it goes.
+Bindings.TABLE = {
+    defaults: Bindings.DEFAULTS,
+    contexts: Bindings.CONTEXTS,
+    known: (name) => Object.hasOwn(Bindings.DEFAULTS, name)
+        || Object.hasOwn(Commands.TABLE, Commands.canonical(name)),
+    canonical: (word) => Commands.canonical(word),
+};
 
 /// What the names that are neither actions nor commands do, or do differently from their commands,
 /// as `{ press, help }`, where `press` takes the UI and the key event, and `help` is the help
