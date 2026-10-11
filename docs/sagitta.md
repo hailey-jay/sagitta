@@ -160,7 +160,7 @@ An arrow can be routed through cells instead of drawn as a curve: it runs straig
   The arrow passes through its checkpoints in the order they were added, and while it is selected, each is marked by a ring.
   A cell an arrow joins is no checkpoint.
 - `; m`, or `:move-checkpoint`, picks up the checkpoint at the focus point, which then follows the focus point.
-  RET puts it down, as one undo step, and ESC puts it back.
+  RET puts it down, as one undo step, and ESC puts it back; any other change to the diagram puts it down first.
   It skips over the arrow's own ends; while one is carried, its ring is filled, and the mode line shows `CHECKPOINT`.
 - `; b` rounds the corners of a route, from 0 (sharp) to 8, as `:rounding` does; it is 3 to begin with.
 

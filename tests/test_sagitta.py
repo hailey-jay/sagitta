@@ -1117,6 +1117,18 @@ def test_carrying_a_checkpoint_undoes_in_one_step(sagitta, home):
     assert result["edges"][0]["route"] == [[1, 0]]
 
 
+def test_a_change_to_the_diagram_puts_a_carried_checkpoint_down(sagitta, home):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    result = sagitta("route", diagram, json.dumps(
+        ["route x", [1, 0], "move-checkpoint", {"keys": [["Up"]]}, "reverse",
+         {"keys": [["Down"]]}]))
+    # Put down a row up before the arrow was reversed, the checkpoint stays there when the focus
+    # point moves on.
+    assert result["edges"][0]["route"] == [[1, -1]]
+    # A command undoes in one step, so putting the checkpoint down goes with the reverse.
+    assert result["steps"] == 2
+
+
 def test_a_checkpoint_put_down_where_it_was_is_no_step(sagitta, home):
     diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
     result = sagitta("route", diagram, json.dumps(

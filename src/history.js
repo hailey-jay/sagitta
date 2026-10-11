@@ -33,6 +33,11 @@ class History {
         if (!actions.some(History.changes)) {
             return false;
         }
+        // A checkpoint being carried is put down where it is before anything else changes the
+        // diagram, so that the change acts on the route as it is drawn, and a deleted or reversed
+        // arrow is not left carrying it. Putting it down adds its own step, without coming back
+        // here, as nothing is carried by then.
+        ui.keys?.put_down(true);
         // Append a new history event.
         // If there are future actions, clear them. (Our history only forms a list, not a tree.)
         ui.quiver.flush(this.present);
