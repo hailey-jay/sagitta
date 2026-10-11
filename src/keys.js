@@ -105,11 +105,9 @@ class Keys {
                 ui.history.add(ui, actions);
             }
             ui.switch_mode(UIMode.default);
-        } else if (this.put_down(true)) {
-            // Enter puts down a carried checkpoint, rather than editing a label.
-        } else {
-            // Toggle the focus of the label input. Focusing edits the label in place (typing
-            // a character instead replaces it: see `Keymap.after`).
+        } else if (!this.put_down(true)) {
+            // With no checkpoint to put down, toggle the focus of the label input. Focusing edits
+            // the label in place (typing a character instead replaces it: see `Keymap.after`).
             const input = ui.label_input.element;
             if (document.activeElement !== input) {
                 if (ui.keymap.edit_target(false)) {
@@ -429,11 +427,13 @@ class Keys {
         }
         const carried = ui.carried;
         ui.carried = null;
+        let moved = false;
         if (keep) {
             const routes = carried.map(({ edge, from }) => ({ edge, from, to: edge.options.route }))
                 .filter(({ from, to }) => JSON.stringify(from) !== JSON.stringify(to));
             if (routes.length > 0) {
                 ui.history.add(ui, [{ kind: "route", routes }]);
+                moved = true;
             }
             for (const { edge } of carried) {
                 edge.render(ui);
@@ -447,7 +447,7 @@ class Keys {
             }
         }
         ui.mode_line.update(ui);
-        ui.mode_line.flash(keep ? "checkpoint moved" : "checkpoint put back");
+        ui.mode_line.flash(moved ? "checkpoint moved" : "checkpoint put back");
         return true;
     }
 

@@ -807,8 +807,8 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                 if (shortened && routed) {
                     try {
                         const curve = edge.arrow.curve();
-                        const [start, end] = edge.arrow.find_endpoints();
-                        const length = (curve.arc_length(end.t) - curve.arc_length(start.t))
+                        const [start, finish] = edge.arrow.find_endpoints();
+                        const length = (curve.arc_length(finish.t) - curve.arc_length(start.t))
                             * QuiverExport.tikz_multiplier(edge.angle());
                         for (const [end, side] of [["source", "<"], ["target", ">"]]) {
                             if (edge.options.shorten[end] !== 0) {

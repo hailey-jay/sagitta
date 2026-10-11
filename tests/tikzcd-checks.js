@@ -712,6 +712,11 @@ const pending = [];
     check("route steps through both bends and back", steps, ["[[1,0]]", "[[0,1]]", "[]"]);
     ui.history.undo(ui);
     check("each step undoes on its own", route(ui), "[[0,1]]");
+    // Asking for the route an arrow already has changes nothing, so leaves nothing to undo.
+    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
+    commands.route("y");
+    ui.history.undo(ui);
+    check("and a route asked for again is no step", route(ui), "[[1,0]]");
 
     // An arrow along a row has no corner to turn.
     ui = parse("\\begin{tikzcd}\n\tA \\arrow[r] & B\n\\end{tikzcd}\n").ui;

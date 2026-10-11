@@ -186,7 +186,7 @@ class Commands {
         const corners = [];
         let at = from;
         while (left.x + left.y > 1) {
-            // An axis with nothing left to go is skipped, so the tail of the path is a straight run.
+            // An axis with nothing left to go is skipped, so the path ends in a straight run.
             if (left[axis] === 0) {
                 axis = axis === "x" ? "y" : "x";
             }
@@ -528,7 +528,8 @@ Commands.TABLE["crossing-over"] = {
         commands.require_edges();
         const values = { on: true, off: false };
         if (value !== undefined && !Object.hasOwn(values, value.toLowerCase())) {
-            throw new Error(`"${value}" is not on or off: crossing-over takes on, off, or nothing.`);
+            throw new Error(
+                `"${value}" is not on or off: crossing-over takes on, off, or nothing.`);
         }
         commands.ensure_arrow();
         ui.arrow_options.set_crossing_over(

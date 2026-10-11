@@ -134,7 +134,7 @@ Any other command (Tab at `:` lists them) can be bound too, and its keys run it 
 
 ## Crossing over
 
-`; x`, or `:crossing-over`, makes the selected arrows cut a gap in the arrows they cross, as tikz-cd's `crossing over` does, and again turns it off.
+`; x`, or `:crossing-over`, makes the selected arrows cut a gap in the arrows they cross, as tikz-cd's `crossing over` does; pressed again, it turns that off.
 `:crossing-over on` brings them to the front even if they cross over already, and `:crossing-over off` turns it off.
 
 tikz-cd draws arrows in the order they are written, and an arrow crossing over cuts a gap only in those drawn before it, so the arrows crossing over stack in layers:
@@ -154,14 +154,14 @@ Layers order arrows as a whole, so three arrows each crossing over the next, aro
 An arrow can be routed through cells instead of drawn as a curve: it runs straight from cell centre to cell centre, and each turn is rounded.
 
 - `; w`, or `:route`, bends the selected arrows round one corner, along the row first.
-  Again goes along the column first, and a third time straightens them.
+  Pressed again, it goes along the column first, and a third time it straightens them.
   `:route x`, `:route y`, and `:route none` name the step.
 - `; k`, or `:checkpoint`, adds the cell at the focus point to the selected arrows' routes, or takes it out if they already pass through it.
-  The arrow passes through its checkpoints in the order they were added.
+  The arrow passes through its checkpoints in the order they were added, and while it is selected, each is marked by a ring.
   A cell an arrow joins is no checkpoint.
 - `; m`, or `:move-checkpoint`, picks up the checkpoint at the focus point, which then follows the focus point.
   RET puts it down, as one undo step, and ESC puts it back.
-  It skips over the arrow's own ends, and the mode line shows `CHECKPOINT` while one is carried.
+  It skips over the arrow's own ends; while one is carried, its ring is filled, and the mode line shows `CHECKPOINT`.
 - `; b` rounds the corners of a route, from 0 (sharp) to 8, as `:rounding` does; it is 3 to begin with.
 
 A route takes the place of the arrow's curve and offset, which come back when it is straightened.
