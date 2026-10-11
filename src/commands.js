@@ -91,6 +91,110 @@ class Commands {
         ui.arrow_options.set(ui, property, current);
     }
 
+    /// Open a gap at `index` along `axis` (`"x"` for a column, `"y"` for a row): every vertex at
+    /// or beyond it moves one step on, and the arrows come with them, since an arrow is held by its
+    /// endpoints rather than by a position. Building a diagram outwards (the snake lemma puts the
+    /// kernels above a row that is already there) is what this is for.
+    ///
+    /// The move goes in the undo history as one step, which `kind: "move"` already knows how to
+    /// undo. No vertex ends up where another was: everything that moves is beyond the gap, and
+    /// everything that stays is before it.
+    insert(axis, index) {
+        const ui = this.ui;
+        const beyond = ui.quiver.all_cells()
+            .filter((cell) => cell.is_vertex() && cell.position[axis] >= index);
+        if (beyond.length === 0) {
+            throw new Error(`There is no ${axis === "x" ? "column" : "row"} at or after ${
+                axis === "x" ? "column" : "row"} ${index + 1} to move.`);
+        }
+        const delta = axis === "x" ? new Position(1, 0) : new Position(0, 1);
+        ui.history.add(ui, [{
+            kind: "move",
+            displacements: beyond.map((vertex) => ({
+                vertex,
+                from: vertex.position,
+                to: vertex.position.add(delta),
+            })),
+        }], true);
+    }
+
+    /// Replace the selected arrow with a chain of arrows through new empty cells along the
+    /// staircase between its ends, so that a connecting morphism drawn step by step (the snake
+    /// lemma marks four: lift, apply, pull back, project) is one command rather than a placement
+    /// apiece.
+    ///
+    /// The staircase steps one cell at a time, alternating between the axes and starting with
+    /// `first` (`"x"`, `"y"`, or `null` for whichever has further to go), so it is the Manhattan
+    /// path between the ends rather than a curve: sagitta has no waypoints on a single arrow, and
+    /// adding them would need a field the quiver round trip does not have.
+    ///
+    /// A cell the staircase passes through that already holds a vertex is used as it stands, rather
+    /// than displaced, so a staircase may be drawn through a diagram as well as around it.
+    snake(first = null) {
+        const ui = this.ui;
+        const edges = Array.from(ui.selection).filter((cell) => cell.is_edge());
+        if (edges.length !== 1) {
+            throw new Error("Select one arrow to draw as a staircase.");
+        }
+        const [edge] = edges;
+        const { source, target } = edge;
+        if (!source.is_vertex() || !target.is_vertex()) {
+            throw new Error("A staircase runs between two cells, not between arrows.");
+        }
+        if (source === target) {
+            throw new Error("A loop has no staircase.");
+        }
+        const corners = Commands.staircase(source.position, target.position, first);
+        if (corners.length === 0) {
+            throw new Error("The two cells are already next to each other.");
+        }
+        // The arrow being replaced is deleted, and the chain created, as one undoable step.
+        const created = new Set();
+        let previous = source;
+        for (const position of corners) {
+            const held = ui.positions.get(`${position}`);
+            const vertex = held ?? new Vertex(ui, "", position);
+            if (held === undefined) {
+                created.add(vertex);
+            }
+            created.add(Edge.create(ui, previous, vertex));
+            previous = vertex;
+        }
+        created.add(Edge.create(ui, previous, target));
+        ui.history.add(ui, [
+            { kind: "create", cells: created },
+            { kind: "delete", cells: ui.quiver.transitive_dependencies(new Set([edge])) },
+        ]);
+        ui.remove_cell(edge, ui.history.present);
+        ui.deselect();
+        ui.select(...created);
+    }
+
+    /// The cells a staircase from `from` to `to` passes through, excluding both ends: one step at a
+    /// time, alternating between the axes, starting with `first` (or the axis with further to go).
+    static staircase(from, to, first = null) {
+        const step = {
+            x: Math.sign(to.x - from.x),
+            y: Math.sign(to.y - from.y),
+        };
+        const left = { x: Math.abs(to.x - from.x), y: Math.abs(to.y - from.y) };
+        let axis = first ?? (left.y > left.x ? "y" : "x");
+        const corners = [];
+        let at = from;
+        while (left.x + left.y > 1) {
+            // An axis with nothing left to go is skipped, so the tail of the path is a straight run.
+            if (left[axis] === 0) {
+                axis = axis === "x" ? "y" : "x";
+            }
+            at = axis === "x"
+                ? new Position(at.x + step.x, at.y) : new Position(at.x, at.y + step.y);
+            --left[axis];
+            corners.push(at);
+            axis = axis === "x" ? "y" : "x";
+        }
+        return corners;
+    }
+
     /// Apply an arrow preset to the selected arrows, or, with none selected, make it the preset
     /// new arrows take (`diagram.arrow_preset`), which is the only thing the key press can
     /// sensibly mean when there is nothing to restyle. The setting is not part of the diagram, so
@@ -262,6 +366,31 @@ Commands.TABLE["set"] = {
         }
         ui.change_setting(setting, value);
         ui.mode_line.flash(`${setting} is now ${JSON.stringify(value)}`);
+    },
+};
+
+/// Opening a gap for a row or a column, anchored on the focus point: `above` and `left` put the gap
+/// where the focus point is, and `below` and `right` just after it. These have no keys by default;
+/// the keys file can bind them, as it can any command.
+for (const [name, axis, after] of [
+    ["insert-row-above", "y", 0],
+    ["insert-row-below", "y", 1],
+    ["insert-column-left", "x", 0],
+    ["insert-column-right", "x", 1],
+]) {
+    Commands.TABLE[name] = {
+        run: (commands) => commands.insert(axis, commands.ui.focus_position[axis] + after),
+    };
+}
+
+Commands.TABLE["snake"] = {
+    arguments: true,
+    completions: ["x", "y"],
+    run: (commands, [first]) => {
+        if (first !== undefined && !["x", "y"].includes(first.toLowerCase())) {
+            throw new Error(`"${first}" is not an axis: snake takes x, y, or nothing.`);
+        }
+        commands.snake(first === undefined ? null : first.toLowerCase());
     },
 };
 

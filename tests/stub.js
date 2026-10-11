@@ -215,9 +215,12 @@ const window = {
 /// `Parser`, `Cell`, and `QuiverImportExport` call on the way through. The view, the selection, the
 /// mode line, and the history are stubbed out, since a parse neither reads nor needs them.
 ///
-/// `make` builds one once the sources have been loaded into the context, which is why it takes the
-/// classes rather than naming them.
-function make_ui({ DOM, Quiver, Grid, Settings, Offset }) {
+/// The undo history and the arrow options are the real ones, so that a command's history event can
+/// be applied, undone, and redone here rather than only in the app.
+///
+/// `make_ui` builds one once the sources have been loaded into the context, which is why it takes
+/// the classes rather than naming them.
+function make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions }) {
     const focus_point = { class_list: new StubClassList() };
     const ui = {
         quiver: new Quiver(),
@@ -234,9 +237,12 @@ function make_ui({ DOM, Quiver, Grid, Settings, Offset }) {
         buffer_updates: false,
         focus_point,
         view: Offset.zero(),
-        history: { present: 0, add: () => {}, squash: () => {} },
+        history: new History(),
         mode_line: { update: () => {}, flash: () => {}, error: () => {}, dismiss_error: () => false },
         colour_picker: { update_diagram_colours: () => {} },
+        // The arrow options are the real ones: they hold the selection's values and need no
+        // elements of their own (the palette that edits them is the mode line's business).
+        arrow_options: new ArrowOptions(),
         // The element every cell is added to, which stands in for the canvas.
         canvas: new DOM.Div({ class: "canvas" }),
 
@@ -266,14 +272,31 @@ function make_ui({ DOM, Quiver, Grid, Settings, Offset }) {
                 }
             }
         },
-        update_cell_size: () => {},
+        /// As `UI.update_cell_size`, without the resize: the grid still has to be told which cell
+        /// constrains which column and row, since moving a cell asks the grid to let go of them
+        /// (see `Grid.unconstrain`).
+        update_cell_size: (cell, width, height) => ui.grid.constrain(cell, width, height),
         reposition_focus_point: () => {},
-        update_col_row_size: () => {},
+        /// As `UI.update_col_row_size`, which only the grid's sizes care about: nothing here is
+        /// laid out, so there is nothing to resize and nothing to rerender.
+        update_col_row_size: () => [],
         recode: () => {},
-        deselect: (cell) => ui.selection.delete(cell),
-        select: (cell) => ui.selection.add(cell),
-        deselect_all: () => ui.selection.clear(),
+        /// As `UI.select` and `UI.deselect`, which are variadic, and where `deselect` with no
+        /// argument clears the selection.
+        select: (...cells) => {
+            for (const cell of cells) {
+                ui.selection.add(cell);
+            }
+        },
+        deselect: (cell = null) => {
+            if (cell === null) {
+                ui.selection.clear();
+            } else {
+                ui.selection.delete(cell);
+            }
+        },
         update_selection: () => {},
+        hide_if_unselected: () => {},
         selection_contains_edge: () =>
             Array.from(ui.selection).some((cell) => cell.is_edge()),
 

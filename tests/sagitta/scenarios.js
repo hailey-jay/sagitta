@@ -445,6 +445,41 @@ module.exports = {
         return steps;
     },
 
+    /// Opening a gap, anchored on the focus point: move the focus point by the keys in
+    /// `argument.keys`, run `argument.command`, then save. Returns where every vertex ended up,
+    /// then undoes and returns that too, so one undo is shown to close the gap.
+    insert: async (ctx) => {
+        const { keys = [], command } = JSON.parse(ctx.argument);
+        for (const [key, modifiers = []] of keys) {
+            await ctx.press(key, modifiers);
+        }
+        const grid = () => ctx.js(`[...ui.quiver.all_cells()].filter((cell) => cell.is_vertex())`
+            + `.map((cell) => cell.label + cell.position.x + cell.position.y).sort().join(" ")`);
+        const before = await grid();
+        await ctx.command(command);
+        const after = await grid();
+        await ctx.save();
+        await ctx.press("z", ["control"]);
+        return { before, after, undone: await grid(), mode_line: await ctx.mode_line() };
+    },
+
+    /// `:snake` on the one arrow of a diagonal pair: select it by code, draw the staircase, and
+    /// save. Returns the counts after each step, and the labels of the cells, so the new one is
+    /// shown to be empty.
+    snake: async (ctx) => {
+        await ctx.press("a", ["control"]);
+        const steps = { selected: await ctx.counts() };
+        await ctx.command(ctx.argument === null ? "snake" : `snake ${ctx.argument}`);
+        steps.drawn = await ctx.counts();
+        steps.cells = await ctx.js(`[...ui.quiver.all_cells()].filter((cell) => cell.is_vertex())`
+            + `.map((cell) => (cell.label || "-") + cell.position.x + cell.position.y)`
+            + `.sort().join(" ")`);
+        await ctx.save();
+        await ctx.press("z", ["control"]);
+        steps.undone = await ctx.counts();
+        return steps;
+    },
+
     /// The value of the JavaScript expression `argument`, evaluated in the page.
     evaluate: async (ctx) => ctx.js(ctx.argument),
 

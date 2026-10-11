@@ -5,7 +5,7 @@
 /// encoded first line is trusted while it still reproduces the file's `tikzcd` environment, and
 /// otherwise the tikz-cd is parsed, so that a hand edit wins.
 function load(text) {
-    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset });
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
     DiagramFile.restore_sep(ui, text);
     const encoding = text.match(/^%(?:.*#q=|\s*)([A-Za-z0-9+/=]{8,})\s*$/m);
     let trusted = false;
@@ -29,7 +29,7 @@ function load(text) {
 
 /// A diagram parsed from tikz-cd alone, with no encoded line.
 function parse(code) {
-    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset });
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
     const { diagnostics } = ui.quiver.import(ui, "tikz-cd", code, ui.settings);
     return { ui, diagnostics };
 }
@@ -85,9 +85,42 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
 }
 
 {
+    // The snake lemma example, which the paper `\input`s beside the pullback: a wider figure, with
+    // empty cells, a curved dashed arrow between non-adjacent cells, and labels that need the
+    // `\coker` of `examples/macros.tex`.
+    const text = example("snake-lemma.tikzcd");
+    const { ui, trusted, diagnostics } = load(text);
+    check("the snake lemma opens from its own line", trusted, true);
+    check("with no diagnostics", diagnostics.length, 0);
+    check("as four rows of terms and the arrows between them", counts(ui), [17, 23]);
+    check("and saving it writes the same bytes", ui.text(), text);
+
+    // The empty cells of the figure are empty cells, not absent ones: the first row has no fifth
+    // term, and the first and last rows have no first term.
+    check("the corners of the figure are left out",
+        ui.quiver.all_cells().filter((cell) => cell.is_vertex())
+            .map((cell) => `${cell.position.x}${cell.position.y}`).sort().join(" "),
+        "01 02 10 11 12 13 20 21 22 23 30 31 32 33 41 42 43");
+
+    // The connecting morphism is one arrow across the whole figure, curved and dashed.
+    const [delta] = ui.quiver.all_cells().filter((cell) => cell.label === "\\delta");
+    check("the connecting morphism runs from ker c to coker a",
+        [`${delta.source.position.x}${delta.source.position.y}`,
+            `${delta.target.position.x}${delta.target.position.y}`], ["30", "13"]);
+    check("and is drawn curved and dashed",
+        [delta.options.curve !== 0, delta.options.style.body.name], [true, "dashed"]);
+
+    // Its tikz-cd says so too, which is what LaTeX reads.
+    check("the export says as much",
+        ui.text().includes('\\arrow["\\delta", curve={height=-6pt}, dashed, from=1-4, to=4-2]'),
+        true);
+
+}
+
+{
     // The `tikzcd` environment's options carry the separations, which the encoding does not.
     const sep = (options) => {
-        const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset });
+        const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
         DiagramFile.restore_sep(ui, `\\begin{tikzcd}${options}\nA\n\\end{tikzcd}\n`);
         return [ui.sep.column, ui.sep.row];
     };
@@ -107,7 +140,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
         ["a bare line", `% ${encoded}`],
         ["our own line", `%#q=${encoded}`],
     ]) {
-        const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset });
+        const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
         const match = line.match(/^%(?:.*#q=|\s*)([A-Za-z0-9+/=]{8,})\s*$/m);
         check(`${name} is read`, match !== null, true);
         QuiverImportExport.base64.import(ui, match[1]);
@@ -154,7 +187,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
 
 {
     // Exporting what the settings ask for.
-    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset });
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
     QuiverImportExport.base64.import(ui,
         example("pullback.tikzcd").match(/^%#q=(\S+)$/m)[1]);
     const text = () => ui.text();
@@ -194,7 +227,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
     check("except where the other axis differs", written(1.8, 3.6), "[row sep=huge]");
     check("and every one reads back", (() => {
         ui.sep = { column: 2.7, row: 0.45 };
-        const read = make_ui({ DOM, Quiver, Grid, Settings, Offset });
+        const read = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
         DiagramFile.restore_sep(read, ui.text());
         return [read.sep.column, read.sep.row];
     })(), [2.7, 0.45]);
@@ -276,7 +309,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
 
 {
     // A preset with nothing selected sets the preset new arrows take, rather than being refused.
-    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset });
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
     const commands = new Commands(ui);
     check("new arrows are plain to begin with",
         ui.settings.get("diagram.arrow_preset"), "plain");
@@ -313,7 +346,7 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
 
 {
     // `:set`, as the command line runs it.
-    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset });
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
     const commands = new Commands(ui);
     const set = (...words) => {
         try {
@@ -349,4 +382,169 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
         set("diagram.arrow_preset", "wiggly").startsWith('"wiggly" is not a value'), true);
     check("every setting is offered for completion",
         Commands.TABLE["set"].completions(commands).length, Object.keys(ui.settings.data).length);
+}
+
+{
+    // The staircase a `:snake` draws: one step at a time, alternating between the axes, starting
+    // with the axis that has further to go.
+    const path = (from, to, first = null) =>
+        Commands.staircase(new Position(...from), new Position(...to), first)
+            .map((position) => [position.x, position.y]);
+
+    // The snake lemma's connecting morphism: from `ker c` at the top right down and left to
+    // `coker a` at the bottom left, as four corners and so five arrows.
+    check("the snake lemma's staircase", path([2, 0], [0, 3]),
+        [[2, 1], [1, 1], [1, 2], [0, 2]]);
+    check("which axis goes first can be asked for", path([2, 0], [0, 3], "x"),
+        [[1, 0], [1, 1], [0, 1], [0, 2]]);
+    check("a straight run has a corner for every cell between", path([0, 0], [3, 0]),
+        [[1, 0], [2, 0]]);
+    check("and the axis with nothing left is skipped", path([0, 0], [1, 3]),
+        [[0, 1], [1, 1], [1, 2]]);
+    check("neighbours have no staircase", path([0, 0], [1, 0]), []);
+    check("and nor do cells a row apart", path([0, 0], [0, 1]), []);
+    // With the same distance either way, x goes first.
+    check("a diagonal step is one corner", path([0, 0], [1, 1]), [[1, 0]]);
+    check("the direction is taken from the ends", path([3, 3], [1, 2]),
+        [[2, 3], [2, 2]]);
+    check("a staircase is as long as the Manhattan distance, less one",
+        [[[0, 0], [4, 2]], [[0, 0], [1, 5]], [[2, 2], [0, 0]]].map(([from, to]) =>
+            path(from, to).length === Math.abs(to[0] - from[0]) + Math.abs(to[1] - from[1]) - 1),
+        [true, true, true]);
+    check("and every step of one moves exactly one cell",
+        (() => {
+            const corners = [[0, 0], ...path([0, 0], [4, 3]), [4, 3]];
+            return corners.slice(1).every(([x, y], i) =>
+                Math.abs(x - corners[i][0]) + Math.abs(y - corners[i][1]) === 1);
+        })(), true);
+}
+
+{
+    // Opening a gap for a row or a column moves everything at or beyond it, and the arrows come
+    // with their endpoints.
+    const square = () => parse("\\begin{tikzcd}\n"
+        + "\tA \\arrow[r, \"f\"] \\arrow[d, \"g\"'] & B \\arrow[d, \"h\"] \\\\\n"
+        + "\tC \\arrow[r, \"k\"'] & D\n"
+        + "\\end{tikzcd}\n").ui;
+    const grid = (ui) => ui.quiver.all_cells().filter((cell) => cell.is_vertex())
+        .map((cell) => `${cell.label}${cell.position.x}${cell.position.y}`).join(" ");
+
+    let ui = square();
+    check("the square starts where the file puts it", grid(ui), "A00 B10 C01 D11");
+
+    // A row above the second row: `C` and `D` move down, `A` and `B` stay.
+    ui = square();
+    new Commands(ui).insert("y", 1);
+    check("a row moves what is at or below it", grid(ui), "A00 B10 C02 D12");
+    check("and the arrows are still there", counts(ui), [4, 4]);
+
+    // A column before the first: everything moves right.
+    ui = square();
+    new Commands(ui).insert("x", 0);
+    check("a column before the first moves everything", grid(ui), "A10 B20 C11 D21");
+
+    // A gap past the last row has nothing to move, which is said rather than done silently.
+    ui = square();
+    let refused = "";
+    try {
+        new Commands(ui).insert("y", 2);
+    } catch (error) {
+        refused = error.message;
+    }
+    check("a gap past the end is refused", refused, "There is no row at or after row 3 to move.");
+    check("and nothing moved", grid(ui), "A00 B10 C01 D11");
+
+    // The gap survives the round trip, as an empty row in the matrix.
+    ui = square();
+    new Commands(ui).insert("y", 1);
+    check("the gap is written as an empty row",
+        ui.text().includes("\\\\\n\t\\\\\n\t"), true);
+    check("and reads back the same way", grid(parse(ui.text()).ui), "A00 B10 C02 D12");
+}
+
+{
+    // `:snake` replaces one arrow with a chain through new empty cells, and one undo puts the
+    // single arrow back.
+    const diagonal = () => parse("\\begin{tikzcd}\n"
+        + "\tP \\arrow[dr, \"c\"] & \\\\\n\t& Q\n\\end{tikzcd}\n").ui;
+
+    let ui = diagonal();
+    check("the diagram is two cells and an arrow between them", counts(ui), [2, 1]);
+    let commands = new Commands(ui);
+
+    // With nothing selected, or with more than one arrow, there is nothing to draw.
+    let refused = "";
+    try {
+        commands.snake();
+    } catch (error) {
+        refused = error.message;
+    }
+    check("a staircase needs one arrow selected",
+        refused, "Select one arrow to draw as a staircase.");
+
+    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
+    commands.snake();
+    // The corner between `P` at (0,0) and `Q` at (1,1) is one new cell, so two arrows.
+    check("the arrow becomes a chain through the corner", counts(ui), [3, 2]);
+    check("the new cell is empty, and at the corner",
+        ui.quiver.all_cells().filter((cell) => cell.is_vertex())
+            .map((cell) => `${cell.label || "-"}${cell.position.x}${cell.position.y}`).join(" "),
+        "P00 Q11 -10");
+    check("and the chain is what is now selected", ui.selection.size, 3);
+
+    ui.history.undo(ui);
+    check("one undo puts the single arrow back", counts(ui), [2, 1]);
+    check("with its own label", ui.quiver.all_cells()
+        .filter((cell) => cell.is_edge()).map((cell) => cell.label), ["c"]);
+    ui.history.redo(ui);
+    check("and redo draws the chain again", counts(ui), [3, 2]);
+
+    // Neighbours have no staircase, and nor does a loop.
+    ui = parse("\\begin{tikzcd}\n\tA \\arrow[r, \"f\"] & B\n\\end{tikzcd}\n").ui;
+    commands = new Commands(ui);
+    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
+    refused = "";
+    try {
+        commands.snake();
+    } catch (error) {
+        refused = error.message;
+    }
+    check("neighbours are refused", refused, "The two cells are already next to each other.");
+
+    ui = parse("\\begin{tikzcd}\n\tA \\arrow[\"f\", loop]\n\\end{tikzcd}\n").ui;
+    commands = new Commands(ui);
+    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
+    refused = "";
+    try {
+        commands.snake();
+    } catch (error) {
+        refused = error.message;
+    }
+    check("and a loop is too", refused, "A loop has no staircase.");
+
+    // A cell the staircase passes through that is already occupied is used rather than displaced.
+    ui = parse("\\begin{tikzcd}\n"
+        + "\tP \\arrow[drr, \"c\"] & M & \\\\\n\t& & Q\n\\end{tikzcd}\n").ui;
+    commands = new Commands(ui);
+    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
+    commands.snake("x");
+    check("a cell on the way is used as it stands",
+        ui.quiver.all_cells().filter((cell) => cell.is_vertex())
+            .map((cell) => cell.label || "-").sort().join(" "), "- M P Q");
+    check("so the chain runs through it", counts(ui), [4, 3]);
+}
+
+{
+    // `:snake` through the command line, which is how the manual spells it.
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, Offset, History, ArrowOptions });
+    const commands = new Commands(ui);
+    let refused = "";
+    try {
+        Commands.TABLE["snake"].run(commands, ["z"]);
+    } catch (error) {
+        refused = error.message;
+    }
+    check("an axis that is not one is refused",
+        refused, '"z" is not an axis: snake takes x, y, or nothing.');
+    check("and x and y are what it offers", Commands.TABLE["snake"].completions, ["x", "y"]);
 }

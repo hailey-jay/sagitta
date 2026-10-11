@@ -27,6 +27,7 @@ const SOURCES = [
     "src/quiver.js",
     "src/settings.js",
     "src/delimiters.js",
+    "src/history.js",
     "src/colours.js",
     "src/cell.js",
     "src/options.js",

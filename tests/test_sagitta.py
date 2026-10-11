@@ -856,6 +856,81 @@ def test_middle_dragging_pans_from_a_cell_as_well_as_empty_space(sagitta, home):
     assert steps["dirty"] is False
 
 
+# ── Building a diagram outwards ───────────────────────────────────────────────
+
+
+DIAGONAL = """\
+\\begin{tikzcd}
+\tP \\arrow[dr, "c"] & \\\\
+\t& Q
+\\end{tikzcd}
+"""
+
+
+@pytest.mark.parametrize("keys,command,after", [
+    # The focus point starts on `A`, so a row above it moves the whole diagram down.
+    ([], "insert-row-above", "A01 B11 C02 D12"),
+    # A row below the focus point moves only the row under it.
+    ([], "insert-row-below", "A00 B10 C02 D12"),
+    # A column left of the focus point moves everything right.
+    ([], "insert-column-left", "A10 B20 C11 D21"),
+    # And one right of it moves only the column after.
+    ([], "insert-column-right", "A00 B20 C01 D21"),
+    # With the focus point moved onto `D`, the gap opens around it instead.
+    ([["Right"], ["Down"]], "insert-row-above", "A00 B10 C02 D12"),
+    ([["Right"], ["Down"]], "insert-column-left", "A00 B20 C01 D21"),
+])
+def test_a_gap_moves_what_is_at_or_beyond_it(sagitta, home, keys, command, after):
+    result = sagitta("insert", _diagram(home / "paper"), json.dumps(
+        {"keys": keys, "command": command}))
+    assert result["before"] == "A00 B10 C01 D11"
+    assert result["after"] == after
+    # One undo closes the gap.
+    assert result["undone"] == "A00 B10 C01 D11"
+
+
+def test_a_gap_with_nothing_beyond_it_is_refused(sagitta, home):
+    """Rather than doing nothing quietly: the key was pressed for a reason."""
+    result = sagitta("insert", _diagram(home / "paper"), json.dumps(
+        {"keys": [["Down"], ["Down"]], "command": "insert-row-below"}),
+        expected_error="There is no row at or after row 4 to move.")
+    assert result["after"] == "A00 B10 C01 D11"
+
+
+def test_the_gap_is_saved_as_an_empty_row(sagitta, home):
+    diagram = _diagram(home / "paper")
+    sagitta("insert", diagram, json.dumps({"keys": [], "command": "insert-row-below"}))
+    # The undo at the end of the scenario is not saved, so the file holds the gap.
+    assert "\t\\\\\n" in diagram.read_text()
+
+
+def test_snake_draws_an_arrow_as_a_chain_through_empty_cells(sagitta, home):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    steps = sagitta("snake", diagram, None)
+    assert steps["selected"] == {"vertices": 2, "edges": 1, "selected": 3}
+    # One corner between `P` and `Q`, so one new cell and two arrows.
+    assert steps["drawn"]["vertices"] == 3
+    assert steps["drawn"]["edges"] == 2
+    # The new cell is empty, and sits at the corner that x-first gives.
+    assert steps["cells"] == "-10 P00 Q11"
+    # One undo puts the single arrow back.
+    assert (steps["undone"]["vertices"], steps["undone"]["edges"]) == (2, 1)
+    # The chain is what was saved.
+    saved = diagram.read_text()
+    assert saved.count("\\arrow[") == 2
+
+
+def test_snake_can_be_told_which_axis_steps_first(sagitta, home):
+    steps = sagitta("snake", _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd"), "y")
+    assert steps["cells"] == "-01 P00 Q11"
+
+
+def test_snake_refuses_what_has_no_staircase(sagitta, home):
+    """Neighbours are already joined, so there is nothing to put between them."""
+    sagitta("snake", _diagram(home / "paper"), None,
+            expected_error="Select one arrow to draw as a staircase.")
+
+
 def test_a_changed_setting_is_written_to_the_settings_file(sagitta, home):
     sagitta("settings", _diagram(home / "paper"))
     settings = json.loads((home / ".config" / "sagitta" / "settings.json").read_text())

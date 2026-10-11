@@ -127,6 +127,25 @@ The names and their defaults:
 
 Any other command (Tab at `:` lists them) can be bound too, and its keys run it with no arguments.
 
+## Building a diagram outwards
+
+Two commands for a figure that grows after it is drawn. Neither has a key by default; the keys file can bind them, as it can any command.
+
+`:insert-row-above`, `:insert-row-below`, `:insert-column-left`, and `:insert-column-right` open a gap at the focus point.
+Everything at or beyond the gap moves one cell on, and the arrows come with their ends, since an arrow is held by the cells it joins rather than by a position.
+`above` and `left` put the gap where the focus point is; `below` and `right` just after it.
+One undo closes the gap.
+A gap with nothing at or beyond it is refused, rather than doing nothing quietly.
+
+`:snake` replaces the selected arrow with a chain of arrows through new empty cells, so that a map drawn step by step is one command rather than a placement apiece.
+The chain follows the staircase between the arrow's ends: one cell at a time, alternating between the axes, starting with whichever has further to go, or with the axis `:snake x` or `:snake y` names.
+A cell the staircase passes through that already holds something is joined to rather than displaced.
+Cells already next to each other have no staircase, and nor does a loop.
+One undo puts the single arrow back.
+
+A single arrow with waypoints is the one thing that is not here: an arrow has one curve, and giving it a path would need a field that the quiver round trip has no room for.
+So a connecting morphism is either one curved arrow (`; b`, and `; -` for dashed, as `examples/snake-lemma.tikzcd` draws $\delta$) or a chain through empty cells, with a label on each step.
+
 ## Settings
 
 Settings live in `~/.config/sagitta/settings.json`, or in `%APPDATA%\sagitta\settings.json` on Windows.
