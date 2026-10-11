@@ -229,8 +229,12 @@ class Commands {
             throw new Error("The arrow is already straight along a row or a column, so it has no"
                 + " corner to turn: add checkpoints for a route round something.");
         }
-        ui.arrow_options.set_route(ui, (edge) => !edges.has(edge) ? edge.options.route
+        const changed = ui.arrow_options.set_route(ui, (edge) => !edges.has(edge)
+            ? edge.options.route
             : first === null ? [] : bends(edge) ? [corner(edge)] : edge.options.route);
+        if (!changed) {
+            ui.mode_line.flash(first === null ? "already straight" : "already routed that way");
+        }
     }
 
     /// The next route `route` with no argument gives: a straight arrow bends along a row first,
@@ -532,8 +536,10 @@ Commands.TABLE["crossing-over"] = {
                 `"${value}" is not on or off: crossing-over takes on, off, or nothing.`);
         }
         commands.ensure_arrow();
-        ui.arrow_options.set_crossing_over(
-            ui, value === undefined ? null : values[value.toLowerCase()]);
+        const on = value === undefined ? null : values[value.toLowerCase()];
+        if (!ui.arrow_options.set_crossing_over(ui, on)) {
+            ui.mode_line.flash(on ? "already at the front" : "already not crossing over");
+        }
     },
 };
 

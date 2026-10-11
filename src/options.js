@@ -301,19 +301,24 @@ class ArrowOptions {
     /// Bring the selected edges to the front of those crossing over others (`value` `true`), or
     /// stop them crossing over (`false`). With `value` `null`, bring them to the front unless
     /// every one crosses over already, in which case stop them. Brought to the front together,
-    /// they share a rank, and stack among themselves as the export orders them.
+    /// they share a rank, and stack among themselves as the export orders them. Returns whether
+    /// anything changed.
     set_crossing_over(ui, value = null) {
         const edges = ArrowOptions.edges(ui);
         const on = value ?? !edges.every((edge) => edge.options.crossing_over > 0);
-        const front = Math.max(0, ...ui.quiver.all_cells()
-            .filter((cell) => cell.is_edge()).map((edge) => edge.options.crossing_over)) + 1;
-        const rank = on ? front : 0;
+        const all = ui.quiver.all_cells().filter((cell) => cell.is_edge());
+        const top = Math.max(0, ...all.map((edge) => edge.options.crossing_over));
+        // Edges that are the front layer already, and alone in it, stay where they are.
+        const in_front = top > 0 && all.every((edge) =>
+            (edge.options.crossing_over === top) === edges.includes(edge));
+        const rank = !on ? 0 : in_front ? top : top + 1;
         const crossings = edges.filter((edge) => edge.options.crossing_over !== rank)
             .map((edge) => ({ edge, from: edge.options.crossing_over, to: rank }));
         // A change that changes nothing is no step to undo.
         if (crossings.length > 0) {
             ui.history.add(ui, [{ kind: "crossing_over", crossings }], true);
         }
+        return crossings.length > 0;
     }
 
     /// The route across the selection, as a list of `[x, y]` cells, or `null` if the selected
@@ -323,6 +328,7 @@ class ArrowOptions {
     }
 
     /// Set the route of each selected edge, other than loops, to what `route` gives for it.
+    /// Returns whether any changed.
     set_route(ui, route) {
         const routes = ArrowOptions.edges(ui).filter((edge) => !edge.is_loop()).map((edge) => ({
             edge,
@@ -333,6 +339,7 @@ class ArrowOptions {
         if (routes.length > 0) {
             ui.history.add(ui, [{ kind: "route", routes }], true);
         }
+        return routes.length > 0;
     }
 
     /// The label alignment across the selection, or `null` if the selected edges disagree.

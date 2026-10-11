@@ -219,6 +219,21 @@ const pending = [];
     check("and the picture alone keeps it too",
         crossing(parse(text.replace(/^%.*\n/, "")).ui), ["AD 1", "BC 0"]);
 
+    // An arrow alone at the front is brought to the front by staying there, which is no step to
+    // undo, but another arrow brought forward goes above it.
+    const front = parse(text.replace(/^%.*\n/, "")).ui;
+    front.unqueue_selected = () => {};
+    const edge = (name) => front.quiver.all_cells()
+        .find((cell) => cell.is_edge() && `${cell.source.label}${cell.target.label}` === name);
+    front.select(edge("AD"));
+    check("an arrow already alone at the front stays there",
+        [front.arrow_options.set_crossing_over(front, true), crossing(front)],
+        [false, ["AD 1", "BC 0"]]);
+    front.deselect();
+    front.select(edge("BC"));
+    front.arrow_options.set_crossing_over(front, true);
+    check("and another goes above it", crossing(front), ["AD 1", "BC 2"]);
+
     // The clearance is tikz-cd's to set, and we do not read it.
     const clearance = parse("\\begin{tikzcd}\n"
         + "\tA \\arrow[r, crossing over clearance=2ex] & B\n\\end{tikzcd}\n");
