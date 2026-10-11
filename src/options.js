@@ -312,13 +312,10 @@ class ArrowOptions {
         const in_front = top > 0 && all.every((edge) =>
             (edge.options.crossing_over === top) === edges.includes(edge));
         const rank = !on ? 0 : in_front ? top : top + 1;
-        const crossings = edges.filter((edge) => edge.options.crossing_over !== rank)
-            .map((edge) => ({ edge, from: edge.options.crossing_over, to: rank }));
-        // A change that changes nothing is no step to undo.
-        if (crossings.length > 0) {
-            ui.history.add(ui, [{ kind: "crossing_over", crossings }], true);
-        }
-        return crossings.length > 0;
+        return ui.history.add(ui, [{
+            kind: "crossing_over",
+            crossings: edges.map((edge) => ({ edge, from: edge.options.crossing_over, to: rank })),
+        }], true);
     }
 
     /// The route across the selection, as a list of `[x, y]` cells, or `null` if the selected
@@ -330,16 +327,14 @@ class ArrowOptions {
     /// Set the route of each selected edge, other than loops, to what `route` gives for it.
     /// Returns whether any changed.
     set_route(ui, route) {
-        const routes = ArrowOptions.edges(ui).filter((edge) => !edge.is_loop()).map((edge) => ({
-            edge,
-            from: edge.options.route,
-            to: route(edge),
-        })).filter(({ from, to }) => JSON.stringify(from) !== JSON.stringify(to));
-        // A change that changes nothing is no step to undo.
-        if (routes.length > 0) {
-            ui.history.add(ui, [{ kind: "route", routes }], true);
-        }
-        return routes.length > 0;
+        return ui.history.add(ui, [{
+            kind: "route",
+            routes: ArrowOptions.edges(ui).filter((edge) => !edge.is_loop()).map((edge) => ({
+                edge,
+                from: edge.options.route,
+                to: route(edge),
+            })),
+        }], true);
     }
 
     /// The label alignment across the selection, or `null` if the selected edges disagree.

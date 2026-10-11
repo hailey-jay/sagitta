@@ -429,12 +429,10 @@ class Keys {
         ui.carried = null;
         let moved = false;
         if (keep) {
-            const routes = carried.map(({ edge, from }) => ({ edge, from, to: edge.options.route }))
-                .filter(({ from, to }) => JSON.stringify(from) !== JSON.stringify(to));
-            if (routes.length > 0) {
-                ui.history.add(ui, [{ kind: "route", routes }]);
-                moved = true;
-            }
+            moved = ui.history.add(ui, [{
+                kind: "route",
+                routes: carried.map(({ edge, from }) => ({ edge, from, to: edge.options.route })),
+            }]);
             for (const { edge } of carried) {
                 edge.render(ui);
             }

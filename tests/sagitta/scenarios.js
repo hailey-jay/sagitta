@@ -595,7 +595,11 @@ module.exports = {
                         })),
                 };
             })`);
-        return { vertices, edges };
+        return {
+            vertices,
+            edges,
+            steps: await ctx.js("ui.history.present"),
+        };
     },
 
     /// The value of the JavaScript expression `argument`, evaluated in the page.

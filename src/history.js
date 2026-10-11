@@ -26,8 +26,13 @@ class History {
     /// Add a reversible event to the history. Its effect will not be invoked (i.e. one should
     /// effect the action separately) unless `invoke` is `true`, as actions added to the history
     /// are often composites of individual actions that should not be performed atomically in
-    /// real-time.
+    /// real-time. An event that changes nothing (see `History.changes`) is not added, so that
+    /// there is never an undo step that does nothing, nor a redo lost to one. Returns whether the
+    /// event was added.
     add(ui, actions, invoke = false, selection = ui.selection) {
+        if (!actions.some(History.changes)) {
+            return false;
+        }
         // Append a new history event.
         // If there are future actions, clear them. (Our history only forms a list, not a tree.)
         ui.quiver.flush(this.present);
@@ -50,13 +55,50 @@ class History {
 
         // Update the mode line (e.g. enabling Redo).
         ui.mode_line.update(ui);
+        return true;
+    }
+
+    /// Whether an action changes anything: whether it has cells to act on, or a modification
+    /// whose `from` and `to` differ. Actions are self-inverse or come in inverse pairs, so one
+    /// that changes nothing done changes nothing undone.
+    static changes(action) {
+        const same = (a, b) => {
+            if (a === b) {
+                return true;
+            }
+            try {
+                return JSON.stringify(a) === JSON.stringify(b);
+            } catch (_) {
+                // Something that cannot be compared is taken to have changed.
+                return false;
+            }
+        };
+        switch (action.kind) {
+            case "create":
+            case "delete":
+            case "reverse":
+            case "flip":
+            case "flip labels":
+            case "edge_alignment":
+                return (action.cells.size ?? action.cells.length) > 0;
+            case "connect":
+                return action.from !== action.to;
+            case "move":
+                return action.displacements.some(({ from, to }) => !same(from, to))
+                    || (action.routes ?? []).length > 0;
+        }
+        // Every other kind is a list of `{ from, to }` modifications, under one name.
+        const modifications = Object.values(action).find(Array.isArray);
+        return modifications === undefined
+            || modifications.some(({ from, to }) => !same(from, to));
     }
 
     /// Add a collapsible history event. This allows the last event to be modified later,
     /// replacing the history state.
     add_collapsible(ui, collapse, event, invoke = false) {
-        this.add(ui, event, invoke);
-        this.collapse = collapse;
+        if (this.add(ui, event, invoke)) {
+            this.collapse = collapse;
+        }
     }
 
     /// Get the previous array of actions, if `collapse` matches `this.collapse`.

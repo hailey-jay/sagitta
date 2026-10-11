@@ -1117,6 +1117,15 @@ def test_carrying_a_checkpoint_undoes_in_one_step(sagitta, home):
     assert result["edges"][0]["route"] == [[1, 0]]
 
 
+def test_a_checkpoint_put_down_where_it_was_is_no_step(sagitta, home):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    result = sagitta("route", diagram, json.dumps(
+        ["route x", [1, 0], "move-checkpoint", {"keys": [["Up"], ["Down"], ["Enter"]]}]))
+    assert result["edges"][0]["route"] == [[1, 0]]
+    # The route is the one step: carrying the checkpoint there and back again adds none.
+    assert result["steps"] == 1
+
+
 def test_carrying_needs_a_checkpoint_at_the_focus_point(sagitta, home):
     diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
     sagitta("route", diagram, json.dumps(["route x", [0, 1], "move-checkpoint"]),

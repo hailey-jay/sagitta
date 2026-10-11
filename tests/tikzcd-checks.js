@@ -732,6 +732,24 @@ const pending = [];
     commands.route("y");
     ui.history.undo(ui);
     check("and a route asked for again is no step", route(ui), "[[1,0]]");
+    // The same holds for every setter, since the history itself refuses a step that changes
+    // nothing: a label alignment the arrow already has is no step either.
+    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
+    const steps_before = ui.history.present;
+    ui.arrow_options.set_label_alignment(ui, ui.arrow_options.label_alignment(ui));
+    check("nor is a label alignment the arrow already has",
+        ui.history.present, steps_before);
+    check("an action changes something when it has cells to act on, or a value that differs",
+        [
+            { kind: "create", cells: new Set() },
+            { kind: "flip", cells: [{}] },
+            { kind: "move", displacements: [{ from: new Position(0, 0), to: new Position(0, 0) }] },
+            { kind: "move", displacements: [{ from: new Position(0, 0), to: new Position(1, 0) }] },
+            { kind: "style", styles: [{ from: { name: "arrow" }, to: { name: "arrow" } }] },
+            { kind: "curve", curves: [{ from: 0, to: 0 }, { from: 0, to: 1 }] },
+            { kind: "route", routes: [] },
+        ].map(History.changes),
+        [false, true, false, true, false, true, false]);
 
     // An arrow along a row has no corner to turn.
     ui = parse("\\begin{tikzcd}\n\tA \\arrow[r] & B\n\\end{tikzcd}\n").ui;
