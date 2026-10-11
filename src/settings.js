@@ -62,15 +62,10 @@ class Settings {
             if (!Object.hasOwn(this.data, setting)) {
                 continue;
             }
-            const [check, expected] = Settings.CHECKS[setting]
-                ?? [(value) => typeof value === "boolean", "true or false"];
-            const typed = value === null ? Settings.NULLABLE.has(setting)
-                : typeof value === typeof this.data[setting];
-            if (typed && check(value)) {
+            if (this.allows(setting, value)) {
                 this.data[setting] = value;
             } else {
-                this.problems.push(`${setting} should be ${
-                    typeof expected === "function" ? expected() : expected}`);
+                this.problems.push(`${setting} should be ${this.expected(setting)}`);
             }
         }
     }
@@ -84,6 +79,38 @@ class Settings {
     set(setting, value) {
         this.data[setting] = value;
         this.write();
+    }
+
+    /// The value a string means for a setting, or `undefined` if it means nothing for it. This is
+    /// what `:set SETTING VALUE` types the value with (see `Commands.TABLE["set"]`).
+    parse(setting, text) {
+        const held = this.data[setting];
+        if (typeof held === "boolean") {
+            return ["true", "on", "yes"].includes(text) ? true
+                : ["false", "off", "no"].includes(text) ? false : undefined;
+        }
+        if (typeof held === "number" || Settings.NULLABLE.has(setting)) {
+            if (text === "null" && Settings.NULLABLE.has(setting)) {
+                return null;
+            }
+            const value = parseFloat(text);
+            return Number.isFinite(value) ? value : undefined;
+        }
+        return text;
+    }
+
+    /// Whether a value is one this setting may hold, as `load` asks of the file's.
+    allows(setting, value) {
+        const [check] = Settings.CHECKS[setting] ?? [(value) => typeof value === "boolean"];
+        const typed = value === null ? Settings.NULLABLE.has(setting)
+            : typeof value === typeof this.data[setting];
+        return typed && check(value);
+    }
+
+    /// What a setting may be, in words, for the message that refuses a value.
+    expected(setting) {
+        const [, expected] = Settings.CHECKS[setting] ?? [null, "true or false"];
+        return typeof expected === "function" ? expected() : expected;
     }
 
     /// Write every setting to the file, unless it is malformed. Returns the write, to wait on.

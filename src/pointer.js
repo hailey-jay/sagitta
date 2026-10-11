@@ -45,8 +45,8 @@ class Pointer {
         // Hide the focus point if it is visible.
         ui.focus_point.class_list.remove("revealed", "pending", "active");
 
-        // If the user is holding shift, then we zoom, otherwise we pan.
-        if (event.shiftKey) {
+        // Shift or Control zooms, as every browser and editor does; otherwise we pan.
+        if (event.shiftKey || event.ctrlKey) {
             ui.pan_to(ui.view, clamp(
                 CONSTANTS.MIN_ZOOM,
                 ui.scale - event.deltaY / 100,
@@ -96,6 +96,13 @@ class Pointer {
     /// connecting.
     release(event) {
         const ui = this.ui;
+        // A pan the middle button started ends with it, rather than waiting on a key.
+        if (event.button === 1) {
+            if (ui.in_mode(UIMode.Pan) && ui.mode.key === null) {
+                ui.switch_mode(UIMode.default);
+            }
+            return;
+        }
         if (event.button === 0) {
             if (ui.in_mode(UIMode.Pan)) {
                 // We only want to pan when the pointer is held.
@@ -126,10 +133,22 @@ class Pointer {
         }
     }
 
-    /// Pressing the pointer on the canvas: start panning (with Option or Control held), or move the
-    /// focus point to it and deselect (unless Shift, Command, or Control is held).
+    /// Pressing the pointer on the canvas: start panning (with the middle button, or Option or
+    /// Control held), or move the focus point to it and deselect (unless Shift, Command, or Control
+    /// is held).
     press(event) {
         const ui = this.ui;
+        // The middle button pans wherever it is pressed, over a cell as well as over empty space,
+        // which the modifier drags cannot, since a cell takes the press for itself (see
+        // `Cell.initialise`). Its pan has no key, so it ends when the button is released.
+        if (event.button === 1 && ui.in_mode(UIMode.Default)) {
+            // Chromium would otherwise start its own autoscroll.
+            event.preventDefault();
+            ui.switch_mode(new UIMode.Pan(null));
+            ui.focus_point.class_list.remove("revealed");
+            ui.mode.origin = ui.offset_from_event(event).sub(ui.view);
+            return;
+        }
         if (event.button === 0) {
             // Usually, if `Alt` or `Control` have been held we will have already switched to
             // the Pan mode. However, if the window is not in focus, they will not have been

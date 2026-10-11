@@ -1,5 +1,8 @@
-# Runs the test suite headless on a local Electron from npm, and packages Sagitta for Windows when
-# asked by hand. The suite itself is Linux-only: it drives Electron with `--ozone-platform=headless`.
+# Runs the test suites and packages Sagitta for Windows when asked by hand.
+#
+# `npm run test:fast` is the `.tikzcd` round trip alone, in node, in about a second, so a parser
+# or export regression shows before anything slower starts. The full suite drives Electron with
+# `--ozone-platform=headless`, so it is Linux-only.
 name: tests
 
 on:
@@ -20,13 +23,15 @@ jobs:
         with:
           python-version: "3.12"
       - run: npm ci
+      - run: npm run test:fast
       - run: pip install pytest
       - run: python3 -m pytest tests
         env:
           SAGITTA_ELECTRON: ${{ github.workspace }}/node_modules/.bin/electron
 
   # The Windows packages, built the way a release builds them, so that a break in the packaging
-  # shows up before a tag rather than during one. Nothing here runs the suite: it needs Linux.
+  # shows up before a tag rather than during one. Only the fast suite runs here; the full one
+  # needs Linux.
   # This job runs only from the button on the Actions tab, since each run downloads Electron and
   # writes two packages of about 100MB.
   package-windows:
@@ -38,6 +43,8 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      # The fast suite needs only node, so Windows runs it as well.
+      - run: npm run test:fast
       - run: npm run dist:win
       # The packages keep for a week, to install and try on a real Windows machine.
       - uses: actions/upload-artifact@v4

@@ -25,6 +25,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: npm ci
+      - run: npm run test:fast
       - run: pip install pytest
       # The suite is Linux-only: it drives Electron with `--ozone-platform=headless`.
       - run: python3 -m pytest tests
@@ -45,6 +46,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      - run: npm run test:fast
       - run: npm run dist:win
       - uses: actions/upload-artifact@v4
         with:

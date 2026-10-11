@@ -39,10 +39,10 @@ class Commands {
         }
     }
 
-    /// Throw unless an edge is selected.
-    require_edges() {
+    /// Throw unless an edge is selected, saying `hint` instead of the usual message.
+    require_edges(hint = "Select an arrow first.") {
         if (!this.ui.selection_contains_edge()) {
-            throw new Error("Select an arrow first.");
+            throw new Error(hint);
         }
     }
 
@@ -54,9 +54,11 @@ class Commands {
         }
     }
 
-    /// Set the arrow component `component` (`tail`, `body`, or `head`) to `style`.
+    /// Set the arrow component `component` (`tail`, `body`, or `head`) to `style`. Unlike a
+    /// preset, a component has no default of its own to set, so this always needs a selection.
     style(component, style) {
-        this.require_edges();
+        this.require_edges("Select an arrow first, or press a preset key to set what new arrows"
+            + " take.");
         this.ensure_arrow();
         const value = Commands.STYLES[component][style];
         if (value === undefined) {
@@ -89,10 +91,18 @@ class Commands {
         ui.arrow_options.set(ui, property, current);
     }
 
-    /// Apply an arrow preset.
+    /// Apply an arrow preset to the selected arrows, or, with none selected, make it the preset
+    /// new arrows take (`diagram.arrow_preset`), which is the only thing the key press can
+    /// sensibly mean when there is nothing to restyle. The setting is not part of the diagram, so
+    /// this does not go in the undo history; the command layer and `C-,` show the new default.
     preset(name) {
+        const ui = this.ui;
         const preset = Commands.PRESETS[name];
-        this.require_edges();
+        if (!ui.selection_contains_edge()) {
+            ui.change_setting("diagram.arrow_preset", name);
+            ui.mode_line.flash(`new arrows: ${name.replace("-", " ")}`);
+            return;
+        }
         for (const component of ["tail", "body", "head"]) {
             if (preset[component] !== undefined) {
                 this.style(component, preset[component]);
@@ -225,6 +235,34 @@ Commands.TABLE["open"] = {
 Commands.TABLE["save"] = {
     arguments: true,
     run: (commands, words) => commands.ui.file.save(words.length > 0 ? words.join(" ") : undefined),
+};
+
+/// `:set SETTING VALUE` names a setting and the value to give it, which the settings layer (`C-,`)
+/// cannot: it steps a number by key. With no value, the line says what the setting holds. Settings
+/// are not part of the diagram, so a change here is not undoable, as it is not in the layer.
+Commands.TABLE["set"] = {
+    arguments: true,
+    completions: (commands) => Object.keys(commands.ui.settings.data).sort(),
+    run: (commands, [setting, ...words]) => {
+        const ui = commands.ui;
+        if (setting === undefined || !Object.hasOwn(ui.settings.data, setting)) {
+            throw new Error(`Unknown setting "${setting ?? ""}". Press Tab for a list.`);
+        }
+        if (words.length === 0) {
+            ui.mode_line.flash(`${setting} is ${JSON.stringify(ui.settings.get(setting))}`);
+            return;
+        }
+        // The words are joined, rather than only the first being taken, so that `set ui.zoom 1 0`
+        // is refused with what was typed instead of quietly setting the zoom to 1.
+        const text = words.join(" ");
+        const value = ui.settings.parse(setting, text);
+        if (value === undefined || !ui.settings.allows(setting, value)) {
+            throw new Error(`"${text}" is not a value for ${setting}, which should be ${
+                ui.settings.expected(setting)}.`);
+        }
+        ui.change_setting(setting, value);
+        ui.mode_line.flash(`${setting} is now ${JSON.stringify(value)}`);
+    },
 };
 
 Commands.TABLE["align"] = {

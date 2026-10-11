@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- `C-SPC` marks a corner of a rectangle of cells: press it, move the focus point, and press it again to select every cell between the two corners, along with the arrows whose ends are both among them. `C-S-SPC` adds that rectangle to the selection instead of replacing it, ESC drops the mark, and the mode line shows `MARK` while there is one.
+- `:set SETTING VALUE` names any setting and the value to give it, which the settings layer cannot: it steps numbers by key, and lists only some of them. Tab lists the settings, `:set SETTING` alone reports what it holds, and a value the setting cannot take is refused with what it may be.
+- A preset with no arrow selected sets `diagram.arrow_preset`, the preset new arrows take, rather than being refused, so a style can be chosen before anything is drawn as well as after. The command layer marks the preset in force, and the change is not undoable, since it is not part of the diagram. A style still needs an arrow to apply to.
+- Control with the wheel zooms, as Shift already did, since that is what every browser and editor uses.
+- Dragging with the middle button pans, over a cell as well as over empty space, which dragging with Control or Option held cannot.
+- A second test suite, `npm run test:fast`, checks the `.tikzcd` round trip, the parser, and the export in about a second, with neither Electron nor a display, so a regression in them shows before the full suite starts.
+
 ## 0.2.0
 
 - Runs on Windows, as a per-user installer that registers `.tikzcd`, or as a portable executable. Neither is signed, so SmartScreen warns the first time.

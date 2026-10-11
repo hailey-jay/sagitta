@@ -441,7 +441,8 @@ class ModeLine {
         if (ui.keymap.active) {
             return [...ui.keymap.describe_layer(), "layer"];
         }
-        return ["TYPE", null, "type"];
+        // A mark waiting for its other corner is state the user cannot otherwise see.
+        return ["TYPE", ui.mark !== null ? "MARK" : null, "type"];
     }
 
     /// The option value for an arrow component (e.g. `top-hook`), as in `Commands.STYLES`.

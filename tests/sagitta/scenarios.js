@@ -330,6 +330,121 @@ module.exports = {
         return found;
     },
 
+    /// The mark (`C-SPC`): on the square `A B / C D`, with the focus point on `A`, take the top
+    /// row, then the whole square, then add the row again to show Shift adds rather than replaces,
+    /// and finally drop a mark with Escape. Returns the counts and the mode line after each step.
+    mark: async (ctx) => {
+        const steps = {};
+        const step = async (name, ...keys) => {
+            for (const [key, modifiers = []] of keys) {
+                await ctx.press(key, modifiers);
+            }
+            steps[name] = { counts: await ctx.counts(), mode_line: await ctx.mode_line() };
+        };
+        // `A` and `B`, and the arrow between them.
+        await step("mark at A", ["Space", ["control"]]);
+        await step("top row", ["Right"], ["Space", ["control"]]);
+        // The whole square, from `A` again: four vertices and all four arrows.
+        await step("square", ["Left"], ["Space", ["control"]],
+            ["Right"], ["Down"], ["Space", ["control"]]);
+        // Shift adds, so marking the top row again over the square leaves the square selected.
+        await step("adding the row", ["Up"], ["Left"], ["Space", ["control"]],
+            ["Right"], ["Space", ["control", "shift"]]);
+        // A mark dropped with Escape selects nothing, and the selection is left alone.
+        await step("mark dropped", ["Space", ["control"]], ["Escape"]);
+        return steps;
+    },
+
+    /// `:set` for each of `argument` (a JSON list of command lines), returning the mode line after
+    /// each, and the settings as the page holds them at the end. `tests/test_sagitta.py` also reads
+    /// `settings.json`, which every change rewrites.
+    set_command: async (ctx) => {
+        const lines = [];
+        for (const command of JSON.parse(ctx.argument)) {
+            await ctx.command(command);
+            lines.push(await ctx.mode_line());
+        }
+        return { lines, settings: await ctx.js("ui.settings.data") };
+    },
+
+    /// A preset key with nothing selected sets the preset new arrows take: `; =` for equals, then
+    /// Space twice to draw an arrow with it, and save. Returns the mode line, the setting, and
+    /// whether the command layer marks equals as the one in force.
+    preset_default: async (ctx) => {
+        await ctx.press(";");
+        await ctx.press("=");
+        const mode_line = await ctx.mode_line();
+        const preset = await ctx.js(`ui.settings.get("diagram.arrow_preset")`);
+        // The list marks the preset only while it is shown, so Escape closes whatever the preset
+        // key left open, `;` enters the layer again, and `?` lists the keys at once.
+        await ctx.press("Escape");
+        await ctx.press(";");
+        await ctx.press("?");
+        const shown = `document.querySelector(".which-key") !== null`
+            + ` && !document.querySelector(".which-key").classList.contains("hidden")`;
+        for (let tries = 0; !await ctx.js(shown); ++tries) {
+            if (tries > 40) {
+                throw new Error("the key list never showed");
+            }
+            await ctx.wait(50);
+        }
+        const current = await ctx.js(
+            `[...document.querySelectorAll(".which-key .main .entry.current")]`
+            + `.map((entry) => entry.querySelector("kbd + span").textContent)`);
+        await ctx.press("Escape");
+        // An arrow drawn now should take the new default: Space on an empty cell makes a vertex,
+        // and Space on the next connects the selection to it.
+        await ctx.press("Space");
+        await ctx.press("Right");
+        await ctx.press("Space");
+        await ctx.save();
+        return { mode_line, preset, current, counts: await ctx.counts() };
+    },
+
+    /// The wheel: pan with no modifier, then zoom with Shift and with Control. Returns the scale
+    /// and the view after each, to the pixel.
+    ///
+    /// The modified turns zoom out rather than in, since the diagram opens one step below
+    /// `CONSTANTS.MAX_ZOOM` and two steps in would both clamp to it, which would say nothing about
+    /// the second.
+    ///
+    /// The plain turn is a real input event. The modified ones are `WheelEvent`s dispatched in the
+    /// page, because Chromium does not deliver a ctrl+wheel from `sendInputEvent` to the page as a
+    /// wheel event at all (it reserves the gesture), so a real one would check nothing.
+    wheel: async (ctx) => {
+        const state = async () => ctx.js("({ scale: ui.scale, view: [ui.view.x, ui.view.y] })");
+        const turn = (modifier) => ctx.js(`window.dispatchEvent(new WheelEvent("wheel", {
+            deltaX: 0, deltaY: 100, clientX: 600, clientY: 400, ${modifier}: true,
+            bubbles: true, cancelable: true,
+        }))`);
+        const steps = { start: await state() };
+        await ctx.wheel([600, 400], 100);
+        steps.plain = await state();
+        await turn("shiftKey");
+        steps.shift = await state();
+        await turn("ctrlKey");
+        steps.control = await state();
+        return steps;
+    },
+
+    /// Dragging with the middle button pans, from over a cell as well as from empty space, and
+    /// leaves the diagram and the selection alone.
+    middle_drag: async (ctx) => {
+        const state = async () => ({
+            view: await ctx.js("[Math.round(ui.view.x), Math.round(ui.view.y)]"),
+            counts: await ctx.counts(),
+        });
+        const [a] = await ctx.vertices();
+        const steps = { start: await state() };
+        // From a vertex, which a left drag would instead draw an arrow from.
+        await ctx.drag(a, [a[0] + 120, a[1] + 80], "middle");
+        steps.from_a_cell = await state();
+        await ctx.drag([1000, 700], [900, 600], "middle");
+        steps.from_empty_space = await state();
+        steps.dirty = ctx.window.getTitle().includes(" + ");
+        return steps;
+    },
+
     /// The value of the JavaScript expression `argument`, evaluated in the page.
     evaluate: async (ctx) => ctx.js(ctx.argument),
 

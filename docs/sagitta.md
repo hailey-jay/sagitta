@@ -42,6 +42,7 @@ The commands live one key away:
 - `;` the command layer: arrow styles and label alignment (a key, then the choice's own key, as listed), sliders (a key, then a number and RET), and presets.
   Its keys are listed once it has waited 300ms for one, so a key typed straight after `;` does not flash the list up, and `?` shows or hides the list at once.
   Its capitals act on the label, and curve sets a loop's radius instead.
+  A preset with no arrow selected sets `diagram.arrow_preset`, the preset new arrows take, and the list marks the one they take now; a style still needs an arrow to apply to.
 - `:` the command line: named commands, with Tab completion.
 - `/` (or `C-f`) search: selects the cells whose label is (or else contains) what is typed, or else the cells whose codes are typed.
   Each vertex has a code of one character, given out row by row (`asdfghjkl`, `zxcvbnm`, `qwertyuiop`, then the digits), and two once those run out; removing a vertex frees its code.
@@ -51,9 +52,13 @@ The commands live one key away:
 - `:dark-mode`: a grey canvas, with the default colour drawn in white.
   Other colours are drawn exactly, and nothing saved changes.
 - `C-arrows` move the selection; on arrows alone they bend or shift them, and on loops alone they resize or turn them.
+- `C-SPC` marks one corner of a rectangle of cells, as Emacs sets a mark: press it, move the focus point, and press it again to select every cell between the two corners, along with the arrows whose both ends are among them.
+  `C-S-SPC` adds that rectangle to the selection rather than replacing it, and ESC lets go of the mark.
+  While there is a mark, the mode line shows `MARK`.
 
 The mouse works too.
 Click a cell to select it, and again to edit its label; click an empty space twice for a new cell; drag from a cell to draw an arrow, by the edge of its space to move it, and an arrow's end to reconnect it.
+The wheel pans, and zooms with Shift or Control held; dragging with the middle button pans, over a cell as well as over empty space, as does dragging with Control or Option held.
 Right-click, or the `; commands` button in the mode line, opens the command layer, listing its keys at once, and clicking a line of its list presses that key; the sliders have `−` and `+` buttons.
 The mode line's `⚙` button opens the settings.
 The help lists all this under Mouse.
@@ -85,7 +90,7 @@ Keys are written as the help shows them:
   Other characters are written as typed, as in `C-+`, without `S-`.
 - `<delete>`, `<insert>`, `<home>`, `<end>`, `<prior>`, `<next>`, and `<f1>` to `<f12>` work alone or with `C-` and `S-`.
   Printable keys alone would type, so they need `;` or `C-`.
-- RET, TAB, SPC, ESC, DEL, and the arrows cannot be rebound.
+- RET, TAB, SPC (with any modifier), ESC, DEL, and the arrows cannot be rebound.
 
 A key that a line binds is taken from whatever had it by default.
 A name alone unbinds it, and `unbind` frees keys from whatever has them.
@@ -131,6 +136,12 @@ It can be edited by hand, and is read at startup.
 The settings layer (`C-,`, or the mode line's `⚙`) lists them, each on a key, and shows every change straight away.
 A setting that is on or off flips; a number is typed and set with RET, or stepped with the arrow keys or its `−` and `+` buttons; and `a` lists the presets for new arrows.
 `e` opens the export layer, and `o` opens the file itself, for the settings the layer does not list.
+
+`:set SETTING VALUE` names any setting and the value to give it, which the layer cannot: it steps numbers by key, and lists only some of them.
+Tab lists the settings.
+`true`, `on`, and `yes` all mean true, as `false`, `off`, and `no` mean false, and `null` is a value where the table below allows one.
+`:set SETTING` alone reports what the setting holds.
+A value the setting cannot take is refused, with what it may be.
 
 | Setting | Default | |
 |---|---|---|

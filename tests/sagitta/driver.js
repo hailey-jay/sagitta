@@ -69,10 +69,11 @@ async function run(window) {
             }
             await wait(150);
         },
-        /// Drag with the left button from `from` to `to`, each `[x, y]` in the page.
-        drag: async (from, to) => {
+        /// Drag with `button` (`left`, by default) from `from` to `to`, each `[x, y]` in the page.
+        drag: async (from, to, button = "left") => {
+            const held = `${button}ButtonDown`;
             const mouse = (type, [x, y], modifiers = []) => contents.sendInputEvent(
-                { type, x: Math.round(x), y: Math.round(y), button: "left", clickCount: 1, modifiers });
+                { type, x: Math.round(x), y: Math.round(y), button, clickCount: 1, modifiers });
             mouse("mouseMove", from);
             mouse("mouseDown", from);
             // Pressing can put the focus point under the pointer, which only counts as over it
@@ -82,10 +83,20 @@ async function run(window) {
                 mouse("mouseMove", [
                     from[0] + (to[0] - from[0]) * step / 10,
                     from[1] + (to[1] - from[1]) * step / 10,
-                ], ["leftButtonDown"]);
+                ], [held]);
                 await wait(20);
             }
             mouse("mouseUp", to);
+            await wait(200);
+        },
+        /// Turn the wheel by `delta` at `point`, with `modifiers` held. The sign is Electron's,
+        /// which is the opposite of the `deltaY` the page sees, so a positive `delta` is the wheel
+        /// turned away from the user: it zooms in, and pans up.
+        wheel: async ([x, y], delta, modifiers = []) => {
+            contents.sendInputEvent({
+                type: "mouseWheel", x: Math.round(x), y: Math.round(y),
+                deltaX: 0, deltaY: delta, canScroll: true, modifiers,
+            });
             await wait(200);
         },
         /// Click with `button` (`left`, by default) at `point`, `[x, y]` in the page.

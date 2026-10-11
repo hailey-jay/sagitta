@@ -542,6 +542,11 @@ class Keymap {
             const [kind, name] = entry.get_attribute("data-value").split(":");
             let value = "";
             let current = false;
+            // With nothing selected, a preset key sets the default, so the list marks the default
+            // rather than anything of a selection.
+            if (kind === "preset" && !edges) {
+                current = name === ui.settings.get("diagram.arrow_preset");
+            }
             if (edges) {
                 switch (kind) {
                     case "slider":
@@ -1021,6 +1026,16 @@ Keymap.CONTEXT = new Enum(
             press: (ui) => ui.keys.enter(),
             help: [["Typing", "edit the label in place"]],
         },
+        // Before the plain Space below, which takes the key with or without the modifier, and so
+        // would otherwise create a vertex instead of setting the mark.
+        {
+            combinations: [{ key: " ", shift: null, modifier: true }],
+            press: (ui, event) => ui.keys.mark(event),
+            help: [
+                ["Typing", "mark a corner, then select to the focus point", "C-SPC"],
+                ["Typing", "and add that region to the selection", "C-S-SPC"],
+            ],
+        },
         {
             combinations: [{ key: " ", shift: null, modifier: null }],
             press: (ui, event) => ui.keys.space(event),
@@ -1098,9 +1113,11 @@ Keymap.HELP_ELSEWHERE = {
         ["Mouse", "move a cell, held by the edge of its space", "drag edge"],
         ["Mouse", "reconnect an arrow", "drag its end"],
         ["Mouse", "commands, as ; (click a line to run it)", "right-click"],
-        // `Pointer.scroll`.
-        ["Mouse", "pan (hold C or A to drag)", "scroll"],
-        ["Mouse", "zoom", "S-scroll"],
+        // `Pointer.scroll` and `Pointer.press`. The middle button drags from a cell as well as
+        // from empty space, which the modifiers cannot.
+        ["Mouse", "pan", "scroll"],
+        ["Mouse", "pan by dragging", "C-drag  A-drag  middle-drag"],
+        ["Mouse", "zoom", "S-scroll  C-scroll"],
     ],
 };
 
@@ -1126,9 +1143,11 @@ Keymap.WHICH_KEY = [
         ["offset", "offset", "edge", "slider:offset"],
         ["length", "length (again: end)", "edge", "slider:length"],
     ]],
+    // A preset needs no selection: with none, it sets the preset new arrows take, and the list
+    // marks the one they take now (see `Commands.preset`).
     ["Presets", [
         "plain", "equals", "inclusion", "mono", "epi", "maps-to", "dashed", "dotted", "squiggly",
-    ].map((name) => [name, name.replace("-", " "), "edge"])],
+    ].map((name) => [name, name.replace("-", " "), null, `preset:${name}`])],
     ["Label", [
         ["align", "alignment", "edge", "alignment:"],
         ["position", "position", "edge", "slider:label_position"],

@@ -43,6 +43,10 @@ class UI {
         // pressed.
         this.focus_position = Position.zero();
 
+        // One corner of a rectangle of cells to select, set by `C-SPC` (see `Keys.mark`), or
+        // `null` if there is none. The mode line shows `MARK` while there is one.
+        this.mark = null;
+
         // The element associated with the focus position.
         this.focus_point = null;
 
@@ -467,6 +471,9 @@ class UI {
     reset() {
         // Reset the mode.
         this.switch_mode(UIMode.default);
+
+        // The mark belongs to the diagram it was set in.
+        this.mark = null;
 
         // Clear the quiver and update associated UI elements.
         this.clear_quiver();
@@ -1143,6 +1150,15 @@ class UI {
                 this.grid.default_size = value;
                 this.relayout();
                 break;
+            case "ui.hint_characters":
+                this.recode();
+                break;
+        }
+        // An export setting changes what saving would write, so whether there are unsaved changes
+        // may have changed with it, and the mode line has to be told. The export layer sets these
+        // itself, and redraws its own preview as it does.
+        if (setting.startsWith("export.")) {
+            this.mode_line.update(this);
         }
     }
 

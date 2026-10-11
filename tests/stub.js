@@ -1,0 +1,307 @@
+/// The window the fast suite (`tests/tikzcd.js`) runs the diagram in: enough of the DOM for
+/// `src/dom.js` to build cells, and a `Stub.UI` holding only what parsing and exporting reach for.
+/// Nothing here draws or measures: the tikz-cd export is written from a cell's options alone, so
+/// every element below is somewhere for the cell to keep its own, and is never looked at again.
+
+/// One `querySelector` selector: a tag name, classes, or both (`kbd.queue`). Descendant selectors
+/// are not needed, and are not supported.
+function matches(element, selector) {
+    const tag = selector.match(/^[A-Za-z][\w-]*/);
+    const classes = selector.match(/\.[\w-]+/g) ?? [];
+    if (tag !== null && element.tagName !== tag[0].toUpperCase()) {
+        return false;
+    }
+    return classes.every((name) => element.classList.contains(name.slice(1)));
+}
+
+class StubClassList {
+    constructor() {
+        this.classes = new Set();
+    }
+
+    add(...names) {
+        for (const name of names) {
+            this.classes.add(name);
+        }
+    }
+
+    remove(...names) {
+        for (const name of names) {
+            this.classes.delete(name);
+        }
+    }
+
+    contains(name) {
+        return this.classes.has(name);
+    }
+
+    toggle(name, force = !this.classes.has(name)) {
+        if (force) {
+            this.classes.add(name);
+        } else {
+            this.classes.delete(name);
+        }
+        return force;
+    }
+
+    replace(from, to) {
+        if (this.classes.delete(from)) {
+            this.classes.add(to);
+            return true;
+        }
+        return false;
+    }
+}
+
+class StubStyle {
+    setProperty(name, value) {
+        this[name] = value;
+    }
+
+    getPropertyValue(name) {
+        return this[name] ?? "";
+    }
+
+    removeProperty(name) {
+        delete this[name];
+    }
+}
+
+class StubElement {
+    constructor(tag_name) {
+        this.tagName = tag_name.toUpperCase();
+        this.classList = new StubClassList();
+        this.style = new StubStyle();
+        this.attributes = new Map();
+        this.children = [];
+        this.parentElement = null;
+        this.listeners = new Map();
+        this.text = "";
+        // Nothing is laid out, so every element measures zero (see `Vertex.measure_label`).
+        this.offsetWidth = 0;
+        this.offsetHeight = 0;
+    }
+
+    get firstChild() {
+        return this.children[0] ?? null;
+    }
+
+    get id() {
+        return this.attributes.get("id") ?? "";
+    }
+
+    appendChild(child) {
+        child.remove();
+        child.parentElement = this;
+        this.children.push(child);
+        return child;
+    }
+
+    remove() {
+        const parent = this.parentElement;
+        if (parent !== null) {
+            parent.children.splice(parent.children.indexOf(this), 1);
+            this.parentElement = null;
+        }
+    }
+
+    addEventListener(type, f) {
+        if (!this.listeners.has(type)) {
+            this.listeners.set(type, []);
+        }
+        this.listeners.get(type).push(f);
+    }
+
+    removeEventListener(type, f) {
+        const listeners = this.listeners.get(type) ?? [];
+        const index = listeners.indexOf(f);
+        if (index !== -1) {
+            listeners.splice(index, 1);
+        }
+    }
+
+    dispatchEvent() {
+        return true;
+    }
+
+    /// Every descendant, in document order.
+    descendants() {
+        return this.children.flatMap((child) => [child, ...child.descendants()]);
+    }
+
+    querySelector(selector) {
+        return this.descendants().find((child) => matches(child, selector)) ?? null;
+    }
+
+    querySelectorAll(selector) {
+        return this.descendants().filter((child) => matches(child, selector));
+    }
+
+    /// `class` is the `classList` spelt as an attribute, since `DOM.Element` sets a new element's
+    /// classes that way and reads them back through `classList`.
+    getAttribute(attribute) {
+        if (attribute === "class") {
+            return Array.from(this.classList.classes).join(" ");
+        }
+        return this.attributes.get(attribute) ?? null;
+    }
+
+    setAttribute(attribute, value) {
+        if (attribute === "class") {
+            this.classList.classes = new Set(`${value}`.split(/\s+/).filter((name) => name !== ""));
+            return;
+        }
+        this.attributes.set(attribute, `${value}`);
+    }
+
+    removeAttribute(attribute) {
+        if (attribute === "class") {
+            this.classList.classes.clear();
+            return;
+        }
+        this.attributes.delete(attribute);
+    }
+
+    cloneNode() {
+        const clone = new StubElement(this.tagName);
+        clone.classList.add(...this.classList.classes);
+        for (const [attribute, value] of this.attributes) {
+            clone.attributes.set(attribute, value);
+        }
+        return clone;
+    }
+
+    contains(other) {
+        return other === this || this.descendants().includes(other);
+    }
+
+    getBoundingClientRect() {
+        return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 };
+    }
+
+    /// The 2D context a `DOM.Canvas` asks for. The grid is the only canvas, and the suite never
+    /// draws it, so each call does nothing.
+    getContext() {
+        return new Proxy({}, { get: () => () => {} });
+    }
+}
+
+class StubText extends StubElement {
+    constructor(text) {
+        super("#text");
+        this.text = text;
+    }
+}
+
+const document = {
+    body: new StubElement("body"),
+    createElement: (tag_name) => new StubElement(tag_name),
+    createElementNS: (_, tag_name) => new StubElement(tag_name),
+    createTextNode: (text) => new StubText(text),
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    fonts: { ready: Promise.resolve() },
+    title: "",
+};
+
+const window = {
+    devicePixelRatio: 1,
+    getComputedStyle: () => new StubStyle(),
+    addEventListener: () => {},
+    removeEventListener: () => {},
+};
+
+/// A `UI` as the diagram sees it: the quiver, the grid, the settings, and the handful of methods
+/// `Parser`, `Cell`, and `QuiverImportExport` call on the way through. The view, the selection, the
+/// mode line, and the history are stubbed out, since a parse neither reads nor needs them.
+///
+/// `make` builds one once the sources have been loaded into the context, which is why it takes the
+/// classes rather than naming them.
+function make_ui({ DOM, Quiver, Grid, Settings, Offset }) {
+    const focus_point = { class_list: new StubClassList() };
+    const ui = {
+        quiver: new Quiver(),
+        grid: new Grid(),
+        settings: new Settings(),
+        macros: new Map(),
+        colours: new Map(),
+        sep: { column: 1.8, row: 1.8 },
+        // The separations `DiagramFile.SEPS` calls normal, which a diagram keeps unless its file
+        // says otherwise.
+        present: 0,
+        positions: new Map(),
+        selection: new Set(),
+        buffer_updates: false,
+        focus_point,
+        view: Offset.zero(),
+        history: { present: 0, add: () => {}, squash: () => {} },
+        mode_line: { update: () => {}, flash: () => {}, error: () => {}, dismiss_error: () => false },
+        colour_picker: { update_diagram_colours: () => {} },
+        // The element every cell is added to, which stands in for the canvas.
+        canvas: new DOM.Div({ class: "canvas" }),
+
+        options: () => ({ dimensions: [0, 0], sep: ui.sep }),
+        definitions: () => ({ macros: ui.macros, colours: ui.colours }),
+
+        /// As `UI.add_cell`, without the colour picker or the codes.
+        add_cell: (cell) => {
+            ui.canvas.add(cell.element);
+            if (cell.is_vertex()) {
+                ui.positions.set(`${cell.position}`, cell);
+                cell.recalculate_size(ui);
+            }
+        },
+
+        /// As `UI.change_setting`, without what it shows: nothing here is drawn.
+        change_setting: (setting, value) => ui.settings.set(setting, value),
+
+        centre_view: () => {},
+        /// KaTeX is not loaded, so a label is never typeset; a vertex that asks for its label to
+        /// be rendered is told it measures nothing, which is what an empty one would.
+        render_maths: (...cells) => {
+            for (const cell of cells) {
+                if (cell.is_vertex()) {
+                    cell.label_size = [0, 0];
+                    cell.resize_content(ui, cell.label_size);
+                }
+            }
+        },
+        update_cell_size: () => {},
+        reposition_focus_point: () => {},
+        update_col_row_size: () => {},
+        recode: () => {},
+        deselect: (cell) => ui.selection.delete(cell),
+        select: (cell) => ui.selection.add(cell),
+        deselect_all: () => ui.selection.clear(),
+        update_selection: () => {},
+        selection_contains_edge: () =>
+            Array.from(ui.selection).some((cell) => cell.is_edge()),
+
+        /// As `UI.remove_cell`, without the elements or the colour picker.
+        remove_cell: (cell, when) => {
+            for (const removed of ui.quiver.remove(cell, when)) {
+                if (removed.is_vertex()) {
+                    ui.positions.delete(`${removed.position}`);
+                    ui.grid.unconstrain(removed);
+                }
+                ui.selection.delete(removed);
+                removed.element.remove();
+            }
+        },
+
+        /// The text the diagram would be saved as, as `DiagramFile.text` writes it.
+        text: () => `${
+            ui.quiver.export("tikz-cd", ui.settings, ui.options(), ui.definitions()).data}\n`,
+
+        /// Start again on an empty diagram, as `UI.reset` does.
+        reset: () => {
+            ui.quiver = new Quiver();
+            ui.grid.clear();
+            ui.positions.clear();
+            ui.selection.clear();
+        },
+    };
+    return ui;
+}
+
+module.exports = { document, window, make_ui, StubElement, StubClassList };

@@ -10,7 +10,8 @@
     "main": "electron/main.js",
     "scripts": {
         "start": "./sagitta",
-        "test": "python3 -m pytest tests",
+        "test": "npm run test:fast && python3 -m pytest tests",
+        "test:fast": "node tests/tikzcd.js",
         "dist": "electron-builder --linux AppImage --publish never",
         "dist:win": "electron-builder --win nsis portable --publish never"
     },

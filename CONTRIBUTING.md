@@ -40,12 +40,27 @@ Match the code around a change: `///` doc comments on functions, `//` comments i
 npm test
 ```
 
-This runs `python3 -m pytest tests` (install pytest first).
-It runs the app headless and drives it with trusted key and mouse events (`tests/sagitta/`), one scenario per process, with HOME pointed at a temporary directory.
+This runs both suites, the fast one first.
+
+```
+npm run test:fast
+```
+
+The fast suite (`node tests/tikzcd.js`) is the `.tikzcd` round trip, the encoded first line, the parser, the export settings, and the command line's settings, in about a second.
+It loads the sources that touch the diagram into a `vm` over a stub DOM (`tests/stub.js`), so it needs neither Electron nor a display, and the checks are in `tests/tikzcd-checks.js`.
+A parser or export regression shows here before the slow suite starts.
+
+```
+python3 -m pytest tests
+```
+
+The full suite (install pytest first) runs the app headless and drives it with trusted key and mouse events (`tests/sagitta/`), one scenario per process, with HOME pointed at a temporary directory.
 A scenario in `tests/sagitta/scenarios.js` does something in the app and returns what to check, and a test in `tests/test_sagitta.py` checks it.
-The suite takes a few minutes, and runs on GitHub for every push and pull request.
+It takes a few minutes.
+Both run on GitHub for every push and pull request.
 
 A change in behaviour comes with a test, and a new key, command, or setting with a line in `docs/sagitta.md`.
+Anything that can be checked without the app belongs in the fast suite.
 
 ## Releasing
 

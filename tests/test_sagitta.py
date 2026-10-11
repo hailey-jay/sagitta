@@ -73,9 +73,11 @@ def home(tmp_path):
 
 @pytest.fixture
 def sagitta(home):
-    """Run a scenario on a diagram, returning its result. Fails on any page error."""
+    """Run a scenario on a diagram, returning its result. Fails on any page error, except one
+    the test asked for: a refused command reports itself with `UI.display_error`, which logs to the
+    console, so `expected_error` names the substring such a run is allowed to log."""
 
-    def run(scenario, diagram, argument=None):
+    def run(scenario, diagram, argument=None, expected_error=None):
         env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"))
         command = [electron, "--ozone-platform=headless", _DRIVER, _APP, scenario, str(diagram)]
         # CI runners (Ubuntu's AppArmor) refuse the user namespaces Chromium's sandbox needs.
@@ -89,7 +91,12 @@ def sagitta(home):
         lines = [line for line in completed.stdout.splitlines() if line.startswith("RESULT ")]
         assert lines, f"no result from {scenario}:\n{completed.stdout}\n{completed.stderr}"
         output = json.loads(lines[-1][len("RESULT "):])
-        assert output["errors"] == []
+        errors = output["errors"]
+        if expected_error is not None:
+            assert [error for error in errors if expected_error in error], \
+                f"{scenario} never reported {expected_error!r}: {errors}"
+            errors = [error for error in errors if expected_error not in error]
+        assert errors == []
         return output["result"]
 
     return run
@@ -367,7 +374,8 @@ def test_the_help_layer_lists_every_binding(sagitta, home):
     assert ["<delete>", "delete"] in help["Typing"]
     assert help["Moving"][0] == ["arrows", "move the focus point"]
     assert help["Mouse"][0] == ["click", "select; again to edit the label"]
-    assert help["Mouse"][-1] == ["S-scroll", "zoom"]
+    assert help["Mouse"][-1] == ["S-scroll  C-scroll", "zoom"]
+    assert ["C-drag  A-drag  middle-drag", "pan by dragging"] in help["Mouse"]
     assert ["C-e", "export tikz-cd"] in help["Layers"]
     assert ["C-m", "macros"] in help["Layers"]
     assert ["/  C-f", "search labels, or type cell codes"] in help["Layers"]
@@ -738,6 +746,114 @@ def test_shift_space_selects_and_space_connects(sagitta, home):
     assert steps["deselect B"] == {"vertices": 4, "edges": 4, "selected": 1}
     assert steps["empty cell"] == {"vertices": 4, "edges": 4, "selected": 2}
     assert steps["connect to D"]["edges"] == 6
+
+
+def test_the_mark_selects_a_rectangle_of_cells(sagitta, home):
+    """`C-SPC` at two corners takes every cell between them, and the arrows whose ends are both
+    among them; Shift adds that region to the selection; Escape drops a mark."""
+    steps = sagitta("mark", _diagram(home / "paper"))
+    assert "MARK" in steps["mark at A"]["mode_line"]
+    assert steps["mark at A"]["counts"]["selected"] == 0
+    # `A`, `B`, and the arrow between them.
+    assert steps["top row"]["counts"]["selected"] == 3
+    assert "MARK" not in steps["top row"]["mode_line"]
+    # The whole square: four vertices and four arrows.
+    assert steps["square"]["counts"]["selected"] == 8
+    # Shift adds, so the square is still selected after the row is added to it.
+    assert steps["adding the row"]["counts"]["selected"] == 8
+    # A mark dropped with Escape selects nothing, and leaves the selection as it was.
+    assert "MARK" not in steps["mark dropped"]["mode_line"]
+    assert steps["mark dropped"]["counts"]["selected"] == 8
+    # Nothing was created or deleted along the way.
+    for step in steps.values():
+        assert (step["counts"]["vertices"], step["counts"]["edges"]) == (4, 4)
+
+
+def test_a_preset_with_nothing_selected_sets_what_new_arrows_take(sagitta, home):
+    diagram = _diagram(home / "pair", PAIR, "pair.tikzcd")
+    result = sagitta("preset_default", diagram)
+    assert result["preset"] == "equals"
+    assert "equals" in result["mode_line"]
+    # The command layer marks the preset in force, since there is no selection to describe.
+    assert result["current"] == ["equals"]
+    # The arrow drawn afterwards takes it.
+    assert "\\arrow[equals" in diagram.read_text()
+
+
+def test_a_preset_with_nothing_selected_does_not_land_in_the_undo_history(sagitta, home):
+    """The preset new arrows take is a setting, not part of the diagram, so undo must step back
+    over the restyling before it, not over the setting."""
+    # Saving writes the encoding and the wrapper, so the diagram to compare against is one saved
+    # the same way, rather than the hand-written file.
+    untouched = _diagram(home / "untouched")
+    sagitta("commands", untouched, json.dumps([]))
+    # Restyle every arrow, deselect, set the default, then undo: the restyling is what comes back.
+    diagram = _diagram(home / "paper")
+    sagitta("commands", diagram, json.dumps(["equals", "deselect-all", "dashed", "undo"]))
+    assert diagram.read_text() == untouched.read_text()
+    settings = json.loads((home / ".config" / "sagitta" / "settings.json").read_text())
+    assert settings["diagram.arrow_preset"] == "dashed"
+
+
+def test_set_names_a_setting_and_its_value(sagitta, home):
+    result = sagitta("set_command", _diagram(home / "paper"), json.dumps([
+        "set ui.zoom 150",
+        "set ui.dark_mode on",
+        "set ui.which_key_delay null",
+        "set diagram.arrow_preset equals",
+    ]))
+    assert result["settings"]["ui.zoom"] == 150
+    assert result["settings"]["ui.dark_mode"] is True
+    assert result["settings"]["ui.which_key_delay"] is None
+    assert result["settings"]["diagram.arrow_preset"] == "equals"
+    # Every change is reported, and reaches the file.
+    assert all("is now" in line for line in result["lines"])
+    settings = json.loads((home / ".config" / "sagitta" / "settings.json").read_text())
+    assert settings["ui.zoom"] == 150
+
+
+@pytest.mark.parametrize("command,problem", [
+    ("set ui.zoom 1000", "a number from 20 to 200"),
+    ("set ui.zoom wide", "a number from 20 to 200"),
+    ("set ui.dark_mode sometimes", "true or false"),
+    ("set diagram.arrow_preset wiggly", "one of plain"),
+    ("set ui.hint_characters AA", "at least two different capital letters or digits"),
+    ("set ui.colour red", 'Unknown setting "ui.colour"'),
+])
+def test_set_refuses_a_value_the_setting_cannot_take(sagitta, home, command, problem):
+    """The refusal reaches the mode line's error banner, which `UI.display_error` also logs."""
+    result = sagitta("set_command", _diagram(home / "paper"), json.dumps([command]),
+                     expected_error=problem)
+    assert problem in result["lines"][0]
+    # Nothing was changed, so nothing was written.
+    assert not (home / ".config" / "sagitta" / "settings.json").exists()
+
+
+def test_set_with_no_value_reports_what_the_setting_holds(sagitta, home):
+    result = sagitta("set_command", _diagram(home / "paper"), json.dumps(["set ui.zoom"]))
+    assert "ui.zoom is 100" in result["lines"][0]
+
+
+def test_the_wheel_zooms_with_shift_or_control_and_pans_with_neither(sagitta, home):
+    steps = sagitta("wheel", _diagram(home / "paper"))
+    # With no modifier the wheel pans, leaving the zoom alone.
+    assert steps["plain"]["view"] != steps["start"]["view"]
+    assert steps["plain"]["scale"] == steps["start"]["scale"]
+    # Shift zooms (out, where there is room for two steps), and Control does the same, by the same
+    # step, rather than panning or doing nothing.
+    assert steps["shift"]["scale"] < steps["plain"]["scale"]
+    assert steps["control"]["scale"] - steps["shift"]["scale"] == pytest.approx(
+        steps["shift"]["scale"] - steps["plain"]["scale"], abs=1e-6)
+
+
+def test_middle_dragging_pans_from_a_cell_as_well_as_empty_space(sagitta, home):
+    steps = sagitta("middle_drag", _diagram(home / "paper"))
+    assert steps["from_a_cell"]["view"] != steps["start"]["view"]
+    assert steps["from_empty_space"]["view"] != steps["from_a_cell"]["view"]
+    # Panning neither draws an arrow, moves a cell, nor selects one.
+    for step in ("start", "from_a_cell", "from_empty_space"):
+        assert steps[step]["counts"] == {"vertices": 4, "edges": 4, "selected": 0}
+    assert steps["dirty"] is False
 
 
 def test_a_changed_setting_is_written_to_the_settings_file(sagitta, home):

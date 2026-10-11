@@ -266,6 +266,12 @@ class Keys {
             return;
         }
 
+        // Let go of the mark, before anything is deselected, so that one Escape cancels the
+        // region and the next clears the selection.
+        if (this.unmark()) {
+            return;
+        }
+
         // Let go of what the command layer was setting.
         if (ui.keymap.property !== null || ui.keymap.component !== null) {
             ui.keymap.unchoose();
@@ -312,6 +318,79 @@ class Keys {
                 }
             }
         }
+    }
+
+    /// `C-SPC`: set the mark at the focus point, as a corner of a rectangle of cells to select;
+    /// with one already set, take the rectangle between it and the focus point, and let go of the
+    /// mark. Shift adds the rectangle to the selection rather than replacing it. Escape lets go of
+    /// the mark without selecting anything (see `escape`).
+    ///
+    /// A rectangular block of a tikz-cd matrix is the unit a diagram is read in, and the keyboard
+    /// had no way to take one: `select-all`, `select-connected`, `select-at-focus`, and `; s` take
+    /// everything, a component, one cell, or cells by code.
+    mark(event) {
+        const ui = this.ui;
+        // Holding Control is itself a binding, which pans, so the key arrives in the Pan mode as
+        // often as in the default one.
+        if (!ui.in_mode(UIMode.Default, UIMode.Pan)) {
+            return false;
+        }
+        if (ui.mark === null) {
+            ui.mark = ui.focus_position;
+            // Show the focus point at the corner just marked, as the arrow keys do when they
+            // first move it.
+            if (!ui.focus_point.class_list.contains("focused")) {
+                ui.focus_point.class_list.remove("revealed", "pending", "active");
+                ui.focus_point.class_list.add("focused");
+                ui.reposition_focus_point(ui.focus_position);
+            }
+            ui.mode_line.update(ui);
+            ui.mode_line.flash("mark set");
+            return true;
+        }
+        const cells = Keys.cells_between(ui, ui.mark, ui.focus_position);
+        ui.mark = null;
+        if (!event.shiftKey) {
+            ui.deselect();
+        }
+        ui.select(...cells);
+        ui.hide_if_unselected();
+        ui.mode_line.update(ui);
+        ui.mode_line.flash(cells.length === 0 ? "nothing in the region"
+            : `selected ${cells.length} cell${cells.length === 1 ? "" : "s"}`);
+        return true;
+    }
+
+    /// Let go of the mark, if there is one. Returns whether there was.
+    unmark() {
+        const ui = this.ui;
+        if (ui.mark === null) {
+            return false;
+        }
+        ui.mark = null;
+        ui.mode_line.update(ui);
+        ui.mode_line.flash("mark dropped");
+        return true;
+    }
+
+    /// The cells of the rectangle with `from` and `to` as opposite corners: every vertex whose
+    /// column and row both lie between them, and every edge both of whose ends is one of those
+    /// vertices, so that selecting a square takes the arrows of the square with it.
+    static cells_between(ui, from, to) {
+        const within = (value, a, b) => value >= Math.min(a, b) && value <= Math.max(a, b);
+        const inside = new Set(ui.quiver.all_cells().filter((cell) => cell.is_vertex()
+            && within(cell.position.x, from.x, to.x)
+            && within(cell.position.y, from.y, to.y)));
+        // An edge may end on another edge, so the edges are taken in order of level: an edge is
+        // inside once both its ends are known to be.
+        for (const cell of ui.quiver.all_cells().filter((cell) => cell.is_edge())
+            .sort((a, b) => a.level - b.level)
+        ) {
+            if (inside.has(cell.source) && inside.has(cell.target)) {
+                inside.add(cell);
+            }
+        }
+        return Array.from(inside);
     }
 
     /// Space: create a vertex at the focus point (or take the one there), connected to the
