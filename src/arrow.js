@@ -33,6 +33,8 @@ const CONSTANTS = {
     CORNER_LINE_LENGTH: 12,
     /// The radius of the mark at each checkpoint of a selected route.
     CHECKPOINT_RADIUS: 4,
+    /// The radius of the area round a checkpoint that the pointer can take it by.
+    CHECKPOINT_HANDLE_RADIUS: 10,
     /// The radius of the handle for dragging an edge.
     HANDLE_RADIUS: 14,
     /// Constants handling the behaviour of loops.
@@ -209,6 +211,9 @@ class Arrow {
         this.route = [];
         // Which checkpoint is being moved with the focus point, if one is (see `Keys.carry`).
         this.carried = null;
+        // The leg of a route the label is on, and how far along it, as `{ leg, pos }`, which is
+        // where the export puts it (see `QuiverExport.route_leg`), or `null` to place it by length.
+        this.label_leg = null;
     }
 
     /// Returns the source and target origins, adjusting for zero-length edges.
@@ -614,7 +619,9 @@ class Arrow {
 
         // A route's checkpoints, which the style sheet shows only while the arrow is selected, so
         // that one can be found to move. They are redrawn whole, as there may be more or fewer.
-        this.svg.query_selector_all(".arrow-checkpoint").forEach((element) => element.remove());
+        // Each has a wider handle, unseen, for the pointer to drag it by (see `Pointer.grab`).
+        this.svg.query_selector_all(".arrow-checkpoint, .arrow-checkpoint-handle")
+            .forEach((element) => element.remove());
         if (this.style.shape === CONSTANTS.ARROW_SHAPE.ROUTE) {
             const source = this.origin().source;
             this.route.forEach((point, index) => {
@@ -624,6 +631,13 @@ class Arrow {
                     cx: centre.x,
                     cy: centre.y,
                     r: CONSTANTS.CHECKPOINT_RADIUS,
+                }).add_to(this.svg);
+                new DOM.SVGElement("circle", {
+                    class: "arrow-checkpoint-handle",
+                    "data-index": index,
+                    cx: centre.x,
+                    cy: centre.y,
+                    r: CONSTANTS.CHECKPOINT_HANDLE_RADIUS,
                 }).add_to(this.svg);
             });
         }
@@ -1472,7 +1486,7 @@ class Arrow {
         const { edge_width, start, end } = constants;
 
         const curve = this.curve(Point.zero());
-        const centre = curve.point(start.t + (end.t - start.t) * this.style.label_position);
+        let centre = curve.point(start.t + (end.t - start.t) * this.style.label_position);
 
         // The angle we will try to push the label so that it no longer intersects the curve. This
         // will be set by the following switch block if we do not return by the end of the block.
@@ -1483,9 +1497,25 @@ class Arrow {
         if (this.style.shape === CONSTANTS.ARROW_SHAPE.ARC) {
             offset_angle = curve.tangent(this.style.label_position);
         }
-        // A route turns, so the label is pushed off the leg it is on.
+        // A route turns, so the label is pushed off the leg it is on. TikZ puts it `pos` of the
+        // way along one leg, which is where the canvas puts it too, so that the two agree; the
+        // first and last legs are measured from where the arrow is seen to start and end, as TikZ
+        // measures them from the nodes' borders.
         if (this.style.shape === CONSTANTS.ARROW_SHAPE.ROUTE) {
             offset_angle = curve.tangent(start.t + (end.t - start.t) * this.style.label_position);
+            if (this.label_leg !== null) {
+                const { source, target } = this.origin();
+                const frame = this.angle();
+                const points = [source, ...this.route, target]
+                    .map((point) => point.sub(source).rotate(-frame));
+                const { leg, pos } = this.label_leg;
+                const from = leg === 0 ? curve.point(start.t) : points[leg];
+                const to = leg === points.length - 2 ? curve.point(end.t) : points[leg + 1];
+                if (to.sub(from).length() > 0) {
+                    centre = from.lerp(to, pos);
+                    offset_angle = to.sub(from).angle();
+                }
+            }
         }
 
         // For Bézier curves, we simply adjust up or down.

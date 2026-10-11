@@ -219,22 +219,36 @@ class Commands {
     route(first) {
         const ui = this.ui;
         const edges = new Set(this.routable());
-        const corner = (edge) => {
-            const { source: { position: source }, target: { position: target } } = edge;
-            return first === "x" ? [target.x, source.y] : [source.x, target.y];
-        };
+        const corner = (edge) => Commands.corner(edge, first);
         const bends = (edge) => edge.source.position.x !== edge.target.position.x
             && edge.source.position.y !== edge.target.position.y;
         if (first !== null && !Array.from(edges).some(bends)) {
             throw new Error("The arrow is already straight along a row or a column, so it has no"
                 + " corner to turn: add checkpoints for a route round something.");
         }
+        // A route of checkpoints placed by hand, rather than one of the two bends, is work that
+        // straightening throws away, so the mode line says how to get it back.
+        const bent = (edge) => ["x", "y"].some((axis) => JSON.stringify(edge.options.route)
+            === JSON.stringify([Commands.corner(edge, axis)]));
+        const placed = first === null && Array.from(edges)
+            .some((edge) => edge.options.route.length > 0 && !bent(edge));
         const changed = ui.arrow_options.set_route(ui, (edge) => !edges.has(edge)
             ? edge.options.route
             : first === null ? [] : bends(edge) ? [corner(edge)] : edge.options.route);
         if (!changed) {
             ui.mode_line.flash(first === null ? "already straight" : "already routed that way");
+        } else if (placed) {
+            // Undo's key as the keys file has it, as the mode line's own button shows it.
+            const undo = ui.mode_line.actions?.get("undo")?.combinations ?? [];
+            ui.mode_line.flash(`route straightened: ${undo.length > 0
+                ? Keymap.describe(undo.slice(0, 1)) : "undo"} brings the checkpoints back`);
         }
+    }
+
+    /// The cell an arrow turns in when it goes along `axis` (`"x"` or `"y"`) first.
+    static corner(edge, axis) {
+        const { source: { position: source }, target: { position: target } } = edge;
+        return axis === "x" ? [target.x, source.y] : [source.x, target.y];
     }
 
     /// The next route `route` with no argument gives: a straight arrow bends along a row first,
@@ -246,7 +260,7 @@ class Commands {
             return "x";
         }
         if (route.length === 1 && edges.every((edge) => JSON.stringify(edge.options.route)
-            === JSON.stringify([[edge.target.position.x, edge.source.position.y]]))
+            === JSON.stringify([Commands.corner(edge, "x")]))
         ) {
             return "y";
         }

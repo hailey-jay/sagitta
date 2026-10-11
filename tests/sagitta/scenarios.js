@@ -562,12 +562,27 @@ module.exports = {
                 await ctx.command(step);
             } else if (Array.isArray(step)) {
                 await ctx.js(`ui.reposition_focus_point(new Position(${step[0]}, ${step[1]}))`);
+            } else if (step.drag !== undefined) {
+                // Drag the selected arrow's checkpoint at one cell to another, by its ring.
+                const [[fx, fy], [tx, ty]] = step.drag;
+                const [from, to] = await ctx.js(`(() => {
+                    const ring = document.querySelector(".arrow.selected .arrow-checkpoint-handle");
+                    const rect = ring.getBoundingClientRect();
+                    const cells = [${fx}, ${fy}, ${tx}, ${ty}];
+                    const offset = (x, y) => ui.grid.centre_offset_from_position(new Position(x, y));
+                    const shift = offset(cells[2], cells[3]).sub(offset(cells[0], cells[1]));
+                    const from = [rect.x + rect.width / 2, rect.y + rect.height / 2];
+                    return [from, [from[0] + shift.x, from[1] + shift.y]];
+                })()`);
+                await ctx.drag(from, to);
             } else {
                 for (const [key, modifiers = []] of step.keys) {
                     await ctx.press(key, modifiers);
                 }
             }
         }
+        // What the mode line says after the last step, before saving says something else.
+        const flashed = await ctx.mode_line();
         await ctx.save();
         const vertices = await ctx.vertices();
         const edges = await ctx.js(`[...ui.quiver.all_cells()].filter((cell) => cell.is_edge())
@@ -598,6 +613,7 @@ module.exports = {
         return {
             vertices,
             edges,
+            flashed,
             steps: await ctx.js("ui.history.present"),
         };
     },

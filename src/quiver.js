@@ -374,6 +374,12 @@ QuiverExport.tikz_multiplier = (angle) => {
         / Math.hypot(horizontal * Math.sin(angle), vertical * Math.cos(angle));
 };
 
+/// The diagram option that gives each empty cell a node to route through, named as tikz-cd names
+/// a cell's node. It is TikZ's `nodes in empty cells`, but with nodes of no size, so that a row or
+/// a column with nothing in it but a route takes up no more room than it would without one.
+QuiverExport.EMPTY_CELLS = String.raw`execute at empty cell={\node[name=\tikzmatrixname-`
+    + String.raw`\the\pgfmatrixcurrentrow-\the\pgfmatrixcurrentcolumn, inner sep=0pt]{};}`;
+
 /// The cells a route passes through, from the source to the target, as points: an end on an arrow
 /// is taken at the middle of that arrow's ends.
 QuiverExport.route_points = (edge) => {
@@ -423,7 +429,7 @@ QuiverExport.route_fraction = (points, leg, pos) => {
 QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
     export(quiver, settings, options, definitions) {
         let output = "";
-        let nodes_in_empty_cells = false;
+        let empty_cells = false;
 
         // Wrap tikz-cd code with `\begin{tikzcd} ... \end{tikzcd}`.
         const wrap_boilerplate = (output) => {
@@ -435,10 +441,6 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
             // Cramped.
             if (settings.get("export.cramped")) {
                 diagram_options.push("cramped");
-            }
-            // A route through a cell with no node to take its centre from (see `checkpoint`).
-            if (nodes_in_empty_cells) {
-                diagram_options.push("nodes in empty cells");
             }
             // Column and row separation.
             const sep = {
@@ -466,6 +468,11 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                         diagram_options.push(`${axis} sep=${sep[axis]}`);
                     }
                 }
+            }
+            // A route through a cell with no node to take its centre from (see `checkpoint`). It
+            // goes last, as the longest.
+            if (empty_cells) {
+                diagram_options.push(QuiverExport.EMPTY_CELLS);
             }
             // `tikzcd` environment.
             let tikzcd = `\\begin{tikzcd}${
@@ -551,8 +558,8 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
         }
         // The cells routes pass through. A checkpoint is the centre of the node in its cell, or,
         // for an empty cell, the column of a node in the same column and the row of one in the
-        // same row. Failing that, the cell is written out empty, and `nodes in empty cells` gives
-        // it a node, which is a last resort, since an empty node takes up a little room.
+        // same row. Failing that, the cell is written out empty, and `QuiverExport.EMPTY_CELLS`
+        // gives every empty cell a node of no size, which takes up no room.
         const occupied = (x, y) => rows.has(y) && rows.get(y).get(x) instanceof Vertex;
         const vertices = Array.from(quiver.cells[0]);
         const in_column = (x) => vertices.find((vertex) => vertex.position.x === x);
@@ -562,7 +569,7 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
             for (const [x, y] of edge.options.route) {
                 if (!occupied(x, y) && (in_column(x) === undefined || in_row(y) === undefined)) {
                     place(x, y, null);
-                    nodes_in_empty_cells = true;
+                    empty_cells = true;
                 }
                 offset = offset.min(new Position(x, y));
             }

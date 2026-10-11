@@ -271,16 +271,50 @@ class DiagramFile {
     /// separations and export settings, rather than the diagram) or whitespace, or `null` if there
     /// is none.
     static body(text) {
-        const match = text.match(/\\begin\{tikzcd\}(?:\[[^\]\n]*\])?([\s\S]*?)\\end\{tikzcd\}/);
-        return match === null ? null : match[1].replace(/\s+/g, "");
+        const environment = DiagramFile.environment(text);
+        return environment === null ? null : environment.body.replace(/\s+/g, "");
+    }
+
+    /// The `tikzcd` environment in `text`, as its `options` (the text between the brackets, or
+    /// `""`) and its `body`, or `null` if there is none. An option may hold brackets of its own
+    /// inside braces (`QuiverExport.EMPTY_CELLS`), so the options end at the first `]` outside
+    /// them.
+    static environment(text) {
+        const begin = text.indexOf("\\begin{tikzcd}");
+        if (begin === -1) {
+            return null;
+        }
+        let at = begin + "\\begin{tikzcd}".length;
+        let options = "";
+        if (text[at] === "[") {
+            let depth = 0;
+            let close = -1;
+            for (let i = at + 1; i < text.length && close === -1; ++i) {
+                if (text[i] === "{") {
+                    ++depth;
+                } else if (text[i] === "}") {
+                    --depth;
+                } else if (text[i] === "]" && depth === 0) {
+                    close = i;
+                } else if (text[i] === "\n") {
+                    break;
+                }
+            }
+            if (close !== -1) {
+                options = text.slice(at + 1, close);
+                at = close + 1;
+            }
+        }
+        const end = text.indexOf("\\end{tikzcd}", at);
+        return end === -1 ? null : { options, body: text.slice(at, end) };
     }
 
     /// Set the column and row separations from the `tikzcd` environment's options in `text`, which
     /// the encoding does not record.
     static restore_sep(ui, text) {
         const sep = { column: DiagramFile.SEPS.normal, row: DiagramFile.SEPS.normal };
-        const options = text.match(/\\begin\{tikzcd\}\[([^\]\n]*)\]/);
-        for (const option of options === null ? [] : options[1].split(",")) {
+        const environment = DiagramFile.environment(text);
+        for (const option of environment === null ? [] : environment.options.split(",")) {
             const match = option.trim().match(/^(column |row )?sep\s*=\s*(\w+|[\d.]+em)$/);
             if (match === null) {
                 continue;

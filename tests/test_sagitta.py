@@ -1057,6 +1057,21 @@ def test_a_route_is_drawn_round_its_corner(sagitta, home):
     assert abs(down["target"][1] - q[1]) <= 1 and down["target"][0] < q[0]
 
 
+def test_a_route_label_is_on_the_leg_the_export_puts_it_on(sagitta, home):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    # tikz-cd lays a diagram out wider than tall, so halfway along a route that goes along the row
+    # first is still on the row, and one that goes down the column first is already on the row.
+    [p, q] = sagitta("route", diagram, json.dumps([]))["vertices"]
+    across = sagitta("route", diagram, json.dumps(["route x"]))
+    assert "\\arrow[\"c\"{pos=0.833}" in diagram.read_text()
+    label = across["edges"][0]["label"]
+    assert p[0] < label[0] < q[0] and label[1] < p[1]
+    down = sagitta("route", diagram, json.dumps(["route y"]))
+    assert "\\tikztonodes [sharp corners]" in diagram.read_text()
+    label = down["edges"][0]["label"]
+    assert p[0] < label[0] < q[0] and p[1] < label[1] < q[1]
+
+
 def test_checkpoints_are_added_at_the_focus_point(sagitta, home):
     diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
     result = sagitta("route", diagram, json.dumps([[0, 2], "checkpoint", [1, 2], "checkpoint"]))
@@ -1065,7 +1080,7 @@ def test_checkpoints_are_added_at_the_focus_point(sagitta, home):
     assert edge["drawn"] and edge["arcs"] == 2
     saved = diagram.read_text()
     # Row 3 holds no vertex, so its cells are written out, empty, to have nodes to pass through.
-    assert "[nodes in empty cells]" in saved
+    assert "[execute at empty cell=" in saved
     assert "-- (\\tikzcdmatrixname-3-1.center) -- (\\tikzcdmatrixname-3-2.center)" in saved
     # Again at the same cell takes it out.
     again = sagitta("route", diagram, json.dumps([[1, 2], "checkpoint"]))
@@ -1138,6 +1153,16 @@ def test_a_checkpoint_put_down_where_it_was_is_no_step(sagitta, home):
     assert result["steps"] == 1
 
 
+def test_a_checkpoint_is_dragged_by_its_ring(sagitta, home):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    result = sagitta("route", diagram, json.dumps(["route x", {"drag": [[1, 0], [2, 0]]}]))
+    [edge] = result["edges"]
+    assert edge["route"] == [[2, 0]]
+    assert not any(mark["carried"] for mark in edge["checkpoints"])
+    # The bend and the drag are a step each.
+    assert result["steps"] == 2
+
+
 def test_carrying_needs_a_checkpoint_at_the_focus_point(sagitta, home):
     diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
     sagitta("route", diagram, json.dumps(["route x", [0, 1], "move-checkpoint"]),
@@ -1153,6 +1178,17 @@ def test_a_route_moves_with_its_arrow(sagitta, home):
     # opens with `P` back at the top left.
     opened = sagitta("route", diagram, json.dumps([[1, 0], "insert-column-left"]))
     assert opened["edges"][0]["route"] == [[2, 0]]
+
+
+def test_straightening_checkpoints_says_how_to_get_them_back(sagitta, home):
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    result = sagitta("route", diagram, json.dumps(
+        [[0, 2], "checkpoint", [1, 2], "checkpoint", "route"]))
+    assert result["edges"][0]["route"] == []
+    assert "route straightened: C-z brings the checkpoints back" in result["flashed"]
+    # One of the two bends is no work to lose.
+    bend = sagitta("route", diagram, json.dumps(["route x", "route none"]))
+    assert "route straightened" not in bend["flashed"]
 
 
 def test_a_route_is_refused_where_there_is_no_corner(sagitta, home):

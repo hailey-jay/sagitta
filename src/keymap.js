@@ -1175,6 +1175,8 @@ Keymap.HELP_ELSEWHERE = {
         ["Mouse", "draw an arrow from a cell (or empty space)", "drag"],
         ["Mouse", "move a cell, held by the edge of its space", "drag edge"],
         ["Mouse", "reconnect an arrow", "drag its end"],
+        // `Pointer.grab`.
+        ["Mouse", "move a selected arrow's checkpoint", "drag its ring"],
         ["Mouse", "commands, as ; (click a line to run it)", "right-click"],
         // `Pointer.scroll` and `Pointer.press`. The middle button drags from a cell as well as
         // from empty space, which the modifiers cannot.

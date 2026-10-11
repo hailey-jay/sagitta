@@ -596,6 +596,19 @@ label input[type="checkbox"]:checked::before {
     fill: var(--ui-focus);
 }
 
+/* The area round a checkpoint the pointer drags it by (see `Pointer.grab`), only while it shows. */
+.arrow .arrow-checkpoint-handle {
+    display: none;
+    fill: transparent;
+    stroke: none;
+    pointer-events: all;
+    cursor: grab;
+}
+
+.arrow.selected .arrow-checkpoint-handle {
+    display: inline;
+}
+
 .arrow:not(.reconnecting) > svg:first-child > .arrow-background {
     pointer-events: stroke;
 }

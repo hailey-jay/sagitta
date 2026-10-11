@@ -484,8 +484,8 @@ class Parser {
             return;
         }
         // Written for a route through a cell no node shares a row or column with, which needs
-        // nothing more than the route.
-        if (this.eat("nodes in empty cells")) {
+        // nothing more than the route. `nodes in empty cells` is the same, with nodes of some size.
+        if (this.eat(QuiverExport.EMPTY_CELLS) || this.eat("nodes in empty cells")) {
             return;
         }
         if (this.eat("cramped")) {

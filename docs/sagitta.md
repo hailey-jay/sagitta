@@ -57,9 +57,10 @@ The commands live one key away:
   While there is a mark, the mode line shows `MARK`, and a dashed rectangle runs from it to the focus point, over the cells it would take.
   `:mark` and `:mark-add` do the same from the command line.
   The keys file can move it (`mark`, and `mark-add` for a key of its own that adds); Space alone cannot be bound, but its chords can.
+  Input methods such as IBus and Fcitx take Control-Space to switch input method, so where one runs, `C-SPC` never reaches Sagitta: bind `mark` to another key in the keys file (`mark C-g`, say, which is free), or change the input method's own key.
 
 The mouse works too.
-Click a cell to select it, and again to edit its label; click an empty space twice for a new cell; drag from a cell to draw an arrow, by the edge of its space to move it, and an arrow's end to reconnect it.
+Click a cell to select it, and again to edit its label; click an empty space twice for a new cell; drag from a cell to draw an arrow, by the edge of its space to move it, an arrow's end to reconnect it, and a selected arrow's checkpoint, by its ring, to move it.
 The wheel pans, and zooms with Shift or Control held; dragging with the middle button pans, over a cell as well as over empty space, as does dragging with Control or Option held.
 Right-click, or the `; commands` button in the mode line, opens the command layer, listing its keys at once, and clicking a line of its list presses that key; the sliders have `−` and `+` buttons.
 The mode line's `⚙` button opens the settings.
@@ -161,6 +162,7 @@ An arrow can be routed through cells instead of drawn as a curve: it runs straig
   A cell an arrow joins is no checkpoint.
 - `; m`, or `:move-checkpoint`, picks up the checkpoint at the focus point, which then follows the focus point.
   RET puts it down, as one undo step, and ESC puts it back; any other change to the diagram puts it down first.
+  With the mouse, drag a selected arrow's checkpoint by its ring; letting go puts it down, and ESC, before then, puts it back.
   It skips over the arrow's own ends; while one is carried, its ring is filled, and the mode line shows `CHECKPOINT`.
 - `; b` rounds the corners of a route, from 0 (sharp) to 8, as `:rounding` does; it is 3 to begin with.
 
@@ -170,7 +172,7 @@ A route moves with its arrow when the whole arrow moves, and a gap opened across
 Reversing an arrow passes through its route the other way.
 
 The export writes a route as a `to path` through the centres of the nodes in its cells, with `rounded corners`.
-An empty cell takes its centre from a node in its column and one in its row; a cell with neither is written out empty, and the diagram gets `nodes in empty cells`.
+An empty cell takes its centre from a node in its column and one in its row; a cell with neither is written out empty, and the diagram gets an `execute at empty cell` option, which is TikZ's `nodes in empty cells` with nodes of no size, so that the spacing is what it would be without the route.
 tikz-cd puts all an arrow's labels on one leg of a route, so the label goes on the leg its position falls on, and `pos` is measured along that leg.
 A shortened route is written with `shorten` lengths, since quiver's `between` does not follow a `to path`.
 Routes written this way are read back from the picture alone; any other `to path` is reported and left out.

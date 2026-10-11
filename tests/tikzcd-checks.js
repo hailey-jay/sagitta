@@ -701,7 +701,7 @@ const pending = [];
     check("whose centre is A's column and C's row", path(ui),
         "[rounded corners=6pt] -- (\\tikzcdmatrixname-1-1.center |- "
         + "\\tikzcdmatrixname-2-2.center) -- (\\tikztotarget) \\tikztonodes [sharp corners]");
-    check("which needs no empty nodes", ui.text().includes("nodes in empty cells"), false);
+    check("which needs no empty nodes", ui.text().includes("execute at empty cell"), false);
 
     // The file keeps the route, and the picture alone gives it back.
     let text = ui.text();
@@ -787,13 +787,22 @@ const pending = [];
     check("checkpoints are passed through in the order they are added",
         edge.options.route, [[1, 0], [2, 0]]);
     let text = ui.text();
-    check("a cell in an empty column takes empty nodes", text.includes("[nodes in empty cells]"),
-        true);
+    check("a cell in an empty column takes empty nodes of no size",
+        text.includes(`[${QuiverExport.EMPTY_CELLS}]`), true);
     check("and the row is written out to it", text.includes("\tA & B & \\\\\n"), true);
     check("so the cell has a name", text.includes("-- (\\tikzcdmatrixname-1-3.center)"), true);
     check("and the picture alone reads it back", [parse(text.replace(/^%.*\n/, "")).ui.quiver
         .all_cells().filter((cell) => cell.is_edge()).map((edge) => edge.options.route),
         parse(text.replace(/^%.*\n/, "")).diagnostics.length], [[[[1, 0], [2, 0]]], 0]);
+    // The option holds brackets of its own, which must not end the options early, or a
+    // separation after it would be lost.
+    const separated = load(text.replace(`[${QuiverExport.EMPTY_CELLS}]`,
+        `[${QuiverExport.EMPTY_CELLS},column sep=small]`).replace(/^%.*\n/, ""));
+    check("and a separation after it is still read", separated.ui.sep.column,
+        DiagramFile.SEPS.small);
+    check("as is TikZ's own nodes in empty cells", parse(text
+        .replace(QuiverExport.EMPTY_CELLS, "nodes in empty cells").replace(/^%.*\n/, ""))
+        .diagnostics.length, 0);
 
     // Above everything, the matrix grows a row, and the cells are counted from there.
     ui.focus_position = new Position(1, -1);

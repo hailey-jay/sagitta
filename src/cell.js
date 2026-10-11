@@ -1088,6 +1088,9 @@ class Edge extends Cell {
         this.arrow.route = this.options.route
             .map(([x, y]) => ui.grid.centre_offset_from_position(new Position(x, y)));
         this.arrow.carried = ui.carried?.find(({ edge }) => edge === this)?.index ?? null;
+        // The label goes on the leg of the route the export puts it on (see `Arrow.label_leg`).
+        this.arrow.label_leg = this.is_routed() ? QuiverExport.route_leg(
+            QuiverExport.route_points(this), this.options.label_position / 100) : null;
         Edge.update_style(this.arrow, this.options);
         this.arrow.redraw();
 

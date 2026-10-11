@@ -4,6 +4,8 @@
 class Pointer {
     constructor(ui) {
         this.ui = ui;
+        // Whether a checkpoint is being dragged (see `grab`).
+        this.dragging = false;
     }
 
     /// Start listening, once the UI's elements exist.
@@ -19,6 +21,8 @@ class Pointer {
             }
         });
         document.addEventListener("pointerup", (event) => this.release(event));
+        // Before the arrow under it takes the press, as it would to move or reconnect the arrow.
+        ui.element.element.addEventListener("pointerdown", (event) => this.grab(event), true);
         ui.element.listen("pointerdown", (event) => this.press(event));
         ui.element.listen("pointermove", (event) => this.move(event));
         ui.element.listen("contextmenu", (event) => this.context_menu(event));
@@ -105,10 +109,45 @@ class Pointer {
         }
     }
 
+    /// Pressing on a checkpoint of a selected arrow picks it up, as `move-checkpoint` does, and
+    /// it follows the pointer (see `move`) until the release puts it down (see `release`). ESC
+    /// puts it back, as it does a checkpoint carried by the keyboard.
+    grab(event) {
+        const ui = this.ui;
+        const handle = event.target.closest?.(".arrow-checkpoint-handle");
+        if (handle === null || handle === undefined || event.button !== 0
+            || !ui.in_mode(UIMode.Default)) {
+            return;
+        }
+        const edge = Array.from(ui.selection).find((cell) => cell.is_edge()
+            && cell.element.element.contains(handle));
+        if (edge === undefined) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        // One already carried is put down where it is first.
+        ui.keys.put_down(true);
+        ui.carried = [{
+            edge,
+            from: edge.options.route,
+            index: Number(handle.getAttribute("data-index")),
+        }];
+        this.dragging = true;
+        edge.render(ui);
+        ui.mode_line.update(ui);
+    }
+
     /// Releasing the pointer anywhere, even outside the window: finish panning, moving, or
     /// connecting.
     release(event) {
         const ui = this.ui;
+        // A dragged checkpoint is put down where it was let go of.
+        if (this.dragging && event.button === 0) {
+            this.dragging = false;
+            ui.keys.put_down(true);
+            return;
+        }
         // A pan the middle button started ends with it, rather than waiting on a key.
         if (event.button === 1) {
             if (ui.in_mode(UIMode.Pan) && ui.mode.key === null) {
@@ -361,6 +400,17 @@ class Pointer {
         }
 
         const position = ui.position_from_event(event);
+
+        // A dragged checkpoint goes to the cell under the pointer, when that changes.
+        if (this.dragging) {
+            event.preventDefault();
+            const carried = ui.carried?.[0];
+            if (carried !== undefined
+                && !position.eq(new Position(...carried.edge.options.route[carried.index]))) {
+                ui.keys.carry_to(position);
+            }
+            return;
+        }
 
         // Moving cells around with the pointer.
         if (ui.in_mode(UIMode.PointerMove)) {
