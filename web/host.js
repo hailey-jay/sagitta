@@ -402,6 +402,14 @@ if (!("host" in window)) {
                 inputs[0]?.select?.();
             });
 
+        // Keep the page's files to open without a network, and to install as an app (see
+        // `service-worker.js`). Browsers offer service workers only to secure pages.
+        if ("serviceWorker" in navigator) {
+            window.addEventListener("load", () => {
+                navigator.serviceWorker.register("service-worker.js").catch(() => {});
+            });
+        }
+
         // Sagitta is driven by the keyboard, so on a device with only a touch screen little of it
         // works. Say so as the page opens, rather than leave it to be found out.
         if (!matchMedia("(any-pointer: fine)").matches) {

@@ -1866,3 +1866,17 @@ def test_the_last_diagram_reopens_with_its_folder(browser):
     })()""" % PAPER)
     result = browser("""({ title: document.title, macros: host.describe(ui.file.macros) })""")
     assert result == {"title": "square.tikzcd - Sagitta", "macros": "macros.tex"}
+
+
+def test_the_page_keeps_its_files_to_open_offline(browser):
+    result = browser("""(async () => {
+        await navigator.serviceWorker.ready;
+        if (navigator.serviceWorker.controller === null) {
+            await new Promise((resolve) => navigator.serviceWorker
+                .addEventListener("controllerchange", resolve, { once: true }));
+        }
+        await fetch("main.css");
+        const kept = await (await caches.open("sagitta")).match("main.css");
+        return kept !== undefined && (await kept.text()).includes("--ui-black");
+    })()""")
+    assert result

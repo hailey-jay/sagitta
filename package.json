@@ -33,6 +33,8 @@
             "fonts/**",
             "icons/**",
             "icon.png",
+            "icon.svg",
+            "manifest.webmanifest",
             "electron/**",
             "web/**"
         ],
