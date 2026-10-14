@@ -35,12 +35,31 @@ if (!("host" in window)) {
             diagram: [{ description: "tikz-cd diagrams", accept: { "text/plain": [".tikzcd"] } }],
             macros: [{ description: "LaTeX", accept: { "text/plain": [".tex", ".sty"] } }],
         };
-        const ACCEPT = { diagram: ".tikzcd", macros: ".tex,.sty" };
+        /// The extensions of `kind`, as `<input type="file">` takes them.
+        const accept = (kind) => Object.values(TYPES[kind][0].accept).flat().join(",");
 
         const has_api = typeof window.showOpenFilePicker === "function";
 
-        /// Whether `error` is the user dismissing a picker, which is not a failure.
-        const dismissed = (error) => error instanceof DOMException && error.name === "AbortError";
+        /// What `picker` gives, or `null` if the user dismissed it, which is not a failure.
+        const pick = async (picker) => {
+            try {
+                return await picker();
+            } catch (error) {
+                if (error instanceof DOMException && error.name === "AbortError") {
+                    return null;
+                }
+                throw error;
+            }
+        };
+
+        /// Wait for the handle a drop may still be handing over (see `path_of`).
+        const settle = async (entry) => {
+            if (entry?.pending !== undefined) {
+                entry.handle = await entry.pending;
+                delete entry.pending;
+            }
+            return entry;
+        };
 
         /// A file picked with a plain `<input type="file">`, or `null` if the user picked none.
         const pick_with_input = (accept) => new Promise((resolve) => {
@@ -87,6 +106,9 @@ if (!("host" in window)) {
         const watched = new Map();
         const listeners = [];
         setInterval(async () => {
+            if (document.hidden) {
+                return;
+            }
             for (const [path, previous] of watched) {
                 const handle = files.get(path)?.handle;
                 if (handle === undefined || handle === null) {
@@ -233,13 +255,9 @@ if (!("host" in window)) {
             // The file's contents, or `null` if it does not exist, as for a path the page made up
             // that no file stands behind yet.
             read: async (path) => {
-                const entry = files.get(path);
+                const entry = await settle(files.get(path));
                 if (entry === undefined) {
                     return null;
-                }
-                if (entry.pending !== undefined) {
-                    entry.handle = await entry.pending;
-                    delete entry.pending;
                 }
                 if (entry.handle) {
                     return (await entry.handle.getFile()).text();
@@ -252,24 +270,19 @@ if (!("host" in window)) {
             },
 
             write: async (path, text) => {
-                let entry = files.get(path);
-                if (entry?.pending !== undefined) {
-                    entry.handle = await entry.pending;
-                    delete entry.pending;
-                }
+                let entry = await settle(files.get(path));
                 if (!entry?.handle && has_api) {
                     // A path with no file behind it, or a copy: ask where the file goes, and keep
                     // writing there.
-                    try {
-                        const handle = await window.showSaveFilePicker({
-                            suggestedName: basename(path),
-                            types: TYPES.diagram,
-                        });
-                        entry = { handle };
-                        files.set(path, entry);
-                    } catch (error) {
-                        throw dismissed(error) ? new Error("no file was chosen") : error;
+                    const handle = await pick(() => window.showSaveFilePicker({
+                        suggestedName: basename(path),
+                        types: TYPES.diagram,
+                    }));
+                    if (handle === null) {
+                        throw new Error("no file was chosen");
                     }
+                    entry = { handle };
+                    files.set(path, entry);
                 }
                 if (entry?.handle) {
                     await writable(entry.handle);
@@ -296,35 +309,24 @@ if (!("host" in window)) {
 
             open_dialog: async (kind) => {
                 if (has_api) {
-                    try {
-                        const [handle] = await window.showOpenFilePicker({ types: TYPES[kind] });
-                        return register(handle.name, { handle });
-                    } catch (error) {
-                        if (dismissed(error)) {
-                            return null;
-                        }
-                        throw error;
-                    }
+                    const handles = await pick(() => window.showOpenFilePicker({
+                        types: TYPES[kind],
+                    }));
+                    const [handle] = handles ?? [null];
+                    return handle === null ? null : register(handle.name, { handle });
                 }
-                const file = await pick_with_input(ACCEPT[kind]);
+                const file = await pick_with_input(accept(kind));
                 return file === null ? null : register(file.name, { file });
             },
 
             save_dialog: async (default_path) => {
                 const name = default_path === null ? "diagram.tikzcd" : basename(default_path);
                 if (has_api) {
-                    try {
-                        const handle = await window.showSaveFilePicker({
-                            suggestedName: name,
-                            types: TYPES.diagram,
-                        });
-                        return register(handle.name, { handle });
-                    } catch (error) {
-                        if (dismissed(error)) {
-                            return null;
-                        }
-                        throw error;
-                    }
+                    const handle = await pick(() => window.showSaveFilePicker({
+                        suggestedName: name,
+                        types: TYPES.diagram,
+                    }));
+                    return handle === null ? null : register(handle.name, { handle });
                 }
                 const chosen = window.prompt("Download the diagram as", name);
                 return chosen === null || chosen.trim() === ""
