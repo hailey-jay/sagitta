@@ -29,4 +29,6 @@ contextBridge.exposeInMainWorld("host", {
     on_save_and_close: (callback) => ipcRenderer.on("save-and-close", () => callback()),
     // The path of a `File` from a drop, which the page cannot see itself.
     path_of: (file) => webUtils.getPathForFile(file),
+    // How a message names the file at `path`: by its path, which the user can find.
+    describe: (path) => path,
 });

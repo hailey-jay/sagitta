@@ -135,7 +135,7 @@ class DiagramFile {
                 this.load(text);
             }
         } catch (error) {
-            UI.display_error(`Could not open ${path}: ${error.message}`);
+            UI.display_error(`Could not open ${host.describe(path)}: ${error.message}`);
         }
     }
 
@@ -204,7 +204,7 @@ class DiagramFile {
             }
             return true;
         } catch (error) {
-            UI.display_error(`Could not save ${path}: ${error.message}`);
+            UI.display_error(`Could not save ${host.describe(path)}: ${error.message}`);
             return false;
         }
     }
@@ -249,7 +249,7 @@ class DiagramFile {
         }
         const text = await host.read(this.macros);
         if (text === null) {
-            UI.display_error(`${this.macros} does not exist.`);
+            UI.display_error(`${host.describe(this.macros)} does not exist.`);
             return;
         }
         ui.load_macros(text);

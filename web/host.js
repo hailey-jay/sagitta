@@ -356,6 +356,9 @@ if (!("host" in window)) {
             on_changed: (callback) => listeners.push(callback),
             on_save_and_close: () => {},
 
+            // How a message names the file at `path`: by its name, since its path is made up.
+            describe: (path) => path === null ? "the file" : basename(path),
+
             path_of: (file) => {
                 const pending = dropped;
                 dropped = null;
