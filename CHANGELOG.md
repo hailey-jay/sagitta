@@ -1,14 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
-- Sagitta runs in a browser, as a page served from any static host. In Chrome, Edge, and other Chromium browsers, opening a diagram keeps hold of the file, so saving writes it back and a macros file is reloaded when it changes. Other browsers open a copy and save by downloading. In Chromium, `:open-folder` hands over a folder, in which the nearest `macros.tex` is found and relative paths work, and the last diagram and its folder reopen on the next visit, once the user agrees. Elsewhere, macros come from `f` in the macros layer or a dropped `.tex` file. Settings and the keys file live in the browser's storage, and opening the settings file edits both in the page. `npm run web` serves the repository to try it.
+- Sagitta runs in a browser, as a page served from any static host. In Chrome, Edge, and other Chromium browsers, opening a diagram keeps hold of the file, so saving writes it back and a macros file is reloaded when it changes. Other browsers open a copy and save by downloading. In Chromium, `:open-folder` hands over a folder, in which the nearest `macros.tex` is found and relative paths work, and the last diagram and its folder reopen on the next visit, once the user agrees. Elsewhere, macros come from `f` in the macros layer or a dropped `.tex` file. Settings and the keys file live in the browser's storage, and opening the settings file edits both in the page.
 - In a browser, an address ending in `#q=...` opens the diagram it encodes, untitled, as quiver's links do, and so does pasting one into the address bar of the open page. The encoding is a `.tikzcd` file's `%#q=` line.
-- The help (`C-/`) ends with About: the version, the licence, and links to the source, quiver, KaTeX, and `NOTICE`, which open in the desktop's browser from the app. In a browser, it also says that nothing drawn or opened leaves the browser. The desktop packages now carry `LICENSE` and `NOTICE`.
-- In a browser, the page opens without a network once it has loaded, and installs as an app where the browser offers that. It asks in dialogs of its own, rather than the browser's, and a device with no mouse or trackpad is told that little works by touch.
-- Quiver mode, `:quiver-mode` or `q` in the settings layer, keeps the command layer open, so its keys work without `;`, and a label is typed only after RET, as in quiver. Spreadsheet mode, where typing edits the label, stays the default. The choice is `ui.quiver_mode` in the settings.
-- `; k` takes a checkpoint out of the selected arrows that pass through it, rather than adding it to the others when only some do, and with the pointer resting on a checkpoint's ring, it takes out that one, wherever the focus point is.
+- In a browser, the page opens without a network once it has loaded, and installs as an app where the browser offers that. It asks in dialogs of its own, rather than the browser's. A device with no mouse or trackpad is told that little works by touch, and a page served insecurely, where the browser withholds files, says so.
+- `npm run web` serves the repository on 127.0.0.1, which browsers treat as secure, to try the page.
+- Quiver mode, `:quiver-mode` or `q` in the settings layer, keeps the command layer open, so its keys work without `;`, and a label is typed only after RET, as in quiver. The layer's keys are listed only on `;`, though a list of choices, such as after `t`, shows at once. Spreadsheet mode, where typing edits the label, stays the default. The choice is `ui.quiver_mode` in the settings.
 - RET on an empty cell with nothing selected makes a cell there and edits its label, in either mode. It used to do nothing.
+- `; k` takes a checkpoint out of the selected arrows that pass through it, rather than adding it to the others when only some do, and with the pointer resting on a checkpoint's ring, it takes out that one, wherever the focus point is.
+- A key the command layer does not use is kept from the browser, which otherwise acted on it (Firefox's quick find, on `'`).
+- A message about a file names it as the host can best name it: by its path on the desktop, and by its name in a browser.
+- The help (`C-/`) ends with About: the version, the licence, and links to the source, quiver, KaTeX, and `NOTICE`, which open in the desktop's browser from the app. In a browser, it also says that nothing drawn or opened leaves the browser. The desktop packages now carry `LICENSE` and `NOTICE`.
 
 ## 0.3.0
 
