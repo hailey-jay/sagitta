@@ -59,6 +59,12 @@ The commands live one key away:
   The keys file can move it (`mark`, and `mark-add` for a key of its own that adds); Space alone cannot be bound, but its chords can.
   Input methods such as IBus and Fcitx take Control-Space to switch input method, so where one runs, `C-SPC` never reaches Sagitta: bind `mark` to another key in the keys file (`mark C-g`, say, which is free), or change the input method's own key.
 
+Quiver mode (`:quiver-mode`, or `q` in the settings layer) works the other way round, as quiver does.
+The command layer stays open by itself, so its keys work without `;`, and a label is typed only after RET, which edits it in place; RET again, or ESC, puts it down.
+Backspace deletes, as in the layer, and ESC does what it does outside the layer once there is nothing in the layer to let go of.
+The layer's keys are listed only on `;`, never by waiting, though a list of choices, such as after `t`, shows at once.
+`:`, `/`, and the chords work as in spreadsheet mode, the default.
+
 The mouse works too.
 Click a cell to select it, and again to edit its label; click an empty space twice for a new cell; drag from a cell to draw an arrow, by the edge of its space to move it, an arrow's end to reconnect it, and a selected arrow's checkpoint, by its ring, to move it.
 The wheel pans, and zooms with Shift or Control held; dragging with the middle button pans, over a cell as well as over empty space, as does dragging with Control or Option held.
@@ -116,7 +122,7 @@ The names and their defaults:
 | `flip-hor`, `flip-ver`, `rotate` | none |
 | `centre-view`, `hide-grid` | `; z`, `; #` |
 | `zoom-out`, `zoom-in`, `reset-zoom` | `C--`, `C-=`, `C-0` |
-| `dark-mode`, `hide-mode-line`, `shortcuts`, `settings` | none, `C-\`, `C-/` `<f1>`, `C-,` |
+| `dark-mode`, `quiver-mode`, `hide-mode-line`, `shortcuts`, `settings` | none, none, `C-\`, `C-/` `<f1>`, `C-,` |
 | `level`, `curve`, `offset`, `radius`, `length`, `position` | `; n`, `; b` (on loops alone, the radius; on routes alone, the rounding), `; o`, none, `; l`, `; P` |
 | `tail`, `body`, `head` | `; t`, `; d`, `; h` |
 | `arrow`, `adjunction`, `corner` | `; a`, `; j`, `; p` |
@@ -224,6 +230,7 @@ A value the setting cannot take is refused, with what it may be.
 | `diagram.arrow_preset` | `"plain"` | the preset new arrows take, from `plain`, `equals`, `inclusion`, `mono`, `epi`, `maps-to`, `dashed`, `dotted`, and `squiggly` |
 | `ui.dark_mode` | `false` | the grey canvas |
 | `ui.zoom` | `100` | the zoom the view starts at, and `reset-zoom` returns to, in percent (20 to 200) |
+| `ui.quiver_mode` | `false` | quiver mode (see Keys): the command layer's keys without `;`, and RET before typing a label |
 | `ui.cell_size` | `128` | the size of an empty column or row, in pixels (48 to 512) |
 | `ui.label_size` | `26` | the size of labels, in pixels (8 to 72) |
 | `ui.which_key_delay` | `300` | how long `;` waits for a key before listing its keys, in milliseconds (0 to 5000), or `null` for only on `?` |

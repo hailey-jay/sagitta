@@ -56,7 +56,7 @@ class ModeLine {
 
         // The command layer, for the pointer as much as the keys.
         this.element.add(button({ class: "hint layer", title: "Commands (;)" }, "", () => {
-            if (ui.keymap.active) {
+            if (ui.keymap.entered) {
                 ui.keymap.leave();
             } else {
                 ui.keymap.settle();
@@ -314,6 +314,7 @@ class ModeLine {
             ui.grid_canvas.class_list.toggle("hidden");
         });
         this.add_action(ui, "dark-mode", "Dark mode", () => ui.toggle_dark_mode());
+        this.add_action(ui, "quiver-mode", "Quiver mode", () => ui.toggle_quiver_mode());
         this.add_action(ui, "hide-mode-line", "Toggle mode line",
             () => ui.element.class_list.toggle("hide-mode-line"),
         );

@@ -290,6 +290,66 @@ def test_the_var_corner_can_be_chosen_on_its_own(sagitta, home):
     assert "\\ulcorner" in diagram.read_text()
 
 
+def _quiver_mode(home):
+    settings = home / ".config" / "sagitta"
+    settings.mkdir(parents=True, exist_ok=True)
+    (settings / "settings.json").write_text('{"ui.quiver_mode": true}\n')
+
+
+def test_spreadsheet_mode_types_straight_into_the_label(sagitta, home):
+    diagram = _diagram(home / "paper")
+    sagitta("typing", diagram, json.dumps(["x", "Enter"]))
+    assert "\tx & B" in diagram.read_text()
+
+
+def test_quiver_mode_types_only_after_return(sagitta, home):
+    _quiver_mode(home)
+    diagram = _diagram(home / "paper")
+    # `x` is the layer's crossing over, which wants an arrow, rather than a label.
+    result = sagitta("typing", diagram, json.dumps(["x"]), expected_error="Select an arrow first")
+    assert result["mode_line"].startswith(";")
+    assert not result["editing"]
+    assert "\tA & B" in diagram.read_text()
+    result = sagitta("typing", diagram, json.dumps(["Enter", "x", "Enter"]))
+    assert result["mode_line"].startswith(";")
+    assert "\tAx & B" in diagram.read_text()
+
+
+def test_quiver_mode_keeps_the_command_layer_open(sagitta, home):
+    """The layer's keys work without `;`, and Escape still deselects."""
+    _quiver_mode(home)
+    diagram = _diagram(home / "paper")
+    sagitta("keys", diagram, json.dumps([["x"]]))
+    assert '\\arrow["f", crossing over, from=1-1' in diagram.read_text()
+    result = sagitta("keys", diagram, json.dumps([["Escape"]]))
+    assert result["counts"]["selected"] == 0
+    assert result["mode_line"].startswith(";")
+
+
+@pytest.mark.parametrize("quiver,keys,main,submenu", [
+    # Spreadsheet mode lists the keys after a pause, as it always has.
+    (False, [";"], True, False),
+    (False, [";", "t"], False, True),
+    # Quiver mode lists them only on `;`, though a component's choices show at once.
+    (True, [], False, False),
+    (True, ["b"], False, False),
+    (True, ["t"], False, True),
+    (True, [";"], True, False),
+    (True, [";", ";"], False, False),
+])
+def test_the_command_list_shows(sagitta, home, quiver, keys, main, submenu):
+    if quiver:
+        _quiver_mode(home)
+    result = sagitta("lists", _diagram(home / "paper"), json.dumps(keys))
+    assert result == {"main": main, "submenu": submenu}
+
+
+def test_quiver_mode_command_switches_it(sagitta, home):
+    sagitta("commands", _diagram(home / "paper"), json.dumps(["quiver-mode"]))
+    settings = json.loads((home / ".config" / "sagitta" / "settings.json").read_text())
+    assert settings["ui.quiver_mode"] is True
+
+
 def test_the_corner_takes_the_kind_last_used(sagitta, home):
     settings = home / ".config" / "sagitta"
     settings.mkdir(parents=True)

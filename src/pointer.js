@@ -41,7 +41,7 @@ class Pointer {
             || !ui.in_mode(UIMode.Default)) {
             return;
         }
-        if (!ui.keymap.active) {
+        if (!ui.keymap.entered) {
             ui.keymap.settle();
             ui.keymap.enter(true);
         }
