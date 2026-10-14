@@ -151,6 +151,9 @@ class ModeLine {
         this.add_action(ui, "save-as", "Save as", () => ui.file.save_as());
         this.add_action(ui, "open", "Open", () => ui.file.open());
         this.add_action(ui, "new", "New", () => ui.file.new_diagram());
+        // Only a host that sees no directory it is not handed (a browser) needs a folder.
+        this.add_action(ui, "open-folder", "Open folder", () => ui.file.open_folder(),
+            () => typeof host.open_folder === "function");
 
         this.add_action(ui, "undo", "Undo",
             () => ui.history.undo(ui),

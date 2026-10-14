@@ -10,6 +10,11 @@
 /// saving writes it back and changes made elsewhere are noticed. Elsewhere, opening reads a copy,
 /// and saving downloads one.
 ///
+/// A folder handed over (`open_folder`) is a directory `/<n>` too, but one whose files are found by
+/// name, so that relative paths and the `macros.tex` search work inside it, and saving to a new
+/// name there needs no picker. The folder, and the diagram last opened or saved, are kept between
+/// visits, and reopened once the user agrees, which the browser asks before giving access again.
+///
 /// Settings and the keys file live in the browser's storage, and `open_settings` edits both in the
 /// page.
 if (!("host" in window)) {
@@ -81,14 +86,127 @@ if (!("host" in window)) {
             setTimeout(() => URL.revokeObjectURL(url), 0);
         };
 
+        // The folder the user handed over, as `{ path, handle }`, or `null`.
+        let folder = null;
+
+        /// `path` with its `.` and `..` segments followed.
+        const normalise = (path) => {
+            const segments = [];
+            for (const segment of path.split("/")) {
+                if (segment === "..") {
+                    segments.pop();
+                } else if (segment !== "" && segment !== ".") {
+                    segments.push(segment);
+                }
+            }
+            return `/${segments.join("/")}`;
+        };
+
+        const dirname = (path) => path.slice(0, path.lastIndexOf("/")) || "/";
+
+        /// Whether `path` is in the folder.
+        const inside = (path) => folder !== null
+            && (path === folder.path || path.startsWith(`${folder.path}/`));
+
+        /// The handle of the directory at `path` in the folder, or of the file, made if `create`,
+        /// or `null` if there is none.
+        const lookup = async (path, directory, create = false) => {
+            const segments = path.slice(folder.path.length + 1).split("/").filter(Boolean);
+            const name = directory ? null : segments.pop();
+            try {
+                let handle = folder.handle;
+                for (const segment of segments) {
+                    handle = await handle.getDirectoryHandle(segment);
+                }
+                return directory ? handle : await handle.getFileHandle(name, { create });
+            } catch (error) {
+                if (["NotFoundError", "TypeMismatchError"].includes(error.name)) {
+                    return null;
+                }
+                throw error;
+            }
+        };
+
+        /// The path of the file `handle`: where it is in the folder, if it is, so that its
+        /// neighbours can be found, or else one of its own.
+        const path_for = async (handle) => {
+            const segments = folder === null ? null : await folder.handle.resolve(handle);
+            if (segments === null) {
+                return register(handle.name, { handle });
+            }
+            const path = [folder.path, ...segments].join("/");
+            files.set(path, { handle });
+            return path;
+        };
+
+        // The folder and the last diagram's handle, kept in IndexedDB, which can hold handles
+        // where `localStorage` cannot. Failing to keep them only loses the reopening.
+        const handles = async (mode, act) => {
+            const database = await new Promise((resolve, reject) => {
+                const request = indexedDB.open("sagitta", 1);
+                request.onupgradeneeded = () => request.result.createObjectStore("handles");
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+            return new Promise((resolve, reject) => {
+                const transaction = database.transaction("handles", mode);
+                const request = act(transaction.objectStore("handles"));
+                transaction.oncomplete = () => resolve(request.result);
+                transaction.onerror = () => reject(transaction.error);
+            });
+        };
+        const recall = (key) => handles("readonly", (store) => store.get(key))
+            .catch(() => undefined);
+        const keep = (key, handle) => handles("readwrite", (store) => store.put(handle, key))
+            .catch(() => {});
+
+        /// Whether the page may read and write through `handle`, asking if `ask`, which needs the
+        /// user to have just pressed something.
+        const allowed = async (handle, ask) => {
+            const mode = { mode: "readwrite" };
+            return await handle.queryPermission(mode) === "granted"
+                || ask && await handle.requestPermission(mode) === "granted";
+        };
+
         /// Ask for leave to write through `handle`, which a file picked for opening lacks at first.
         const writable = async (handle) => {
-            const mode = { mode: "readwrite" };
-            if (await handle.queryPermission(mode) !== "granted"
-                && await handle.requestPermission(mode) !== "granted"
-            ) {
+            if (!await allowed(handle, true)) {
                 throw new Error("the browser was not allowed to write it");
             }
+        };
+
+        /// The folder and the diagram kept from the last visit, as `{ folder, last }`, with the
+        /// folder `null` if it was not kept or the browser refused it, once the user has agreed
+        /// to reopen them, where the browser needs asking; or `null`.
+        const reopen = async () => {
+            const [kept_folder = null, last] = await Promise.all(
+                [recall("folder"), recall("last")]);
+            if (last === undefined) {
+                return null;
+            }
+            // Access to the folder covers the diagram in it. The folder comes first.
+            const covers = kept_folder !== null
+                && await kept_folder.resolve(last).catch(() => null) !== null;
+            const needed = covers ? [kept_folder] : [kept_folder, last].filter(Boolean);
+            let access = await Promise.all(needed.map((handle) => allowed(handle, false)));
+            if (!access.every(Boolean)) {
+                const { value } = await ask({
+                    message: `Reopen ${last.name}${covers ? ` in ${kept_folder.name}` : ""}?`,
+                    buttons: [["Reopen", true], ["Not now", false]],
+                });
+                if (!value) {
+                    return null;
+                }
+                // The click lets each handle ask, which the browser does one at a time.
+                access = [];
+                for (const handle of needed) {
+                    access.push(await allowed(handle, true));
+                }
+            }
+            if (!access.at(-1)) {
+                return null;
+            }
+            return { folder: kept_folder !== null && access[0] ? kept_folder : null, last };
         };
 
         // A drop hands over a `File`, and, in Chromium, a handle to it, but only while the drop
@@ -312,22 +430,49 @@ if (!("host" in window)) {
             }
         };
 
-        return {
-            // There is no command line. A diagram or macros file comes from a picker or a drop.
-            arguments: async () => ({ diagram: null, macros: null }),
-
-            resolve: async (base, file) => {
-                if (file.startsWith("/")) {
-                    return file;
+        /// What `path` stands for, as `files` holds it, looking it up in the folder, and making the
+        /// file there if `create`, when it is not held yet; or `undefined`.
+        const entry_for = async (path, create = false) => {
+            if (!files.has(path) && inside(path)) {
+                const handle = await lookup(path, false, create);
+                if (handle !== null) {
+                    files.set(path, { handle });
                 }
-                const directory = base ?? `/${++next}`;
-                return `${directory.replace(/\/$/, "")}/${file}`;
+            }
+            return settle(files.get(path));
+        };
+
+        /// Hand over the folder `handle`, keeping it for the next visit if `keep_it`. Returns its
+        /// path.
+        const use_folder = (handle, keep_it) => {
+            folder = { path: `/${++next}`, handle };
+            if (keep_it) {
+                keep("folder", handle);
+            }
+            return folder.path;
+        };
+
+        const host = {
+            // There is no command line. The diagram comes from the last visit, a picker, or a drop.
+            arguments: async () => {
+                const kept = has_api ? await reopen() : null;
+                if (kept === null) {
+                    return { diagram: null, macros: null };
+                }
+                if (kept.folder !== null) {
+                    use_folder(kept.folder, false);
+                }
+                return { diagram: await path_for(kept.last), macros: null };
             },
+
+            resolve: async (base, file) => normalise(file.startsWith("/")
+                ? file
+                : `${base ?? folder?.path ?? `/${++next}`}/${file}`),
 
             // The file's contents, or `null` if it does not exist, as for a path the page made up
             // that no file stands behind yet.
             read: async (path) => {
-                const entry = await settle(files.get(path));
+                const entry = await entry_for(path);
                 if (entry === undefined) {
                     return null;
                 }
@@ -342,7 +487,7 @@ if (!("host" in window)) {
             },
 
             write: async (path, text) => {
-                let entry = await settle(files.get(path));
+                let entry = await entry_for(path, true);
                 if (!entry?.handle && has_api) {
                     // A path with no file behind it, or a copy: ask where the file goes, and keep
                     // writing there.
@@ -376,16 +521,35 @@ if (!("host" in window)) {
                 return "";
             },
 
-            // No directory is handed over, so there is no nearest `macros.tex` to find.
-            find_up: async () => null,
+            // The nearest file called `name` in `directory` or its ancestors, as the desktop shell
+            // finds it, but only in the folder, which ends the search as the home directory does.
+            find_up: async (directory, name) => {
+                if (directory === null || !inside(directory)) {
+                    return null;
+                }
+                for (let current = directory; ; current = dirname(current)) {
+                    const handle = await lookup(current, true);
+                    const found = await handle?.getFileHandle(name).catch(() => null);
+                    if (found) {
+                        const path = `${current}/${name}`;
+                        files.set(path, { handle: found });
+                        return path;
+                    }
+                    const root = await handle?.getDirectoryHandle(".git").catch(() => null);
+                    if (root || current === folder.path) {
+                        return null;
+                    }
+                }
+            },
 
             open_dialog: async (kind) => {
                 if (has_api) {
                     const handles = await pick(() => window.showOpenFilePicker({
                         types: TYPES[kind],
+                        startIn: folder?.handle,
                     }));
                     const [handle] = handles ?? [null];
-                    return handle === null ? null : register(handle.name, { handle });
+                    return handle === null ? null : path_for(handle);
                 }
                 const file = await pick_with_input(accept(kind));
                 return file === null ? null : register(file.name, { file });
@@ -397,8 +561,9 @@ if (!("host" in window)) {
                     const handle = await pick(() => window.showSaveFilePicker({
                         suggestedName: name,
                         types: TYPES.diagram,
+                        startIn: folder?.handle,
                     }));
-                    return handle === null ? null : register(handle.name, { handle });
+                    return handle === null ? null : path_for(handle);
                 }
                 const { value, fields: [chosen] } = await ask({
                     fields: [["Download the diagram as", name, false]],
@@ -442,6 +607,26 @@ if (!("host" in window)) {
                 dropped = null;
                 return register(file.name, pending === null ? { file } : { file, pending });
             },
+
+            // The diagram at `path` was opened or saved: keep its handle, to reopen next visit.
+            opened: async (path) => {
+                const handle = (await settle(files.get(path)))?.handle;
+                if (handle) {
+                    keep("last", handle);
+                }
+            },
         };
+        if (has_api) {
+            /// Ask for a folder to find files in by name, as the desktop finds them on disk.
+            /// Returns its path, or `null` if none was chosen.
+            host.open_folder = async () => {
+                const handle = await pick(() => window.showDirectoryPicker({
+                    mode: "readwrite",
+                    startIn: folder?.handle,
+                }));
+                return handle === null ? null : use_folder(handle, true);
+            };
+        }
+        return host;
     })();
 }

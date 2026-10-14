@@ -247,6 +247,7 @@ Bindings.DEFAULTS = {
     "save-as": ["C-S-s"],
     "open": ["C-o"],
     "new": ["C-n"],
+    "open-folder": [],
     "undo": ["C-z"],
     "redo": ["C-S-z"],
     "select-all": ["C-a"],

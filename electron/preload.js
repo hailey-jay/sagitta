@@ -31,4 +31,7 @@ contextBridge.exposeInMainWorld("host", {
     path_of: (file) => webUtils.getPathForFile(file),
     // How a message names the file at `path`: by its path, which the user can find.
     describe: (path) => path,
+    // The diagram at `path` was opened or saved. A browser keeps it to reopen; the desktop has
+    // the command line and its own recent files for that.
+    opened: () => {},
 });

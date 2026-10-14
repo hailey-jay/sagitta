@@ -113,7 +113,7 @@ The names and their defaults:
 | Names | Defaults |
 |---|---|
 | `import`, `export`, `macros` | `C-i`, `C-e`, `C-m` |
-| `save`, `save-as`, `open`, `new` | `C-s`, `C-S-s`, `C-o`, `C-n` |
+| `save`, `save-as`, `open`, `new`, `open-folder` | `C-s`, `C-S-s`, `C-o`, `C-n`, none (in a browser only) |
 | `undo`, `redo` | `C-z`, `C-S-z` |
 | `select-all`, `select-connected`, `deselect-all` | `C-a`, `C-S-c`, `C-S-a` |
 | `copy`, `cut`, `paste` | `C-c`, `C-x`, `C-v` |

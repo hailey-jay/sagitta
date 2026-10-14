@@ -51,7 +51,9 @@ Run `npm run web` in a clone and open <http://localhost:8000>, or serve the repo
 
 Chromium browsers (Chrome, Edge, Brave) open and save the diagram file in place, as the desktop app does.
 Firefox and Safari open a copy, and saving downloads the diagram.
-A page sees no directories, so the nearest `macros.tex` is not found on its own: take macros from `f` in the macros layer, or drop a `.tex` file on the page.
+A page sees only the folders it is given, so in Chromium, `:open-folder` hands over the paper's folder: opening a diagram from it then finds the nearest `macros.tex`, as the desktop app does, and relative paths work inside it.
+Without a folder, or in Firefox and Safari, take macros from `f` in the macros layer, or drop a `.tex` file on the page.
+Chromium also reopens the last diagram, and its folder, on the next visit, once you agree.
 Settings and the keys file live in the browser's storage, and opening the settings file (`o` in the settings layer) edits both.
 The browser keeps `C-n` for itself, so start a new diagram with `:new`.
 

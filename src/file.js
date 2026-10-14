@@ -122,6 +122,7 @@ class DiagramFile {
             const text = await host.read(path);
             this.path = path;
             this.base = this.directory();
+            host.opened(path);
             if (!this.chosen) {
                 await this.use_macros(await host.find_up(this.directory(), "macros.tex"), false,
                     false);
@@ -196,6 +197,7 @@ class DiagramFile {
             const moved = DiagramFile.dirname(path) !== this.directory();
             this.path = path;
             this.base = this.directory();
+            host.opened(path);
             this.mark_saved(text);
             this.ui.mode_line.flash(`wrote ${this.name()}`);
             // A diagram saved somewhere new takes that project's macros.
@@ -206,6 +208,27 @@ class DiagramFile {
         } catch (error) {
             UI.display_error(`Could not save ${host.describe(path)}: ${error.message}`);
             return false;
+        }
+    }
+
+    /// Ask for a folder to find files in, where the host only sees what it is handed (a browser).
+    /// An untitled diagram then saves there, and takes its `macros.tex`.
+    async open_folder() {
+        try {
+            const folder = await host.open_folder();
+            if (folder === null) {
+                return;
+            }
+            if (this.path === null) {
+                this.base = folder;
+                if (!this.chosen) {
+                    await this.use_macros(await host.find_up(folder, "macros.tex"), false, false);
+                }
+            }
+            this.ui.mode_line.flash(`opened the folder${this.path === null
+                ? this.describe_macros() : ""}`);
+        } catch (error) {
+            UI.display_error(`Could not open the folder: ${error.message}`);
         }
     }
 

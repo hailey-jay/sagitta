@@ -1734,7 +1734,9 @@ def browser(site, home):
         assert lines, f"no result:\n{completed.stdout}\n{completed.stderr}"
         output = json.loads(lines[-1][len("RESULT "):])
         assert output["errors"] == []
-        return (output["result"], output["notice"]) if notice else output["result"]
+        # A script returning nothing leaves `result` out.
+        result = output.get("result")
+        return (result, output["notice"]) if notice else result
 
     return run
 
@@ -1813,3 +1815,54 @@ def test_the_settings_are_edited_in_the_page(browser):
         };
     })()""")
     assert result == {"fields": 2, "zoom": 150, "mode_line": True}
+
+
+# The origin's private file system stands in for a folder on disk: its handles need no picker, and
+# the browser grants them without asking. `PAPER` lays out a paper in it, with `macros.tex` at the
+# top, a `.git` beside it, and a diagram a directory down, and hands it over as the picker would.
+PAPER = """
+    const root = await navigator.storage.getDirectory();
+    const paper = await root.getDirectoryHandle("paper", { create: true });
+    await paper.getDirectoryHandle(".git", { create: true });
+    const write = async (directory, name, text) => {
+        const stream = await (await directory.getFileHandle(name, { create: true }))
+            .createWritable();
+        await stream.write(text);
+        await stream.close();
+    };
+    await write(paper, "macros.tex", String.raw`\\newcommand{\\C}{\\mathbb{C}}`);
+    const figures = await paper.getDirectoryHandle("figures", { create: true });
+    await write(figures, "square.tikzcd", %s);
+    const diagram = await figures.getFileHandle("square.tikzcd");
+    window.showDirectoryPicker = async () => paper;
+    window.showOpenFilePicker = async () => [diagram];
+    const read = async (directory, name) => (await (await directory.getFileHandle(name))
+        .getFile()).text();
+""" % json.dumps(SQUARE)
+
+
+def test_a_folder_finds_macros_and_relative_paths(browser):
+    result = browser("""(async () => {
+        %s
+        await ui.file.open_folder();
+        await ui.file.open();
+        const opened = { title: document.title, macros: host.describe(ui.file.macros),
+            defined: ui.macros.has("\\\\C") };
+        // A relative name saves beside the diagram, with no picker.
+        await ui.file.save("../copy.tikzcd");
+        return { ...opened, copy: (await read(paper, "copy.tikzcd")).includes("A & B") };
+    })()""" % PAPER)
+    assert result == {"title": "square.tikzcd - Sagitta", "macros": "macros.tex", "defined": True,
+                      "copy": True}
+
+
+def test_the_last_diagram_reopens_with_its_folder(browser):
+    browser("""(async () => {
+        %s
+        await ui.file.open_folder();
+        await ui.file.open();
+        // Keeping the handles is not awaited by the page.
+        await new Promise((resolve) => setTimeout(resolve, 200));
+    })()""" % PAPER)
+    result = browser("""({ title: document.title, macros: host.describe(ui.file.macros) })""")
+    assert result == {"title": "square.tikzcd - Sagitta", "macros": "macros.tex"}
