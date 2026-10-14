@@ -43,6 +43,7 @@ class DiagramFile {
                 this.load_macros();
             }
         });
+        host.on_link((link) => this.open_link(link));
         host.on_save_and_close(async () => {
             if (await this.save()) {
                 host.close();
@@ -63,12 +64,14 @@ class DiagramFile {
             }
         });
 
-        const { diagram, macros } = await host.arguments();
+        const { diagram, macros, link } = await host.arguments();
         if (macros !== null) {
             await this.use_macros(macros, true);
         }
         if (diagram !== null) {
             await this.open(diagram, true);
+        } else if (link !== null) {
+            await this.open_link(link, true);
         } else {
             this.mark_saved();
         }
@@ -122,6 +125,7 @@ class DiagramFile {
             const text = await host.read(path);
             this.path = path;
             this.base = this.directory();
+            host.opened(path);
             if (!this.chosen) {
                 await this.use_macros(await host.find_up(this.directory(), "macros.tex"), false,
                     false);
@@ -135,8 +139,29 @@ class DiagramFile {
                 this.load(text);
             }
         } catch (error) {
-            UI.display_error(`Could not open ${path}: ${error.message}`);
+            UI.display_error(`Could not open ${host.describe(path)}: ${error.message}`);
         }
+    }
+
+    /// Open the diagram a link encodes, as quiver's `#q=...` does, untitled and so unsaved, keeping
+    /// the macros. Unless `force`, asks before discarding unsaved changes.
+    async open_link(encoding, force = false) {
+        const ui = this.ui;
+        if (!force && this.dirty && !await host.confirm(`Discard the changes to ${this.name()}?`)) {
+            return;
+        }
+        this.path = null;
+        ui.reset();
+        DiagramFile.restore_sep(ui, "");
+        this.mark_saved();
+        try {
+            QuiverImportExport.base64.import(ui, encoding);
+            ui.mode_line.flash(`opened a link${this.describe_macros()}`);
+        } catch (error) {
+            ui.reset();
+            UI.display_error(`Could not open the link: ${error.message}`);
+        }
+        ui.mode_line.update(ui);
     }
 
     /// Start an untitled diagram, keeping the macros, asking before discarding unsaved changes.
@@ -196,6 +221,7 @@ class DiagramFile {
             const moved = DiagramFile.dirname(path) !== this.directory();
             this.path = path;
             this.base = this.directory();
+            host.opened(path);
             this.mark_saved(text);
             this.ui.mode_line.flash(`wrote ${this.name()}`);
             // A diagram saved somewhere new takes that project's macros.
@@ -204,8 +230,29 @@ class DiagramFile {
             }
             return true;
         } catch (error) {
-            UI.display_error(`Could not save ${path}: ${error.message}`);
+            UI.display_error(`Could not save ${host.describe(path)}: ${error.message}`);
             return false;
+        }
+    }
+
+    /// Ask for a folder to find files in, where the host only sees what it is handed (a browser).
+    /// An untitled diagram then saves there, and takes its `macros.tex`.
+    async open_folder() {
+        try {
+            const folder = await host.open_folder();
+            if (folder === null) {
+                return;
+            }
+            if (this.path === null) {
+                this.base = folder;
+                if (!this.chosen) {
+                    await this.use_macros(await host.find_up(folder, "macros.tex"), false, false);
+                }
+            }
+            this.ui.mode_line.flash(`opened the folder${this.path === null
+                ? this.describe_macros() : ""}`);
+        } catch (error) {
+            UI.display_error(`Could not open the folder: ${error.message}`);
         }
     }
 
@@ -249,7 +296,7 @@ class DiagramFile {
         }
         const text = await host.read(this.macros);
         if (text === null) {
-            UI.display_error(`${this.macros} does not exist.`);
+            UI.display_error(`${host.describe(this.macros)} does not exist.`);
             return;
         }
         ui.load_macros(text);

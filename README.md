@@ -1,10 +1,10 @@
 # Sagitta
 
-Sagitta is a keyboard-driven editor for tikz-cd commutative diagrams, grown from my personal tweaks to [quiver](https://q.uiver.app) and run as a desktop app on Electron.
+Sagitta is a keyboard-driven editor for tikz-cd commutative diagrams, grown from my personal tweaks to [quiver](https://q.uiver.app), and run as a desktop app on Electron or as a web page.
 It edits `.tikzcd` files that a paper `\input`s directly.
 
 Status: I use Sagitta daily on Linux.
-The Windows packages are new, and less tested than the Linux ones.
+The Windows packages and the web page are new, and less tested than the Linux app.
 The file format and keys may still change before 1.0.
 
 ## Install
@@ -43,6 +43,21 @@ Choose "More info", then "Run anyway".
 Settings and the keys file live in `%APPDATA%\sagitta`, rather than `~/.config/sagitta`.
 
 A windowed program on Windows has no console, so `--help` and `--version` open a dialog instead of printing.
+
+### In a browser
+
+Sagitta also runs as a web page.
+Run `npm run web` in a clone and open <http://127.0.0.1:8000>, or serve the repository from any static host.
+
+Chromium browsers (Chrome, Edge, Brave) open and save the diagram file in place, as the desktop app does.
+Firefox and Safari open a copy, and saving downloads the diagram.
+A page sees only the folders it is given, so in Chromium, `:open-folder` hands over the paper's folder: opening a diagram from it then finds the nearest `macros.tex`, as the desktop app does, and relative paths work inside it.
+Without a folder, or in Firefox and Safari, take macros from `f` in the macros layer, or drop a `.tex` file on the page.
+Chromium also reopens the last diagram, and its folder, on the next visit, once you agree.
+A link ending in `#q=...`, as quiver's do, opens the diagram it encodes, untitled; the encoding is the same as a `.tikzcd` file's `%#q=` line, so the page's address with a file's line after `#q=` opens that diagram.
+Once loaded, the page opens without a network, and browsers that install web apps (Chrome and Edge, or Safari's Add to Dock) can install it to run in a window of its own.
+Settings and the keys file live in the browser's storage, and opening the settings file (`o` in the settings layer) edits both.
+The browser keeps `C-n` for itself, so start a new diagram with `:new`.
 
 ### From source
 

@@ -11,18 +11,25 @@ opening and saving must not change them, and hand edits must win over the encode
 HOME and XDG_CONFIG_HOME point into `tmp_path` for every run, so Sagitta's settings and its
 `macros.tex` search never see the real home directory. The headless clipboard is Chromium's
 own, not the desktop's, so the clipboard scenarios leave the real one alone.
+
+The browser tests serve the repository over HTTP instead, and load it in a window with no preload
+(`tests/sagitta/browser.js`), so that the page runs on `web/host.js`, as it would in a browser.
 """
 
+import functools
+import http.server
 import json
 import os
 import shutil
 import stat
 import subprocess
+import threading
 
 import pytest
 
 _APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _DRIVER = os.path.join(_APP, "tests", "sagitta", "driver.js")
+_BROWSER = os.path.join(_APP, "tests", "sagitta", "browser.js")
 
 
 def _electron():
@@ -290,6 +297,101 @@ def test_the_var_corner_can_be_chosen_on_its_own(sagitta, home):
     assert "\\ulcorner" in diagram.read_text()
 
 
+def _quiver_mode(home):
+    settings = home / ".config" / "sagitta"
+    settings.mkdir(parents=True, exist_ok=True)
+    (settings / "settings.json").write_text('{"ui.quiver_mode": true}\n')
+
+
+def test_spreadsheet_mode_types_straight_into_the_label(sagitta, home):
+    diagram = _diagram(home / "paper")
+    sagitta("typing", diagram, json.dumps(["x", "Enter"]))
+    assert "\tx & B" in diagram.read_text()
+
+
+def test_quiver_mode_types_only_after_return(sagitta, home):
+    _quiver_mode(home)
+    diagram = _diagram(home / "paper")
+    # `x` is the layer's crossing over, which wants an arrow, rather than a label.
+    result = sagitta("typing", diagram, json.dumps(["x"]), expected_error="Select an arrow first")
+    assert result["mode_line"].startswith(";")
+    assert not result["editing"]
+    assert "\tA & B" in diagram.read_text()
+    result = sagitta("typing", diagram, json.dumps(["Enter", "x", "Enter"]))
+    assert result["mode_line"].startswith(";")
+    assert "\tAx & B" in diagram.read_text()
+
+
+def test_quiver_mode_keeps_the_command_layer_open(sagitta, home):
+    """The layer's keys work without `;`, and Escape still deselects."""
+    _quiver_mode(home)
+    diagram = _diagram(home / "paper")
+    sagitta("keys", diagram, json.dumps([["x"]]))
+    assert '\\arrow["f", crossing over, from=1-1' in diagram.read_text()
+    result = sagitta("keys", diagram, json.dumps([["Escape"]]))
+    assert result["counts"]["selected"] == 0
+    assert result["mode_line"].startswith(";")
+
+
+@pytest.mark.parametrize("quiver,keys,main,submenu", [
+    # Spreadsheet mode lists the keys after a pause, as it always has.
+    (False, [";"], True, False),
+    (False, [";", "t"], False, True),
+    # Quiver mode lists them only on `;`, though a component's choices show at once.
+    (True, [], False, False),
+    (True, ["b"], False, False),
+    (True, ["t"], False, True),
+    (True, [";"], True, False),
+    (True, [";", ";"], False, False),
+])
+def test_the_command_list_shows(sagitta, home, quiver, keys, main, submenu):
+    if quiver:
+        _quiver_mode(home)
+    result = sagitta("lists", _diagram(home / "paper"), json.dumps(keys))
+    assert result == {"main": main, "submenu": submenu}
+
+
+@pytest.mark.parametrize("quiver", [False, True])
+def test_a_key_the_command_layer_does_not_use_is_kept_from_the_browser(sagitta, home, quiver):
+    """Firefox's quick find takes `'` otherwise."""
+    if quiver:
+        _quiver_mode(home)
+    script = """(() => {
+        if (!ui.keymap.active) {
+            ui.keymap.enter();
+        }
+        const event = new KeyboardEvent("keydown", { key: "'", cancelable: true });
+        document.dispatchEvent(event);
+        return event.defaultPrevented;
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script)
+
+
+@pytest.mark.parametrize("quiver", [False, True])
+def test_return_on_an_empty_cell_makes_one_to_label(sagitta, home, quiver):
+    if quiver:
+        _quiver_mode(home)
+    diagram = _diagram(home / "paper")
+    result = sagitta("typing", diagram, json.dumps(["Right", "Right", "Enter", "E", "Enter"]))
+    assert result["counts"]["vertices"] == 5
+    assert "& B & E" in diagram.read_text()
+
+
+def test_return_with_a_selection_still_edits_it(sagitta, home):
+    """The focus point on an empty cell leaves a selection's label to RET, as it always has."""
+    diagram = _diagram(home / "paper")
+    result = sagitta("typing", diagram, json.dumps(
+        [["Space", ["shift"]], "Right", "Right", "Enter", "x", "Enter"]))
+    assert result["counts"]["vertices"] == 4
+    assert "\tAx & B" in diagram.read_text()
+
+
+def test_quiver_mode_command_switches_it(sagitta, home):
+    sagitta("commands", _diagram(home / "paper"), json.dumps(["quiver-mode"]))
+    settings = json.loads((home / ".config" / "sagitta" / "settings.json").read_text())
+    assert settings["ui.quiver_mode"] is True
+
+
 def test_the_corner_takes_the_kind_last_used(sagitta, home):
     settings = home / ".config" / "sagitta"
     settings.mkdir(parents=True)
@@ -415,9 +517,9 @@ def test_the_help_layer_lists_every_binding(sagitta, home):
     """Its lines come from the bindings and actions themselves, and from `Keymap.HELP_ELSEWHERE`
     for the keys handled elsewhere."""
     help = dict(sagitta("help", _diagram(home / "paper")))
-    assert list(help) == ["Typing", "Moving", "Mouse", "Layers", "Chords", "Help"]
+    assert list(help) == ["Typing", "Moving", "Mouse", "Layers", "Chords", "Help", "About"]
     assert help["Typing"][0] == ["a \\ 2 …", "replace the label"]
-    assert ["RET", "edit the label in place"] in help["Typing"]
+    assert ["RET", "edit the label in place, or label a new cell"] in help["Typing"]
     assert ["<delete>", "delete"] in help["Typing"]
     assert help["Moving"][0] == ["arrows", "move the focus point"]
     assert help["Mouse"][0] == ["click", "select; again to edit the label"]
@@ -1087,6 +1189,33 @@ def test_checkpoints_are_added_at_the_focus_point(sagitta, home):
     assert again["edges"][0]["route"] == [[0, 2]]
 
 
+FORK = """\
+\\begin{tikzcd}
+\tP \\arrow[dr] \\arrow[drr] & & \\\\
+\t& Q & R
+\\end{tikzcd}
+"""
+
+
+def test_a_checkpoint_comes_out_of_the_arrows_that_have_it(sagitta, home):
+    """With several arrows selected, a cell only some pass through is taken out of those, rather
+    than added to the rest."""
+    diagram = _diagram(home / "fork", FORK, "fork.tikzcd")
+    first = ("const [edge] = ui.quiver.all_cells().filter((cell) => cell.is_edge());"
+             " edge.options.route = [[0, 1]]; edge.render(ui);")
+    result = sagitta("route", diagram, json.dumps([{"js": first}, [0, 1], "checkpoint"]))
+    assert [edge["route"] for edge in result["edges"]] == [[], []]
+
+
+def test_k_takes_out_the_checkpoint_under_the_pointer(sagitta, home):
+    """Wherever the focus point is."""
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    result = sagitta("route", diagram, json.dumps(
+        ["route x", [0, 1], {"hover": 0}, {"keys": [[";"], ["k"]]}]))
+    assert result["edges"][0]["route"] == []
+    assert "checkpoint removed" in result["flashed"]
+
+
 def test_checkpoint_has_a_key_in_the_layer(sagitta, home):
     diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
     result = sagitta("route", diagram, json.dumps(
@@ -1567,3 +1696,256 @@ def test_source_parses(source):
         [node, "--check", os.path.join(_APP, source)], capture_output=True, text=True,
         check=False)
     assert completed.returncode == 0, completed.stderr
+
+
+# ── In a browser ──────────────────────────────────────────────────────────────
+
+
+class _QuietHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *_):
+        pass
+
+
+@pytest.fixture(scope="module")
+def site():
+    """The repository, served over HTTP on a free port, as a static host would serve it."""
+    handler = functools.partial(_QuietHandler, directory=_APP)
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_address[1]}/"
+    server.shutdown()
+
+
+@pytest.fixture
+def browser(site, home):
+    """Evaluate a script in the page, served from `site` at `hash`, returning what it returns,
+    or, if `notice`, that and the text of the notice the page opened on its own (see
+    `browser.js`), or `None`. Fails on any page error but one with `expected_error` in it, as
+    `sagitta` does."""
+
+    def run(script, notice=False, hash="", expected_error=None):
+        env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"))
+        command = [electron, "--ozone-platform=headless", _BROWSER, site + hash, script]
+        if os.environ.get("CI"):
+            command.insert(1, "--no-sandbox")
+        completed = subprocess.run(
+            command, env=env, capture_output=True, text=True, timeout=60, check=False)
+        lines = [line for line in completed.stdout.splitlines() if line.startswith("RESULT ")]
+        assert lines, f"no result:\n{completed.stdout}\n{completed.stderr}"
+        output = json.loads(lines[-1][len("RESULT "):])
+        errors = output["errors"]
+        if expected_error is not None:
+            assert [error for error in errors if expected_error in error], \
+                f"never reported {expected_error!r}: {errors}"
+            errors = [error for error in errors if expected_error not in error]
+        assert errors == []
+        # A script returning nothing leaves `result` out.
+        result = output.get("result")
+        return (result, output["notice"]) if notice else result
+
+    return run
+
+
+def test_the_page_runs_on_the_web_host(browser):
+    result = browser("""({
+        built: document.querySelectorAll(".mode-line").length,
+        title: document.title,
+        web: typeof host.describe === "function" && host.describe("/1/a.tikzcd") === "a.tikzcd",
+    })""")
+    assert result == {"built": 1, "title": "untitled - Sagitta", "web": True}
+
+
+def test_a_device_with_no_mouse_is_told_what_works(browser):
+    fine, notice = browser('matchMedia("(any-pointer: fine)").matches', notice=True)
+    if fine:
+        assert notice is None
+    else:
+        assert "driven by the keyboard" in notice
+
+
+def test_a_dropped_diagram_opens_in_a_browser(browser):
+    script = """(async () => {
+        const text = %s;
+        const path = host.path_of(new File([text], "square.tikzcd"));
+        await ui.file.open(path, true);
+        return { counts: ui.quiver.all_cells().length, title: document.title };
+    })()""" % json.dumps(SQUARE)
+    assert browser(script) == {"counts": 8, "title": "square.tikzcd - Sagitta"}
+
+
+def test_settings_are_kept_in_the_browser(browser):
+    result = browser("""(async () => {
+        await ui.settings.set("ui.zoom", 150);
+        return JSON.parse(await host.read_settings())["ui.zoom"];
+    })()""")
+    assert result == 150
+
+
+@pytest.mark.parametrize("press,expected", [
+    ("Discard", True),
+    ("Cancel", False),
+    # ESC presses the last button, Cancel.
+    (None, False),
+])
+def test_discarding_asks_in_the_page(browser, press, expected):
+    script = """(async () => {
+        const answer = host.confirm("Discard the changes to square.tikzcd?");
+        const dialog = document.querySelector("dialog.web-dialog[open]");
+        const focused = document.activeElement.textContent;
+        const press = %s;
+        if (press === null) {
+            dialog.close();
+        } else {
+            [...dialog.querySelectorAll("button")]
+                .find((button) => button.textContent === press).click();
+        }
+        return { answer: await answer, focused, gone: !dialog.isConnected };
+    })()""" % json.dumps(press)
+    assert browser(script) == {"answer": expected, "focused": "Cancel", "gone": True}
+
+
+def test_the_settings_are_edited_in_the_page(browser):
+    result = browser("""(async () => {
+        await ui.settings.set("ui.zoom", 150);
+        await host.open_settings();
+        const dialog = document.querySelector("dialog.web-dialog[open]");
+        const areas = [...dialog.querySelectorAll("textarea")];
+        // Keys typed here are the dialog's, not the page's.
+        const event = new KeyboardEvent("keydown", { key: "x", bubbles: true, cancelable: true });
+        areas[0].dispatchEvent(event);
+        return {
+            fields: areas.length,
+            zoom: JSON.parse(areas[0].value)["ui.zoom"],
+            mode_line: document.querySelector(".mode-line").textContent.startsWith("TYPE"),
+        };
+    })()""")
+    assert result == {"fields": 2, "zoom": 150, "mode_line": True}
+
+
+# The origin's private file system stands in for a folder on disk: its handles need no picker, and
+# the browser grants them without asking. `PAPER` lays out a paper in it, with `macros.tex` at the
+# top, a `.git` beside it, and a diagram a directory down, and hands it over as the picker would.
+PAPER = """
+    const root = await navigator.storage.getDirectory();
+    const paper = await root.getDirectoryHandle("paper", { create: true });
+    await paper.getDirectoryHandle(".git", { create: true });
+    const write = async (directory, name, text) => {
+        const stream = await (await directory.getFileHandle(name, { create: true }))
+            .createWritable();
+        await stream.write(text);
+        await stream.close();
+    };
+    await write(paper, "macros.tex", String.raw`\\newcommand{\\C}{\\mathbb{C}}`);
+    const figures = await paper.getDirectoryHandle("figures", { create: true });
+    await write(figures, "square.tikzcd", %s);
+    const diagram = await figures.getFileHandle("square.tikzcd");
+    window.showDirectoryPicker = async () => paper;
+    window.showOpenFilePicker = async () => [diagram];
+    const read = async (directory, name) => (await (await directory.getFileHandle(name))
+        .getFile()).text();
+""" % json.dumps(SQUARE)
+
+
+def test_a_folder_finds_macros_and_relative_paths(browser):
+    result = browser("""(async () => {
+        %s
+        await ui.file.open_folder();
+        await ui.file.open();
+        const opened = { title: document.title, macros: host.describe(ui.file.macros),
+            defined: ui.macros.has("\\\\C") };
+        // A relative name saves beside the diagram, with no picker.
+        await ui.file.save("../copy.tikzcd");
+        return { ...opened, copy: (await read(paper, "copy.tikzcd")).includes("A & B") };
+    })()""" % PAPER)
+    assert result == {"title": "square.tikzcd - Sagitta", "macros": "macros.tex", "defined": True,
+                      "copy": True}
+
+
+def test_the_last_diagram_reopens_with_its_folder(browser):
+    browser("""(async () => {
+        %s
+        await ui.file.open_folder();
+        await ui.file.open();
+        // Keeping the handles is not awaited by the page.
+        await new Promise((resolve) => setTimeout(resolve, 200));
+    })()""" % PAPER)
+    result = browser("""({ title: document.title, macros: host.describe(ui.file.macros) })""")
+    assert result == {"title": "square.tikzcd - Sagitta", "macros": "macros.tex"}
+
+
+def test_the_page_keeps_its_files_to_open_offline(browser):
+    result = browser("""(async () => {
+        await navigator.serviceWorker.ready;
+        if (navigator.serviceWorker.controller === null) {
+            await new Promise((resolve) => navigator.serviceWorker
+                .addEventListener("controllerchange", resolve, { once: true }));
+        }
+        await fetch("main.css");
+        const kept = await (await caches.open("sagitta")).match("main.css");
+        return kept !== undefined && (await kept.text()).includes("--ui-black");
+    })()""")
+    assert result
+
+
+def _square_link(browser):
+    """The square's encoding, as its file's `%#q=` line has it."""
+    return browser("""(async () => {
+        await ui.file.open(host.path_of(new File([%s], "square.tikzcd")), true);
+        return ui.file.text().match(/^%%#q=(\\S+)$/m)[1];
+    })()""" % json.dumps(SQUARE))
+
+
+def test_a_link_opens_its_diagram(browser):
+    """As quiver's do, with `+` and `=` escaped or not, and untitled, so unsaved."""
+    encoding = _square_link(browser)
+    for hash in [f"#q={encoding}", f"#q={encoding.replace('+', '%2B').replace('=', '%3D')}"]:
+        result = browser("""({ cells: ui.quiver.all_cells().length, title: document.title,
+            dirty: ui.file.dirty })""", hash=hash)
+        assert result == {"cells": 8, "title": "untitled + - Sagitta", "dirty": True}
+
+
+def test_a_link_pasted_into_the_open_page_opens(browser):
+    encoding = _square_link(browser)
+    result = browser("""(async () => {
+        location.hash = "q=%s";
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return ui.quiver.all_cells().length;
+    })()""" % encoding)
+    assert result == 8
+
+
+def test_a_broken_link_says_so(browser):
+    cells = browser("ui.quiver.all_cells().length", hash="#q=bm90IGpzb24=",
+                    expected_error="Could not open the link")
+    assert cells == 0
+
+
+def test_the_help_says_what_sagitta_is_made_from(sagitta, home):
+    """With the version, links to the source, quiver, KaTeX, and the notices, and nothing of
+    where a diagram goes, which only a browser has a server to keep it from."""
+    about = dict(sagitta("help", _diagram(home / "paper")))["About"]
+    version = json.load(open(os.path.join(_APP, "package.json")))["version"]
+    assert about[0][1].startswith(f"Sagitta {version}: free software")
+    assert [line for _, line in about if "quiver" in line]
+    assert len(about) == 4
+
+
+def test_the_help_in_a_browser_says_the_diagram_stays_there(browser):
+    result = browser("""(async () => {
+        await host.version();
+        ui.keymap.layers.help.toggle();
+        const lines = [...document.querySelectorAll(".which-key .submenu .group")]
+            .find((group) => group.querySelector("h3").textContent === "About")
+            .querySelectorAll(".entry");
+        return {
+            first: lines[0].textContent,
+            links: [...document.querySelectorAll(".which-key .submenu a")]
+                .map((link) => link.href),
+            last: lines[lines.length - 1].textContent,
+        };
+    })()""")
+    version = json.load(open(os.path.join(_APP, "package.json")))["version"]
+    assert result["first"].startswith(f"Sagitta {version}")
+    assert "https://github.com/varkor/quiver" in result["links"]
+    assert "never sent to the server" in result["last"]

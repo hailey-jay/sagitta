@@ -56,7 +56,7 @@ class ModeLine {
 
         // The command layer, for the pointer as much as the keys.
         this.element.add(button({ class: "hint layer", title: "Commands (;)" }, "", () => {
-            if (ui.keymap.active) {
+            if (ui.keymap.entered) {
                 ui.keymap.leave();
             } else {
                 ui.keymap.settle();
@@ -151,6 +151,10 @@ class ModeLine {
         this.add_action(ui, "save-as", "Save as", () => ui.file.save_as());
         this.add_action(ui, "open", "Open", () => ui.file.open());
         this.add_action(ui, "new", "New", () => ui.file.new_diagram());
+        // Only a host that sees no directory it is not handed (a browser) needs a folder, and only
+        // it has the action, which says why where the browser gives none.
+        this.add_action(ui, "open-folder", "Open folder", () => ui.file.open_folder(),
+            () => typeof host.open_folder === "function");
 
         this.add_action(ui, "undo", "Undo",
             () => ui.history.undo(ui),
@@ -314,6 +318,7 @@ class ModeLine {
             ui.grid_canvas.class_list.toggle("hidden");
         });
         this.add_action(ui, "dark-mode", "Dark mode", () => ui.toggle_dark_mode());
+        this.add_action(ui, "quiver-mode", "Quiver mode", () => ui.toggle_quiver_mode());
         this.add_action(ui, "hide-mode-line", "Toggle mode line",
             () => ui.element.class_list.toggle("hide-mode-line"),
         );

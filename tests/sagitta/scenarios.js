@@ -152,6 +152,38 @@ module.exports = {
         return { mode_line };
     },
 
+    /// Press each key in `argument` (a JSON list of keys, or `[key, modifiers]`), without
+    /// selecting anything first, then save, returning the mode line before saving, and whether a
+    /// label was being edited.
+    typing: async (ctx) => {
+        for (const step of JSON.parse(ctx.argument)) {
+            const [key, modifiers = []] = Array.isArray(step) ? step : [step];
+            await ctx.press(key, modifiers);
+        }
+        const mode_line = await ctx.mode_line();
+        const editing = await ctx.js("ui.input_is_active() !== false");
+        await ctx.save();
+        return { mode_line, editing, counts: await ctx.counts() };
+    },
+
+    /// Select every cell, press each key in `argument` (as for `typing`), and wait out the command
+    /// layer's delay before listing its keys, returning which of its lists are shown.
+    lists: async (ctx) => {
+        await ctx.press("a", ["control"]);
+        for (const step of JSON.parse(ctx.argument)) {
+            const [key, modifiers = []] = Array.isArray(step) ? step : [step];
+            await ctx.press(key, modifiers);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        return ctx.js(`(() => {
+            const shown = (selector) => {
+                const element = document.querySelector(selector);
+                return element !== null && element.getClientRects().length > 0;
+            };
+            return { main: shown(".which-key .main"), submenu: shown(".which-key .submenu") };
+        })()`);
+    },
+
     /// Select every cell, then press each key in `argument` (a JSON list of `[key, modifiers]`)
     /// outside any layer, and save. Shift+Space on the vertices leaves only the arrows selected,
     /// which the arrow keys then nudge while panning (with Control held).
@@ -550,11 +582,12 @@ module.exports = {
     },
 
     /// Routes: select every cell, then take each step of `argument` (a JSON list): a string runs
-    /// through the command line, `[x, y]` moves the focus point to that cell, and `{ keys }` presses
-    /// each `[key, modifiers]`. Then save, and report each arrow's route as its options hold it,
-    /// whether it is drawn, how many arcs its line turns through, where on the screen its ends,
-    /// label, and checkpoint marks are, and whether each mark shows and is carried, beside the
-    /// centres of the vertices.
+    /// through the command line, `[x, y]` moves the focus point to that cell, `{ keys }` presses
+    /// each `[key, modifiers]`, `{ hover }` rests the pointer on the selected arrows' checkpoint
+    /// ring of that index, and `{ js }` runs JavaScript in the page. Then save, and report each
+    /// arrow's route as its options hold it, whether it is drawn, how many arcs its line turns
+    /// through, where on the screen its ends, label, and checkpoint marks are, and whether each
+    /// mark shows and is carried, beside the centres of the vertices.
     route: async (ctx) => {
         await ctx.press("a", ["control"]);
         for (const step of JSON.parse(ctx.argument)) {
@@ -575,6 +608,15 @@ module.exports = {
                     return [from, [from[0] + shift.x, from[1] + shift.y]];
                 })()`);
                 await ctx.drag(from, to);
+            } else if (step.hover !== undefined) {
+                await ctx.hover(await ctx.js(`(() => {
+                    const rect = document.querySelectorAll(
+                        ".arrow.selected .arrow-checkpoint-handle")[${step.hover}]
+                        .getBoundingClientRect();
+                    return [rect.x + rect.width / 2, rect.y + rect.height / 2];
+                })()`));
+            } else if (step.js !== undefined) {
+                await ctx.js(step.js);
             } else {
                 for (const [key, modifiers = []] of step.keys) {
                     await ctx.press(key, modifiers);

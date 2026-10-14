@@ -6,13 +6,22 @@ class Pointer {
         this.ui = ui;
         // Whether a checkpoint is being dragged (see `grab`).
         this.dragging = false;
+        // Where the pointer last was in the window, as `[x, y]`, or `null` once it has left, for
+        // the keys that act on what is under it (see `hovered_checkpoint`).
+        this.client = null;
     }
 
     /// Start listening, once the UI's elements exist.
     initialise() {
         const ui = this.ui;
         window.addEventListener("wheel", (event) => this.scroll(event), { passive: false });
-        document.addEventListener("pointermove", (event) => this.stop_stale_pan(event));
+        document.addEventListener("pointermove", (event) => {
+            this.client = [event.clientX, event.clientY];
+            this.stop_stale_pan(event);
+        });
+        document.documentElement.addEventListener("pointerleave", () => {
+            this.client = null;
+        });
         // A file dialog, or another window, can take the key's release with the focus, so a pan
         // held by a key ends when the window loses the focus.
         window.addEventListener("blur", () => {
@@ -41,7 +50,7 @@ class Pointer {
             || !ui.in_mode(UIMode.Default)) {
             return;
         }
-        if (!ui.keymap.active) {
+        if (!ui.keymap.entered) {
             ui.keymap.settle();
             ui.keymap.enter(true);
         }
@@ -114,28 +123,40 @@ class Pointer {
     /// puts it back, as it does a checkpoint carried by the keyboard.
     grab(event) {
         const ui = this.ui;
-        const handle = event.target.closest?.(".arrow-checkpoint-handle");
-        if (handle === null || handle === undefined || event.button !== 0
-            || !ui.in_mode(UIMode.Default)) {
-            return;
-        }
-        const edge = Array.from(ui.selection).find((cell) => cell.is_edge()
-            && cell.element.element.contains(handle));
-        if (edge === undefined) {
+        const checkpoint = this.checkpoint_of(event.target);
+        if (checkpoint === null || event.button !== 0 || !ui.in_mode(UIMode.Default)) {
             return;
         }
         event.preventDefault();
         event.stopPropagation();
         // One already carried is put down where it is first.
         ui.keys.put_down(true);
-        ui.carried = [{
-            edge,
-            from: edge.options.route,
-            index: Number(handle.getAttribute("data-index")),
-        }];
+        ui.carried = [{ ...checkpoint, from: checkpoint.edge.options.route }];
+        const { edge } = checkpoint;
         this.dragging = true;
         edge.render(ui);
         ui.mode_line.update(ui);
+    }
+
+    /// The checkpoint whose ring (by its handle) is `element`, or contains it, on a selected arrow,
+    /// as `{ edge, index }`, or `null`.
+    checkpoint_of(element) {
+        const handle = element?.closest?.(".arrow-checkpoint-handle");
+        if (handle === null || handle === undefined) {
+            return null;
+        }
+        const edge = Array.from(this.ui.selection).find((cell) => cell.is_edge()
+            && cell.element.element.contains(handle));
+        return edge === undefined
+            ? null
+            : { edge, index: Number(handle.getAttribute("data-index")) };
+    }
+
+    /// The checkpoint of a selected arrow whose ring the pointer is over, as for `checkpoint_of`.
+    hovered_checkpoint() {
+        return this.client === null
+            ? null
+            : this.checkpoint_of(document.elementFromPoint(...this.client));
     }
 
     /// Releasing the pointer anywhere, even outside the window: finish panning, moving, or

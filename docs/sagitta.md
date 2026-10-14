@@ -34,6 +34,7 @@ The macros reload whenever the file changes.
 
 Typing edits the label of the targeted cell, spreadsheet-style, except that `(`, `[`, and `{` wrap the label (or the selected part of it) instead of replacing it.
 Elsewhere they bring their closing delimiter, as in most editors, unless it is already next; typing the closing one steps over it, and Backspace in an empty pair deletes both.
+RET edits the label in place instead, and on an empty cell with nothing selected, makes a cell there to label, in either mode.
 `\{` and `\|` pair the same way, and `\langle`, `\lvert`, `\lVert`, `\lceil`, and `\lfloor` once something other than a letter follows them.
 After `\left`, the closing delimiter comes with `\right`.
 `|` pairs only there, since it is as often a restriction or "divides" as an absolute value: elsewhere it types itself, and `\|` or `\lvert` gives a pair.
@@ -48,7 +49,7 @@ The commands live one key away:
   Each vertex has a code of one character, given out row by row (`asdfghjkl`, `zxcvbnm`, `qwertyuiop`, then the digits), and two once those run out; removing a vertex frees its code.
   An arrow's code is its source's then its target's, so the arrow from `A` to `S` is `AS`, and a second one `AS2`.
   An arrow whose code would be longer than three characters, as between arrows, takes one of its own, as a vertex does.
-- `C-/` (or `<f1>`) help, `C-e` export, `C-i` import (paste tikz-cd), `C-m` macros (paste definitions), `C-,` settings, and `C-s` save.
+- `C-/` (or `<f1>`) help, which ends with what Sagitta is made from and where its source is, `C-e` export, `C-i` import (paste tikz-cd), `C-m` macros (paste definitions), `C-,` settings, and `C-s` save.
 - `:dark-mode`: a grey canvas, with the default colour drawn in white.
   Other colours are drawn exactly, and nothing saved changes.
 - `C-arrows` move the selection; on arrows alone they bend or shift them, and on loops alone they resize or turn them.
@@ -58,6 +59,12 @@ The commands live one key away:
   `:mark` and `:mark-add` do the same from the command line.
   The keys file can move it (`mark`, and `mark-add` for a key of its own that adds); Space alone cannot be bound, but its chords can.
   Input methods such as IBus and Fcitx take Control-Space to switch input method, so where one runs, `C-SPC` never reaches Sagitta: bind `mark` to another key in the keys file (`mark C-g`, say, which is free), or change the input method's own key.
+
+Quiver mode (`:quiver-mode`, or `q` in the settings layer) works the other way round, as quiver does.
+The command layer stays open by itself, so its keys work without `;`, and a label is typed only after RET, which edits it in place; RET again, or ESC, puts it down.
+Backspace deletes, as in the layer, and ESC does what it does outside the layer once there is nothing in the layer to let go of.
+The layer's keys are listed only on `;`, never by waiting, though a list of choices, such as after `t`, shows at once.
+`:`, `/`, and the chords work as in spreadsheet mode, the default.
 
 The mouse works too.
 Click a cell to select it, and again to edit its label; click an empty space twice for a new cell; drag from a cell to draw an arrow, by the edge of its space to move it, an arrow's end to reconnect it, and a selected arrow's checkpoint, by its ring, to move it.
@@ -71,6 +78,7 @@ While the diagram is empty, a line of tips runs along the top.
 
 `~/.config/sagitta/keys`, if it exists, rebinds keys.
 On Windows the file is `%APPDATA%\sagitta\keys`.
+In a browser it lives in the browser's storage, and opening the settings file (`o` in the settings layer) edits it beside the settings.
 It is read at startup, and Sagitta never writes it.
 Each line names something, then its keys, which replace all of its defaults:
 
@@ -105,7 +113,7 @@ The names and their defaults:
 | Names | Defaults |
 |---|---|
 | `import`, `export`, `macros` | `C-i`, `C-e`, `C-m` |
-| `save`, `save-as`, `open`, `new` | `C-s`, `C-S-s`, `C-o`, `C-n` |
+| `save`, `save-as`, `open`, `new`, `open-folder` | `C-s`, `C-S-s`, `C-o`, `C-n`, none (in a browser only) |
 | `undo`, `redo` | `C-z`, `C-S-z` |
 | `select-all`, `select-connected`, `deselect-all` | `C-a`, `C-S-c`, `C-S-a` |
 | `copy`, `cut`, `paste` | `C-c`, `C-x`, `C-v` |
@@ -115,7 +123,7 @@ The names and their defaults:
 | `flip-hor`, `flip-ver`, `rotate` | none |
 | `centre-view`, `hide-grid` | `; z`, `; #` |
 | `zoom-out`, `zoom-in`, `reset-zoom` | `C--`, `C-=`, `C-0` |
-| `dark-mode`, `hide-mode-line`, `shortcuts`, `settings` | none, `C-\`, `C-/` `<f1>`, `C-,` |
+| `dark-mode`, `quiver-mode`, `hide-mode-line`, `shortcuts`, `settings` | none, none, `C-\`, `C-/` `<f1>`, `C-,` |
 | `level`, `curve`, `offset`, `radius`, `length`, `position` | `; n`, `; b` (on loops alone, the radius; on routes alone, the rounding), `; o`, none, `; l`, `; P` |
 | `tail`, `body`, `head` | `; t`, `; d`, `; h` |
 | `arrow`, `adjunction`, `corner` | `; a`, `; j`, `; p` |
@@ -157,7 +165,8 @@ An arrow can be routed through cells instead of drawn as a curve: it runs straig
 - `; w`, or `:route`, bends the selected arrows round one corner, along the row first.
   Pressed again, it goes along the column first, and a third time it straightens them.
   `:route x`, `:route y`, and `:route none` name the step.
-- `; k`, or `:checkpoint`, adds the cell at the focus point to the selected arrows' routes, or takes it out if they already pass through it.
+- `; k`, or `:checkpoint`, adds the cell at the focus point to the selected arrows' routes, or, if any of them already passes through it, takes it out of those.
+  With the pointer resting on a selected arrow's checkpoint ring, it takes out that checkpoint instead, wherever the focus point is.
   The arrow passes through its checkpoints in the order they were added, and while it is selected, each is marked by a ring.
   A cell an arrow joins is no checkpoint.
 - `; m`, or `:move-checkpoint`, picks up the checkpoint at the focus point, which then follows the focus point.
@@ -199,6 +208,7 @@ A connecting morphism with one label is one arrow instead: curved (`; b`, and `;
 ## Settings
 
 Settings live in `~/.config/sagitta/settings.json`, or in `%APPDATA%\sagitta\settings.json` on Windows.
+In a browser they live in the browser's storage, for that browser alone.
 Sagitta writes the file with every default the first time a setting changes, so the file shows each setting there is.
 It can be edited by hand, and is read at startup.
 
@@ -221,6 +231,7 @@ A value the setting cannot take is refused, with what it may be.
 | `diagram.var_corner` | `false` | the corner `; p` gives first, which follows the last one used |
 | `diagram.arrow_preset` | `"plain"` | the preset new arrows take, from `plain`, `equals`, `inclusion`, `mono`, `epi`, `maps-to`, `dashed`, `dotted`, and `squiggly` |
 | `ui.dark_mode` | `false` | the grey canvas |
+| `ui.quiver_mode` | `false` | quiver mode (see Keys): the command layer's keys without `;`, and RET before typing a label |
 | `ui.zoom` | `100` | the zoom the view starts at, and `reset-zoom` returns to, in percent (20 to 200) |
 | `ui.cell_size` | `128` | the size of an empty column or row, in pixels (48 to 512) |
 | `ui.label_size` | `26` | the size of labels, in pixels (8 to 72) |

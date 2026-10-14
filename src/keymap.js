@@ -11,6 +11,9 @@
 ///   live. After focusing a slider (`K`, `O`, `L`, ...), typing a signed number and pressing Enter
 ///   sets it. Punctuation applies arrow presets. `;`, Escape, or Enter (with no pending number)
 ///   leave the layer.
+///   In quiver mode (`ui.quiver_mode`), the command layer is latched open instead: its keys are live
+///   whenever nothing else has them, RET edits the label, and Escape does what it does outside
+///   the layer once there is nothing in the layer to let go of. The keys are listed only on `;`.
 /// - Command line (`:`): named commands, with Tab completion, separated by `;`.
 /// - Import layer (`C-i`): pasting tikz-cd (`C-v`) replaces the diagram, as one undo step, and
 ///   lists any problems parsing it.
@@ -46,8 +49,8 @@ class Keymap {
         // `Bindings.resolve`). Until `load`, the defaults.
         ({ keys: this.keys, problems: this.problems } = Bindings.resolve(null));
 
-        // Whether the command layer is active.
-        this.active = false;
+        // Whether the command layer was entered, with `;`, rather than latched open (see `active`).
+        this.entered = false;
 
         // The layers that take over the keys (see `layers.js`), and the one that has them, or
         // `null`. The colour layer is not held here: it is active while the colour picker has a
@@ -178,6 +181,23 @@ class Keymap {
         }
     }
 
+    /// Whether the command layer is active: entered, or latched open in quiver mode.
+    get active() {
+        return this.entered || this.latched();
+    }
+
+    set active(value) {
+        this.entered = value;
+    }
+
+    /// Whether quiver mode holds the command layer open: whenever no other layer, mode, or text
+    /// field has the keys, so that finishing a label, a prompt, or a layer comes back to it.
+    latched() {
+        const ui = this.ui;
+        return ui.settings?.get("ui.quiver_mode") === true && this.layer === null
+            && ui.in_mode(UIMode.Default) && !ui.input_is_active();
+    }
+
     /// Whether the command layer's bindings may run: while it is active and no text field has the
     /// keys, and in the hint-code prompts, which switch between their modes with them.
     layer_live() {
@@ -193,10 +213,12 @@ class Keymap {
         // A pan whose key came up while the window did not have the focus ends with the next key,
         // as it does with the next pointer move, rather than stealing the arrows until a click.
         this.ui.pointer.stop_stale_pan(event);
-        const waiting = type === "keydown" && this.active && !this.listed
+        // Only a layer entered with `;` lists its keys by itself: in quiver mode, where the layer
+        // is latched open, the list waits for `;`.
+        const waiting = type === "keydown" && this.entered && !this.listed
             && !Keymap.MODIFIERS.has(event.key);
         this.handle(type, event);
-        if (waiting && this.active && !this.listed) {
+        if (waiting && this.entered && !this.listed) {
             this.wait_to_list(this.property !== null || this.component !== null);
         }
     }
@@ -406,11 +428,17 @@ class Keymap {
     /// or, for an opening delimiter, wraps it (bringing the closing one, if it was empty).
     after(event) {
         const ui = this.ui;
-        if (this.active || event.defaultPrevented
+        if (event.defaultPrevented
             || event.ctrlKey || event.metaKey || event.altKey
             || [...event.key].length !== 1 || Keymap.BASE_KEYS.has(event.key)
             || !ui.in_mode(UIMode.Default) || ui.input_is_active()
         ) {
+            return;
+        }
+        if (this.active) {
+            // A key the command layer does not use does nothing, rather than what the browser
+            // gives it (Firefox's quick find, on `'`).
+            event.preventDefault();
             return;
         }
         if (this.edit_target(true)) {
@@ -529,6 +557,8 @@ class Keymap {
 
     leave() {
         this.active = false;
+        // Quiver mode keeps the layer open, but not its list.
+        this.listed = false;
         this.count = "";
         clearTimeout(this.list_timeout);
         this.render();
@@ -561,7 +591,10 @@ class Keymap {
     update_which_key() {
         const ui = this.ui;
         const layer = this.current_layer();
-        const shown = this.active && this.listed || layer !== null;
+        // In quiver mode, a component's list shows as soon as it is chosen, though the main list
+        // waits for `;` (see `dispatch`). Entered with `;`, the layer waits as it always has.
+        const shown = this.active && (this.listed || this.component !== null && !this.entered)
+            || layer !== null;
         this.which_key.class_list.toggle("hidden", !shown);
         // Lines that describe keys rather than being them (the help's) get room to be read.
         this.which_key.class_list.toggle("descriptive", layer !== null && !layer.clickable);
@@ -809,9 +842,28 @@ class Keymap {
             }
         }
 
+        // Whether the layer is only latched open, with nothing chosen in it and its keys not
+        // listed, so that Escape does what it does outside it.
+        const resting = !this.entered && !this.listed && this.property === null
+            && this.component === null;
         switch (key) {
-            case "Escape":
             case ";":
+                if (this.latched() && !this.entered) {
+                    // The keys are live already: `;` lists them at once, keeping whatever slider
+                    // or component list was chosen.
+                    this.entered = true;
+                    this.listed = true;
+                    this.render();
+                    return true;
+                }
+                this.unchoose();
+                ui.colour_picker.close();
+                this.leave();
+                return true;
+            case "Escape":
+                if (this.latched() && resting) {
+                    return false;
+                }
                 this.unchoose();
                 ui.colour_picker.close();
                 this.leave();
@@ -819,11 +871,12 @@ class Keymap {
             case "Enter":
                 if (this.count !== "") {
                     this.apply_count();
-                } else {
-                    this.unchoose();
-                    this.leave();
+                    return true;
                 }
-                return true;
+                this.unchoose();
+                this.leave();
+                // In quiver mode, RET goes on to edit the label.
+                return !this.latched();
             case "Backspace":
                 ui.mode_line.run(ui, "delete");
                 return true;
@@ -1096,7 +1149,7 @@ Keymap.CONTEXT = new Enum(
         {
             combinations: [{ key: "Enter", context: Always }],
             press: (ui) => ui.keys.enter(),
-            help: [["Typing", "edit the label in place"]],
+            help: [["Typing", "edit the label in place, or label a new cell"]],
         },
         // Without the modifier, which is the mark's (see `Bindings.DEFAULTS`).
         {

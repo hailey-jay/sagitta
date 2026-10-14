@@ -1,7 +1,7 @@
 {
     "name": "sagitta",
     "productName": "Sagitta",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "A keyboard-driven commutative diagram editor for .tikzcd files, grown from quiver",
     "license": "GPL-3.0-or-later",
     "author": "Hailey Jay Garcia <504haileyjay@gmail.com>",
@@ -12,6 +12,7 @@
         "start": "./sagitta",
         "test": "npm run test:fast && python3 -m pytest tests",
         "test:fast": "node tests/tikzcd.js",
+        "web": "python3 -m http.server 8000 --bind 127.0.0.1",
         "dist": "electron-builder --linux AppImage --publish never",
         "dist:win": "electron-builder --win nsis portable --publish never"
     },
@@ -25,6 +26,8 @@
         },
         "files": [
             "package.json",
+            "LICENSE",
+            "NOTICE",
             "index.html",
             "main.css",
             "katex.css",
@@ -32,7 +35,10 @@
             "fonts/**",
             "icons/**",
             "icon.png",
-            "electron/**"
+            "icon.svg",
+            "manifest.webmanifest",
+            "electron/**",
+            "web/**"
         ],
         "fileAssociations": [
             {

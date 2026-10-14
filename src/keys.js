@@ -107,10 +107,11 @@ class Keys {
             ui.switch_mode(UIMode.default);
         } else if (!this.put_down(true)) {
             // With no checkpoint to put down, toggle the focus of the label input. Focusing edits
-            // the label in place (typing a character instead replaces it: see `Keymap.after`).
+            // the label in place (typing a character instead replaces it: see `Keymap.after`). On
+            // an empty cell with nothing selected, there is no label to edit, so make the cell.
             const input = ui.label_input.element;
             if (document.activeElement !== input) {
-                if (ui.keymap.edit_target(false)) {
+                if (ui.keymap.edit_target(ui.selection.size === 0)) {
                     ui.keymap.begin_edit();
                 }
             } else {
