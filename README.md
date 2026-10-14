@@ -47,7 +47,7 @@ A windowed program on Windows has no console, so `--help` and `--version` open a
 ### In a browser
 
 Sagitta also runs as a web page, still experimental.
-Run `npm run web` in a clone and open <http://localhost:8000>, or serve the repository from any static host.
+Run `npm run web` in a clone and open <http://127.0.0.1:8000>, or serve the repository from any static host.
 
 Chromium browsers (Chrome, Edge, Brave) open and save the diagram file in place, as the desktop app does.
 Firefox and Safari open a copy, and saving downloads the diagram.

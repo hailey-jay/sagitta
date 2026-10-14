@@ -410,6 +410,19 @@ if (!("host" in window)) {
             });
         }
 
+        // Served over plain HTTP from anywhere but this machine (`http://0.0.0.0:8000`, as Python's
+        // server offers, among them), the page is not a secure context, and the browser withholds
+        // files, folders, downloads, and offline use. Nothing else says why, so say so as it opens.
+        const UNSAFE = "the page is not served securely, over HTTPS or from localhost or"
+            + " 127.0.0.1, so the browser gives it no files or folders";
+        if (!window.isSecureContext) {
+            document.addEventListener("DOMContentLoaded", () => ask({
+                message: `Sagitta can open and save little here: ${UNSAFE}, and may block`
+                    + " its downloads. Open it at https://, or at http://127.0.0.1, instead.",
+                buttons: [["Continue", null]],
+            }));
+        }
+
         // Sagitta is driven by the keyboard, so on a device with only a touch screen little of it
         // works. Say so as the page opens, rather than leave it to be found out.
         if (!matchMedia("(any-pointer: fine)").matches) {
@@ -616,6 +629,22 @@ if (!("host" in window)) {
                 return register(file.name, pending === null ? { file } : { file, pending });
             },
 
+            /// Ask for a folder to find files in by name, as the desktop finds them on disk.
+            /// Returns its path, or `null` if none was chosen. Where the browser gives a page no
+            /// folders, says why, which the page reports.
+            open_folder: async () => {
+                if (!has_api) {
+                    throw new Error(window.isSecureContext
+                        ? "this browser gives a page no folders, which Chrome and Edge do"
+                        : UNSAFE);
+                }
+                const handle = await pick(() => window.showDirectoryPicker({
+                    mode: "readwrite",
+                    startIn: folder?.handle,
+                }));
+                return handle === null ? null : use_folder(handle, true);
+            },
+
             // The diagram at `path` was opened or saved: keep its handle, to reopen next visit.
             opened: async (path) => {
                 const handle = (await settle(files.get(path)))?.handle;
@@ -624,17 +653,6 @@ if (!("host" in window)) {
                 }
             },
         };
-        if (has_api) {
-            /// Ask for a folder to find files in by name, as the desktop finds them on disk.
-            /// Returns its path, or `null` if none was chosen.
-            host.open_folder = async () => {
-                const handle = await pick(() => window.showDirectoryPicker({
-                    mode: "readwrite",
-                    startIn: folder?.handle,
-                }));
-                return handle === null ? null : use_folder(handle, true);
-            };
-        }
         return host;
     })();
 }

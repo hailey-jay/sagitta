@@ -31,7 +31,7 @@ There is no build step.
 
 `electron/` is the desktop shell, which the page reaches through `window.host`.
 `web/host.js` is the same `window.host` for a browser, and does nothing under the shell, which defines it first.
-To try the page in a browser, run `npm run web` and open <http://localhost:8000>.
+To try the page in a browser, run `npm run web` and open <http://127.0.0.1:8000>.
 To publish it, serve `index.html`, `main.css`, `katex.css`, `icon.svg`, `icon.png`, `manifest.webmanifest`, `service-worker.js`, `src/`, `fonts/`, `icons/`, and `web/` from one directory of a static host.
 `service-worker.js` keeps what the page fetches, for opening without a network, and must sit beside `index.html` to cover it.
 `sagitta` is the launcher, which checks the arguments and picks an Electron.
