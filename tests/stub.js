@@ -275,6 +275,8 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
         history: new History(),
         mode_line: { update: () => {}, flash: () => {}, error: () => {}, dismiss_error: () => false },
         colour_picker: { update_diagram_colours: () => {} },
+        // No pointer rests on anything, so the keys act at the focus point.
+        pointer: { hovered_checkpoint: () => null },
         // The arrow options are the real ones: they hold the selection's values and need no
         // elements of their own (the palette that edits them is the mode line's business).
         arrow_options: new ArrowOptions(),
