@@ -1700,10 +1700,11 @@ def site():
 
 @pytest.fixture
 def browser(site, home):
-    """Evaluate a script in the page, served from `site`, returning what it returns. Fails on any
-    page error, as `sagitta` does."""
+    """Evaluate a script in the page, served from `site`, returning what it returns, or, if
+    `notice`, that and the text of the notice the page opened on its own (see `browser.js`), or
+    `None`. Fails on any page error, as `sagitta` does."""
 
-    def run(script):
+    def run(script, notice=False):
         env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"))
         command = [electron, "--ozone-platform=headless", _BROWSER, site, script]
         if os.environ.get("CI"):
@@ -1714,7 +1715,7 @@ def browser(site, home):
         assert lines, f"no result:\n{completed.stdout}\n{completed.stderr}"
         output = json.loads(lines[-1][len("RESULT "):])
         assert output["errors"] == []
-        return output["result"]
+        return (output["result"], output["notice"]) if notice else output["result"]
 
     return run
 
@@ -1726,6 +1727,14 @@ def test_the_page_runs_on_the_web_host(browser):
         web: typeof host.describe === "function" && host.describe("/1/a.tikzcd") === "a.tikzcd",
     })""")
     assert result == {"built": 1, "title": "untitled - Sagitta", "web": True}
+
+
+def test_a_device_with_no_mouse_is_told_what_works(browser):
+    fine, notice = browser('matchMedia("(any-pointer: fine)").matches', notice=True)
+    if fine:
+        assert notice is None
+    else:
+        assert "driven by the keyboard" in notice
 
 
 def test_a_dropped_diagram_opens_in_a_browser(browser):
@@ -1755,7 +1764,7 @@ def test_settings_are_kept_in_the_browser(browser):
 def test_discarding_asks_in_the_page(browser, press, expected):
     script = """(async () => {
         const answer = host.confirm("Discard the changes to square.tikzcd?");
-        const dialog = document.querySelector("dialog.web-dialog");
+        const dialog = document.querySelector("dialog.web-dialog[open]");
         const focused = document.activeElement.textContent;
         const press = %s;
         if (press === null) {

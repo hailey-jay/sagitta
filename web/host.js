@@ -284,6 +284,16 @@ if (!("host" in window)) {
                 inputs[0]?.select?.();
             });
 
+        // Sagitta is driven by the keyboard, so on a device with only a touch screen little of it
+        // works. Say so as the page opens, rather than leave it to be found out.
+        if (!matchMedia("(any-pointer: fine)").matches) {
+            document.addEventListener("DOMContentLoaded", () => ask({
+                message: "Sagitta is driven by the keyboard, and needs one, and a mouse or"
+                    + " trackpad, to do much. On a touch screen alone, little of it works.",
+                buttons: [["Continue", null]],
+            }));
+        }
+
         /// Edit the settings and the keys file in the page, which the desktop shell leaves to an
         /// editor. Saving stores both and reloads, since the page reads them as it starts.
         const edit_settings = async () => {

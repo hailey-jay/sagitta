@@ -5,8 +5,10 @@
 ///
 /// The window has no preload, so the page gets `window.host` from `web/host.js` rather than from
 /// the desktop shell. `SCRIPT` is evaluated once the page has started, and may return a promise.
-/// The last line printed is `RESULT <json>`, holding what it returned and every console error the
-/// page logged.
+/// A dialog open by then, as the notice for a device with no mouse that headless Chromium can seem
+/// to be, is closed first, and its text returned as `notice`. The last line printed is
+/// `RESULT <json>`, holding that, what the script returned, and every console error the page
+/// logged.
 
 const { app, BrowserWindow, Menu } = require("electron");
 
@@ -31,12 +33,17 @@ app.whenReady().then(async () => {
             ? resolve() : setTimeout(check, 50);
         check();
     })`);
+    const notice = await window.webContents.executeJavaScript(`(() => {
+        const dialog = document.querySelector("dialog.web-dialog[open]");
+        dialog?.close();
+        return dialog?.textContent ?? null;
+    })()`);
     let result = null;
     try {
         result = await window.webContents.executeJavaScript(script);
     } catch (error) {
         errors.push(String(error));
     }
-    process.stdout.write(`RESULT ${JSON.stringify({ result, errors })}\n`);
+    process.stdout.write(`RESULT ${JSON.stringify({ notice, result, errors })}\n`);
     app.exit(0);
 });
