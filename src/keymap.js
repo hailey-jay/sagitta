@@ -428,11 +428,17 @@ class Keymap {
     /// or, for an opening delimiter, wraps it (bringing the closing one, if it was empty).
     after(event) {
         const ui = this.ui;
-        if (this.active || event.defaultPrevented
+        if (event.defaultPrevented
             || event.ctrlKey || event.metaKey || event.altKey
             || [...event.key].length !== 1 || Keymap.BASE_KEYS.has(event.key)
             || !ui.in_mode(UIMode.Default) || ui.input_is_active()
         ) {
+            return;
+        }
+        if (this.active) {
+            // A key the command layer does not use does nothing, rather than what the browser
+            // gives it (Firefox's quick find, on `'`).
+            event.preventDefault();
             return;
         }
         if (this.edit_target(true)) {

@@ -344,6 +344,22 @@ def test_the_command_list_shows(sagitta, home, quiver, keys, main, submenu):
     assert result == {"main": main, "submenu": submenu}
 
 
+@pytest.mark.parametrize("quiver", [False, True])
+def test_a_key_the_command_layer_does_not_use_is_kept_from_the_browser(sagitta, home, quiver):
+    """Firefox's quick find takes `'` otherwise."""
+    if quiver:
+        _quiver_mode(home)
+    script = """(() => {
+        if (!ui.keymap.active) {
+            ui.keymap.enter();
+        }
+        const event = new KeyboardEvent("keydown", { key: "'", cancelable: true });
+        document.dispatchEvent(event);
+        return event.defaultPrevented;
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script)
+
+
 def test_quiver_mode_command_switches_it(sagitta, home):
     sagitta("commands", _diagram(home / "paper"), json.dumps(["quiver-mode"]))
     settings = json.loads((home / ".config" / "sagitta" / "settings.json").read_text())
