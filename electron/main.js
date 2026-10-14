@@ -236,6 +236,9 @@ app.whenReady().then(() => {
         // A link to open (see `web/host.js`) comes only from a browser's address bar.
         arguments: () => ({ diagram: args.diagram, macros: args.macros, link: null }),
         resolve: (base, file) => path.resolve(base ?? process.cwd(), file),
+        // From `package.json` itself, which `app.getVersion` is not when another script (the test
+        // driver) is Electron's entry point.
+        version: () => require("../package.json").version,
         read: read_file,
         write: write_file,
         // The settings, as the text of `settings.json`, or `null` before it has been written.
@@ -327,9 +330,15 @@ app.whenReady().then(() => {
     });
 
     // The page never leaves `index.html` or opens windows of its own: a link or a file dropped
-    // where the page does not take it would otherwise replace the diagram.
+    // where the page does not take it would otherwise replace the diagram. A link the page opens
+    // in a new window (the help's About) goes to the desktop's browser instead.
     window.webContents.on("will-navigate", (event) => event.preventDefault());
-    window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    window.webContents.setWindowOpenHandler(({ url }) => {
+        if (url.startsWith("https://")) {
+            shell.openExternal(url);
+        }
+        return { action: "deny" };
+    });
 
     window.loadFile(path.join(__dirname, "..", "index.html"));
     if (args.devtools) {

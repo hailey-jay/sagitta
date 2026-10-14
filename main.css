@@ -941,6 +941,11 @@ label input[type="checkbox"]:checked::before {
     white-space: normal;
 }
 
+/* The help's About links. */
+.which-key a {
+    color: var(--ui-secondary);
+}
+
 /* The chord also bound to a command layer binding. */
 .which-key .entry kbd.chord {
     min-width: 0;

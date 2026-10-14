@@ -7,6 +7,7 @@ const invoke = (name) => (...parameters) => ipcRenderer.invoke(name, ...paramete
 
 contextBridge.exposeInMainWorld("host", {
     arguments: invoke("arguments"),
+    version: invoke("version"),
     resolve: invoke("resolve"),
     read: invoke("read"),
     write: invoke("write"),
@@ -29,6 +30,9 @@ contextBridge.exposeInMainWorld("host", {
     on_save_and_close: (callback) => ipcRenderer.on("save-and-close", () => callback()),
     // The desktop has no address bar to follow a link from.
     on_link: () => {},
+    // What the help says of where the diagram goes, which only a browser, with a server behind
+    // it, has reason to say (see `web/host.js`).
+    private: null,
     // The path of a `File` from a drop, which the page cannot see itself.
     path_of: (file) => webUtils.getPathForFile(file),
     // How a message names the file at `path`: by its path, which the user can find.

@@ -517,7 +517,7 @@ def test_the_help_layer_lists_every_binding(sagitta, home):
     """Its lines come from the bindings and actions themselves, and from `Keymap.HELP_ELSEWHERE`
     for the keys handled elsewhere."""
     help = dict(sagitta("help", _diagram(home / "paper")))
-    assert list(help) == ["Typing", "Moving", "Mouse", "Layers", "Chords", "Help"]
+    assert list(help) == ["Typing", "Moving", "Mouse", "Layers", "Chords", "Help", "About"]
     assert help["Typing"][0] == ["a \\ 2 …", "replace the label"]
     assert ["RET", "edit the label in place, or label a new cell"] in help["Typing"]
     assert ["<delete>", "delete"] in help["Typing"]
@@ -1919,3 +1919,33 @@ def test_a_broken_link_says_so(browser):
     cells = browser("ui.quiver.all_cells().length", hash="#q=bm90IGpzb24=",
                     expected_error="Could not open the link")
     assert cells == 0
+
+
+def test_the_help_says_what_sagitta_is_made_from(sagitta, home):
+    """With the version, links to the source, quiver, KaTeX, and the notices, and nothing of
+    where a diagram goes, which only a browser has a server to keep it from."""
+    about = dict(sagitta("help", _diagram(home / "paper")))["About"]
+    version = json.load(open(os.path.join(_APP, "package.json")))["version"]
+    assert about[0][1].startswith(f"Sagitta {version}: free software")
+    assert [line for _, line in about if "quiver" in line]
+    assert len(about) == 4
+
+
+def test_the_help_in_a_browser_says_the_diagram_stays_there(browser):
+    result = browser("""(async () => {
+        await host.version();
+        ui.keymap.layers.help.toggle();
+        const lines = [...document.querySelectorAll(".which-key .submenu .group")]
+            .find((group) => group.querySelector("h3").textContent === "About")
+            .querySelectorAll(".entry");
+        return {
+            first: lines[0].textContent,
+            links: [...document.querySelectorAll(".which-key .submenu a")]
+                .map((link) => link.href),
+            last: lines[lines.length - 1].textContent,
+        };
+    })()""")
+    version = json.load(open(os.path.join(_APP, "package.json")))["version"]
+    assert result["first"].startswith(f"Sagitta {version}")
+    assert "https://github.com/varkor/quiver" in result["links"]
+    assert "never sent to the server" in result["last"]

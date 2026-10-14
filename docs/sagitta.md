@@ -49,7 +49,7 @@ The commands live one key away:
   Each vertex has a code of one character, given out row by row (`asdfghjkl`, `zxcvbnm`, `qwertyuiop`, then the digits), and two once those run out; removing a vertex frees its code.
   An arrow's code is its source's then its target's, so the arrow from `A` to `S` is `AS`, and a second one `AS2`.
   An arrow whose code would be longer than three characters, as between arrows, takes one of its own, as a vertex does.
-- `C-/` (or `<f1>`) help, `C-e` export, `C-i` import (paste tikz-cd), `C-m` macros (paste definitions), `C-,` settings, and `C-s` save.
+- `C-/` (or `<f1>`) help, which ends with what Sagitta is made from and where its source is, `C-e` export, `C-i` import (paste tikz-cd), `C-m` macros (paste definitions), `C-,` settings, and `C-s` save.
 - `:dark-mode`: a grey canvas, with the default colour drawn in white.
   Other colours are drawn exactly, and nothing saved changes.
 - `C-arrows` move the selection; on arrows alone they bend or shift them, and on loops alone they resize or turn them.

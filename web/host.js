@@ -506,6 +506,20 @@ if (!("host" in window)) {
             },
             on_link: (callback) => link_listeners.push(callback),
 
+            // The version `package.json` gives, published beside the page, or `null`.
+            version: async () => {
+                try {
+                    return (await (await fetch("package.json")).json()).version ?? null;
+                } catch (_) {
+                    return null;
+                }
+            },
+
+            // What the help says of where the diagram goes. The part of an address after `#`
+            // stays in the browser, and the page sends nothing anywhere.
+            private: "what you draw, open, and save stays in this browser: a #q= link's diagram"
+                + " is never sent to the server",
+
             resolve: async (base, file) => normalise(file.startsWith("/")
                 ? file
                 : `${base ?? folder?.path ?? `/${++next}`}/${file}`),

@@ -26,6 +26,8 @@
         },
         "files": [
             "package.json",
+            "LICENSE",
+            "NOTICE",
             "index.html",
             "main.css",
             "katex.css",

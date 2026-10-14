@@ -282,6 +282,15 @@ Layer.Macros = class extends Layer {
 /// The help layer (`C-/`): the base layer's bindings, how to enter the other layers, and the
 /// chords, described by the bindings and actions themselves.
 Layer.Help = class extends Layer {
+    constructor(keymap) {
+        super(keymap);
+        // Sagitta's version, for the About lines, once the host has said.
+        this.version = null;
+        host.version().then((version) => {
+            this.version = version;
+        });
+    }
+
     describe() {
         return ["HELP", "keys"];
     }
@@ -347,7 +356,33 @@ Layer.Help = class extends Layer {
         }
         const shortcuts = keys(this.keymap.combinations("shortcuts"), "chords");
         sections.get("Help").push([`${shortcuts} RET ; ESC`.trim(), "leave"]);
+        sections.set("About", this.about());
         return Array.from(sections);
+    }
+
+    /// What Sagitta is, what it is made from, and where its source and notices are, as lines with
+    /// no keys. Links open in a new window: a browser's tab, or the desktop's browser.
+    about() {
+        const link = (text, url) => new DOM.Element("a", {
+            href: url, target: "_blank", rel: "noopener",
+        }).add(text);
+        const line = (...parts) => {
+            const span = new DOM.Element("span");
+            parts.forEach((part) => span.add(part));
+            return ["", span];
+        };
+        const lines = [
+            line(`Sagitta${this.version === null ? "" : ` ${this.version}`}: free software,`
+                + " under the GPL, version 3 or later; ", link("source", Layer.Help.SOURCE)),
+            line("a fork of ", link("quiver", "https://github.com/varkor/quiver"),
+                ", by varkor and its contributors"),
+            line("its maths drawn by ", link("KaTeX", "https://katex.org")),
+            line("licences and credits: ", link("NOTICE", `${Layer.Help.SOURCE}/blob/main/NOTICE`)),
+        ];
+        if (host.private !== null) {
+            lines.push(line(host.private));
+        }
+        return lines;
     }
 
     intercept(event) {
@@ -366,6 +401,9 @@ Layer.Help = class extends Layer {
         return !event.key.startsWith("Arrow");
     }
 };
+
+/// Where Sagitta's source lives, which the GPL has the About lines point to.
+Layer.Help.SOURCE = "https://github.com/hailey-jay/sagitta";
 
 /// The export layer (`C-e`): the diagram's tikz-cd encoding as an object, whose options are toggled
 /// and stepped by key, and which `y` or Enter copies to the clipboard.
