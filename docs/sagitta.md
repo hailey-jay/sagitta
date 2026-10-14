@@ -34,6 +34,7 @@ The macros reload whenever the file changes.
 
 Typing edits the label of the targeted cell, spreadsheet-style, except that `(`, `[`, and `{` wrap the label (or the selected part of it) instead of replacing it.
 Elsewhere they bring their closing delimiter, as in most editors, unless it is already next; typing the closing one steps over it, and Backspace in an empty pair deletes both.
+RET edits the label in place instead, and on an empty cell with nothing selected, makes a cell there to label, in either mode.
 `\{` and `\|` pair the same way, and `\langle`, `\lvert`, `\lVert`, `\lceil`, and `\lfloor` once something other than a letter follows them.
 After `\left`, the closing delimiter comes with `\right`.
 `|` pairs only there, since it is as often a restriction or "divides" as an absolute value: elsewhere it types itself, and `\|` or `\lvert` gives a pair.

@@ -1149,7 +1149,7 @@ Keymap.CONTEXT = new Enum(
         {
             combinations: [{ key: "Enter", context: Always }],
             press: (ui) => ui.keys.enter(),
-            help: [["Typing", "edit the label in place"]],
+            help: [["Typing", "edit the label in place, or label a new cell"]],
         },
         // Without the modifier, which is the mark's (see `Bindings.DEFAULTS`).
         {

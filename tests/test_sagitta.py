@@ -367,6 +367,25 @@ def test_a_key_the_command_layer_does_not_use_is_kept_from_the_browser(sagitta, 
     assert sagitta("evaluate", _diagram(home / "paper"), script)
 
 
+@pytest.mark.parametrize("quiver", [False, True])
+def test_return_on_an_empty_cell_makes_one_to_label(sagitta, home, quiver):
+    if quiver:
+        _quiver_mode(home)
+    diagram = _diagram(home / "paper")
+    result = sagitta("typing", diagram, json.dumps(["Right", "Right", "Enter", "E", "Enter"]))
+    assert result["counts"]["vertices"] == 5
+    assert "& B & E" in diagram.read_text()
+
+
+def test_return_with_a_selection_still_edits_it(sagitta, home):
+    """The focus point on an empty cell leaves a selection's label to RET, as it always has."""
+    diagram = _diagram(home / "paper")
+    result = sagitta("typing", diagram, json.dumps(
+        [["Space", ["shift"]], "Right", "Right", "Enter", "x", "Enter"]))
+    assert result["counts"]["vertices"] == 4
+    assert "\tAx & B" in diagram.read_text()
+
+
 def test_quiver_mode_command_switches_it(sagitta, home):
     sagitta("commands", _diagram(home / "paper"), json.dumps(["quiver-mode"]))
     settings = json.loads((home / ".config" / "sagitta" / "settings.json").read_text())
@@ -500,7 +519,7 @@ def test_the_help_layer_lists_every_binding(sagitta, home):
     help = dict(sagitta("help", _diagram(home / "paper")))
     assert list(help) == ["Typing", "Moving", "Mouse", "Layers", "Chords", "Help"]
     assert help["Typing"][0] == ["a \\ 2 …", "replace the label"]
-    assert ["RET", "edit the label in place"] in help["Typing"]
+    assert ["RET", "edit the label in place, or label a new cell"] in help["Typing"]
     assert ["<delete>", "delete"] in help["Typing"]
     assert help["Moving"][0] == ["arrows", "move the focus point"]
     assert help["Mouse"][0] == ["click", "select; again to edit the label"]
