@@ -101,6 +101,9 @@ class UI {
         // sizing them is scheduled.
         this.unsized_labels = new Set();
         this.sizing_labels = false;
+        // How many times in a row each edge's label has measured nothing, though it has text (see
+        // `size_labels`).
+        this.unmeasured = new WeakMap();
 
         // The user settings, kept in `~/.config/sagitta/settings.json` (see `Settings`).
         this.settings = new Settings(SETTINGS);
@@ -307,6 +310,12 @@ class UI {
             );
             this.unsized_labels.add(cell);
         }
+        this.queue_sizing();
+    }
+
+    /// Size the labels in `unsized_labels` (see `size_labels`), once the fonts they need have
+    /// loaded, in the next frame, unless that is already to come.
+    queue_sizing() {
         if (this.unsized_labels.size === 0 || this.sizing_labels) {
             return;
         }
@@ -352,6 +361,18 @@ class UI {
                 width + (width > 0 ? CONSTANTS.EDGE_LABEL_PADDING * 2 : 0),
                 height + (height > 0 ? CONSTANTS.EDGE_LABEL_PADDING * 2 : 0),
             );
+            // An edge's label sits in a `foreignObject`, which the edge replaces as it redraws. A
+            // browser may not lay out one inserted in the frame the label is measured in, as
+            // Firefox does not, so that a label typed onto an arrow measures nothing, and is never
+            // seen. Such a label is measured again in the next frame, a few times at most, since
+            // a label of nothing but space really does measure nothing.
+            const retries = this.unmeasured.get(edge) ?? 0;
+            if (width === 0 && edge.label.trim() !== "" && retries < 3) {
+                this.unmeasured.set(edge, retries + 1);
+                this.unsized_labels.add(edge);
+            } else {
+                this.unmeasured.delete(edge);
+            }
         }
         // Resize the grid once for all the vertices, rather than once for each.
         const buffered = this.buffer_updates;
@@ -371,6 +392,7 @@ class UI {
                 cell.render(this);
             }
         }
+        this.queue_sizing();
     }
 
     /// Focus the label input and select all its text.
