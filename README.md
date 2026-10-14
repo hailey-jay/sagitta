@@ -54,6 +54,7 @@ Firefox and Safari open a copy, and saving downloads the diagram.
 A page sees only the folders it is given, so in Chromium, `:open-folder` hands over the paper's folder: opening a diagram from it then finds the nearest `macros.tex`, as the desktop app does, and relative paths work inside it.
 Without a folder, or in Firefox and Safari, take macros from `f` in the macros layer, or drop a `.tex` file on the page.
 Chromium also reopens the last diagram, and its folder, on the next visit, once you agree.
+A link ending in `#q=...`, as quiver's do, opens the diagram it encodes, untitled; the encoding is the same as a `.tikzcd` file's `%#q=` line, so the page's address with a file's line after `#q=` opens that diagram.
 Once loaded, the page opens without a network, and browsers that install web apps (Chrome and Edge, or Safari's Add to Dock) can install it to run in a window of its own.
 Settings and the keys file live in the browser's storage, and opening the settings file (`o` in the settings layer) edits both.
 The browser keeps `C-n` for itself, so start a new diagram with `:new`.

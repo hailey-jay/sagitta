@@ -27,12 +27,10 @@ app.whenReady().then(async () => {
         }
     });
     await window.loadURL(url);
-    // Wait for the diagram to load, which titles the page, as the desktop driver does. Until then
-    // an empty diagram counts as changed, so the title has a ` + `, and the reopening of the last
-    // diagram, which reads IndexedDB first, is not mistaken for a start with none.
+    // Wait for the page to finish starting, which includes opening a link or the last diagram.
     await window.webContents.executeJavaScript(`new Promise((resolve) => {
-        const check = () => document.title.endsWith(" - Sagitta")
-            && !document.title.includes(" + ") ? resolve() : setTimeout(check, 50);
+        const check = () => window.ui?.started !== undefined
+            ? window.ui.started.then(resolve) : setTimeout(check, 50);
         check();
     })`);
     const notice = await window.webContents.executeJavaScript(`(() => {

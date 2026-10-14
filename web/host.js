@@ -473,18 +473,38 @@ if (!("host" in window)) {
             return folder.path;
         };
 
+        /// The diagram the address links to, as quiver's links do (`#q=...`), as its encoding, or
+        /// `null`. The encoding is base64, whose `+` `URLSearchParams` would read as a space.
+        const linked = () => {
+            const field = location.hash.slice(1).split("&").find((part) => part.startsWith("q="));
+            return field === undefined || field === "q="
+                ? null
+                : decodeURIComponent(field.slice(2));
+        };
+        const link_listeners = [];
+        // A link pasted into the address bar of the open page changes only the hash.
+        window.addEventListener("hashchange", () => {
+            const link = linked();
+            if (link !== null) {
+                link_listeners.forEach((callback) => callback(link));
+            }
+        });
+
         const host = {
-            // There is no command line. The diagram comes from the last visit, a picker, or a drop.
+            // There is no command line. The diagram comes from a link, the last visit, a picker,
+            // or a drop. A link is asked for by name, so it comes before the last visit.
             arguments: async () => {
-                const kept = has_api ? await reopen() : null;
+                const link = linked();
+                const kept = link === null && has_api ? await reopen() : null;
                 if (kept === null) {
-                    return { diagram: null, macros: null };
+                    return { diagram: null, macros: null, link };
                 }
                 if (kept.folder !== null) {
                     use_folder(kept.folder, false);
                 }
-                return { diagram: await path_for(kept.last), macros: null };
+                return { diagram: await path_for(kept.last), macros: null, link: null };
             },
+            on_link: (callback) => link_listeners.push(callback),
 
             resolve: async (base, file) => normalise(file.startsWith("/")
                 ? file

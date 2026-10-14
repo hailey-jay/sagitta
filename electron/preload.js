@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld("host", {
     close: () => ipcRenderer.send("close"),
     on_changed: (callback) => ipcRenderer.on("changed", (_, file) => callback(file)),
     on_save_and_close: (callback) => ipcRenderer.on("save-and-close", () => callback()),
+    // The desktop has no address bar to follow a link from.
+    on_link: () => {},
     // The path of a `File` from a drop, which the page cannot see itself.
     path_of: (file) => webUtils.getPathForFile(file),
     // How a message names the file at `path`: by its path, which the user can find.

@@ -1719,13 +1719,14 @@ def site():
 
 @pytest.fixture
 def browser(site, home):
-    """Evaluate a script in the page, served from `site`, returning what it returns, or, if
-    `notice`, that and the text of the notice the page opened on its own (see `browser.js`), or
-    `None`. Fails on any page error, as `sagitta` does."""
+    """Evaluate a script in the page, served from `site` at `hash`, returning what it returns,
+    or, if `notice`, that and the text of the notice the page opened on its own (see
+    `browser.js`), or `None`. Fails on any page error but one with `expected_error` in it, as
+    `sagitta` does."""
 
-    def run(script, notice=False):
+    def run(script, notice=False, hash="", expected_error=None):
         env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"))
-        command = [electron, "--ozone-platform=headless", _BROWSER, site, script]
+        command = [electron, "--ozone-platform=headless", _BROWSER, site + hash, script]
         if os.environ.get("CI"):
             command.insert(1, "--no-sandbox")
         completed = subprocess.run(
@@ -1733,7 +1734,12 @@ def browser(site, home):
         lines = [line for line in completed.stdout.splitlines() if line.startswith("RESULT ")]
         assert lines, f"no result:\n{completed.stdout}\n{completed.stderr}"
         output = json.loads(lines[-1][len("RESULT "):])
-        assert output["errors"] == []
+        errors = output["errors"]
+        if expected_error is not None:
+            assert [error for error in errors if expected_error in error], \
+                f"never reported {expected_error!r}: {errors}"
+            errors = [error for error in errors if expected_error not in error]
+        assert errors == []
         # A script returning nothing leaves `result` out.
         result = output.get("result")
         return (result, output["notice"]) if notice else result
@@ -1880,3 +1886,36 @@ def test_the_page_keeps_its_files_to_open_offline(browser):
         return kept !== undefined && (await kept.text()).includes("--ui-black");
     })()""")
     assert result
+
+
+def _square_link(browser):
+    """The square's encoding, as its file's `%#q=` line has it."""
+    return browser("""(async () => {
+        await ui.file.open(host.path_of(new File([%s], "square.tikzcd")), true);
+        return ui.file.text().match(/^%%#q=(\\S+)$/m)[1];
+    })()""" % json.dumps(SQUARE))
+
+
+def test_a_link_opens_its_diagram(browser):
+    """As quiver's do, with `+` and `=` escaped or not, and untitled, so unsaved."""
+    encoding = _square_link(browser)
+    for hash in [f"#q={encoding}", f"#q={encoding.replace('+', '%2B').replace('=', '%3D')}"]:
+        result = browser("""({ cells: ui.quiver.all_cells().length, title: document.title,
+            dirty: ui.file.dirty })""", hash=hash)
+        assert result == {"cells": 8, "title": "untitled + - Sagitta", "dirty": True}
+
+
+def test_a_link_pasted_into_the_open_page_opens(browser):
+    encoding = _square_link(browser)
+    result = browser("""(async () => {
+        location.hash = "q=%s";
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return ui.quiver.all_cells().length;
+    })()""" % encoding)
+    assert result == 8
+
+
+def test_a_broken_link_says_so(browser):
+    cells = browser("ui.quiver.all_cells().length", hash="#q=bm90IGpzb24=",
+                    expected_error="Could not open the link")
+    assert cells == 0

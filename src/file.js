@@ -43,6 +43,7 @@ class DiagramFile {
                 this.load_macros();
             }
         });
+        host.on_link((link) => this.open_link(link));
         host.on_save_and_close(async () => {
             if (await this.save()) {
                 host.close();
@@ -63,12 +64,14 @@ class DiagramFile {
             }
         });
 
-        const { diagram, macros } = await host.arguments();
+        const { diagram, macros, link } = await host.arguments();
         if (macros !== null) {
             await this.use_macros(macros, true);
         }
         if (diagram !== null) {
             await this.open(diagram, true);
+        } else if (link !== null) {
+            await this.open_link(link, true);
         } else {
             this.mark_saved();
         }
@@ -138,6 +141,27 @@ class DiagramFile {
         } catch (error) {
             UI.display_error(`Could not open ${host.describe(path)}: ${error.message}`);
         }
+    }
+
+    /// Open the diagram a link encodes, as quiver's `#q=...` does, untitled and so unsaved, keeping
+    /// the macros. Unless `force`, asks before discarding unsaved changes.
+    async open_link(encoding, force = false) {
+        const ui = this.ui;
+        if (!force && this.dirty && !await host.confirm(`Discard the changes to ${this.name()}?`)) {
+            return;
+        }
+        this.path = null;
+        ui.reset();
+        DiagramFile.restore_sep(ui, "");
+        this.mark_saved();
+        try {
+            QuiverImportExport.base64.import(ui, encoding);
+            ui.mode_line.flash(`opened a link${this.describe_macros()}`);
+        } catch (error) {
+            ui.reset();
+            UI.display_error(`Could not open the link: ${error.message}`);
+        }
+        ui.mode_line.update(ui);
     }
 
     /// Start an untitled diagram, keeping the macros, asking before discarding unsaved changes.

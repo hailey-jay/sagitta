@@ -233,7 +233,8 @@ app.whenReady().then(() => {
     const watched = new Map();
 
     const handlers = {
-        arguments: () => ({ diagram: args.diagram, macros: args.macros }),
+        // A link to open (see `web/host.js`) comes only from a browser's address bar.
+        arguments: () => ({ diagram: args.diagram, macros: args.macros, link: null }),
         resolve: (base, file) => path.resolve(base ?? process.cwd(), file),
         read: read_file,
         write: write_file,
