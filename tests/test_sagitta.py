@@ -11,18 +11,25 @@ opening and saving must not change them, and hand edits must win over the encode
 HOME and XDG_CONFIG_HOME point into `tmp_path` for every run, so Sagitta's settings and its
 `macros.tex` search never see the real home directory. The headless clipboard is Chromium's
 own, not the desktop's, so the clipboard scenarios leave the real one alone.
+
+The browser tests serve the repository over HTTP instead, and load it in a window with no preload
+(`tests/sagitta/browser.js`), so that the page runs on `web/host.js`, as it would in a browser.
 """
 
+import functools
+import http.server
 import json
 import os
 import shutil
 import stat
 import subprocess
+import threading
 
 import pytest
 
 _APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _DRIVER = os.path.join(_APP, "tests", "sagitta", "driver.js")
+_BROWSER = os.path.join(_APP, "tests", "sagitta", "browser.js")
 
 
 def _electron():
@@ -1670,3 +1677,111 @@ def test_source_parses(source):
         [node, "--check", os.path.join(_APP, source)], capture_output=True, text=True,
         check=False)
     assert completed.returncode == 0, completed.stderr
+
+
+# ── In a browser ──────────────────────────────────────────────────────────────
+
+
+class _QuietHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *_):
+        pass
+
+
+@pytest.fixture(scope="module")
+def site():
+    """The repository, served over HTTP on a free port, as a static host would serve it."""
+    handler = functools.partial(_QuietHandler, directory=_APP)
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_address[1]}/"
+    server.shutdown()
+
+
+@pytest.fixture
+def browser(site, home):
+    """Evaluate a script in the page, served from `site`, returning what it returns. Fails on any
+    page error, as `sagitta` does."""
+
+    def run(script):
+        env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"))
+        command = [electron, "--ozone-platform=headless", _BROWSER, site, script]
+        if os.environ.get("CI"):
+            command.insert(1, "--no-sandbox")
+        completed = subprocess.run(
+            command, env=env, capture_output=True, text=True, timeout=60, check=False)
+        lines = [line for line in completed.stdout.splitlines() if line.startswith("RESULT ")]
+        assert lines, f"no result:\n{completed.stdout}\n{completed.stderr}"
+        output = json.loads(lines[-1][len("RESULT "):])
+        assert output["errors"] == []
+        return output["result"]
+
+    return run
+
+
+def test_the_page_runs_on_the_web_host(browser):
+    result = browser("""({
+        built: document.querySelectorAll(".mode-line").length,
+        title: document.title,
+        web: typeof host.describe === "function" && host.describe("/1/a.tikzcd") === "a.tikzcd",
+    })""")
+    assert result == {"built": 1, "title": "untitled - Sagitta", "web": True}
+
+
+def test_a_dropped_diagram_opens_in_a_browser(browser):
+    script = """(async () => {
+        const text = %s;
+        const path = host.path_of(new File([text], "square.tikzcd"));
+        await ui.file.open(path, true);
+        return { counts: ui.quiver.all_cells().length, title: document.title };
+    })()""" % json.dumps(SQUARE)
+    assert browser(script) == {"counts": 8, "title": "square.tikzcd - Sagitta"}
+
+
+def test_settings_are_kept_in_the_browser(browser):
+    result = browser("""(async () => {
+        await ui.settings.set("ui.zoom", 150);
+        return JSON.parse(await host.read_settings())["ui.zoom"];
+    })()""")
+    assert result == 150
+
+
+@pytest.mark.parametrize("press,expected", [
+    ("Discard", True),
+    ("Cancel", False),
+    # ESC presses the last button, Cancel.
+    (None, False),
+])
+def test_discarding_asks_in_the_page(browser, press, expected):
+    script = """(async () => {
+        const answer = host.confirm("Discard the changes to square.tikzcd?");
+        const dialog = document.querySelector("dialog.web-dialog");
+        const focused = document.activeElement.textContent;
+        const press = %s;
+        if (press === null) {
+            dialog.close();
+        } else {
+            [...dialog.querySelectorAll("button")]
+                .find((button) => button.textContent === press).click();
+        }
+        return { answer: await answer, focused, gone: !dialog.isConnected };
+    })()""" % json.dumps(press)
+    assert browser(script) == {"answer": expected, "focused": "Cancel", "gone": True}
+
+
+def test_the_settings_are_edited_in_the_page(browser):
+    result = browser("""(async () => {
+        await ui.settings.set("ui.zoom", 150);
+        await host.open_settings();
+        const dialog = document.querySelector("dialog.web-dialog[open]");
+        const areas = [...dialog.querySelectorAll("textarea")];
+        // Keys typed here are the dialog's, not the page's.
+        const event = new KeyboardEvent("keydown", { key: "x", bubbles: true, cancelable: true });
+        areas[0].dispatchEvent(event);
+        return {
+            fields: areas.length,
+            zoom: JSON.parse(areas[0].value)["ui.zoom"],
+            mode_line: document.querySelector(".mode-line").textContent.startsWith("TYPE"),
+        };
+    })()""")
+    assert result == {"fields": 2, "zoom": 150, "mode_line": True}

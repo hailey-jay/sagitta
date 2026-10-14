@@ -155,11 +155,11 @@ if (!("host" in window)) {
             }
         });
 
-        // The dialog's look, in the page's colours (see `main.css`).
+        // The dialogs' look, in the page's colours (see `main.css`).
         const style = document.createElement("style");
         style.textContent = `
-            .web-settings {
-                width: min(48rem, calc(100vw - 2rem));
+            .web-dialog {
+                width: min(32rem, calc(100vw - 2rem));
                 padding: 1rem;
                 border: 1px solid var(--ui-border);
                 border-radius: 4px;
@@ -167,77 +167,139 @@ if (!("host" in window)) {
                 color: var(--ui-white);
                 font: inherit;
             }
-            .web-settings::backdrop {
+            .web-dialog.wide {
+                width: min(48rem, calc(100vw - 2rem));
+            }
+            .web-dialog::backdrop {
                 background: hsla(0, 0%, 0%, 0.5);
             }
-            .web-settings label {
+            .web-dialog p {
+                margin: 0 0 1rem;
+            }
+            .web-dialog label {
                 display: block;
                 margin-bottom: 1rem;
             }
-            .web-settings textarea {
+            .web-dialog textarea, .web-dialog input {
                 display: block;
                 width: 100%;
-                height: 12rem;
                 margin-top: 0.25rem;
                 padding: 0.5rem;
                 border: 1px solid var(--ui-border);
                 background: transparent;
                 color: inherit;
                 font-family: monospace;
+            }
+            .web-dialog textarea {
+                height: 12rem;
                 resize: vertical;
             }
-            .web-settings textarea:focus {
+            .web-dialog :is(textarea, input):focus {
                 outline: 1px solid var(--ui-focus);
             }
-            .web-settings div {
+            .web-dialog .buttons {
                 display: flex;
                 justify-content: flex-end;
                 gap: 0.5rem;
             }
+            .web-dialog button {
+                padding: 0.25rem 0.75rem;
+                border: 1px solid var(--ui-border);
+                border-radius: 2px;
+                background: transparent;
+                font: inherit;
+                color: inherit;
+                cursor: pointer;
+            }
+            .web-dialog button:hover {
+                background: var(--ui-hover);
+            }
+            .web-dialog button:focus-visible {
+                outline: 1px solid var(--ui-focus);
+            }
         `;
         document.head.append(style);
 
+        /// Ask the user something in a modal dialog of the page's own, rather than the browser's,
+        /// which looks foreign and, in some browsers, blocks the page. `message` heads it, if not
+        /// `null`; `fields` are its text fields, as `[label, value, multiline]`; and `buttons` its
+        /// buttons, as `[text, value]`, the last of them the one ESC presses. Resolves to the value
+        /// of the button pressed, with the fields' contents, as `{ value, fields }`. RET in a
+        /// one-line field presses the first button. `focus` names the button to focus, by index,
+        /// when there are no fields.
+        const ask = ({ message = null, fields = [], buttons, wide = false, focus = 0 }) =>
+            new Promise((resolve) => {
+                const dialog = document.createElement("dialog");
+                dialog.className = `web-dialog${wide ? " wide" : ""}`;
+                if (message !== null) {
+                    const paragraph = document.createElement("p");
+                    paragraph.textContent = message;
+                    dialog.append(paragraph);
+                }
+                let value = buttons[buttons.length - 1][1];
+                const inputs = fields.map(([label, text, multiline]) => {
+                    const heading = document.createElement("label");
+                    heading.textContent = label;
+                    const input = document.createElement(multiline ? "textarea" : "input");
+                    input.spellcheck = false;
+                    input.value = text;
+                    if (!multiline) {
+                        input.addEventListener("keydown", (event) => {
+                            if (event.key === "Enter") {
+                                event.preventDefault();
+                                value = buttons[0][1];
+                                dialog.close();
+                            }
+                        });
+                    }
+                    heading.append(input);
+                    dialog.append(heading);
+                    return input;
+                });
+                const row = document.createElement("div");
+                row.className = "buttons";
+                const elements = buttons.map(([text, button_value]) => {
+                    const button = document.createElement("button");
+                    button.textContent = text;
+                    button.addEventListener("click", () => {
+                        value = button_value;
+                        dialog.close();
+                    });
+                    row.append(button);
+                    return button;
+                });
+                dialog.append(row);
+                // The page's own keys must not act on what is typed here. ESC still closes the
+                // dialog, which is the browser's doing rather than a listener's.
+                for (const type of ["keydown", "keyup"]) {
+                    dialog.addEventListener(type, (event) => event.stopPropagation());
+                }
+                dialog.addEventListener("close", () => {
+                    dialog.remove();
+                    resolve({ value, fields: inputs.map((input) => input.value) });
+                });
+                document.body.append(dialog);
+                dialog.showModal();
+                (inputs[0] ?? elements[focus]).focus();
+                inputs[0]?.select?.();
+            });
+
         /// Edit the settings and the keys file in the page, which the desktop shell leaves to an
         /// editor. Saving stores both and reloads, since the page reads them as it starts.
-        const edit_settings = () => {
-            const dialog = document.createElement("dialog");
-            dialog.className = "web-settings";
-            const field = (label, key, placeholder) => {
-                const heading = document.createElement("label");
-                heading.textContent = label;
-                const area = document.createElement("textarea");
-                area.spellcheck = false;
-                area.placeholder = placeholder;
-                area.value = load(key) ?? "";
-                heading.append(area);
-                dialog.append(heading);
-                return area;
-            };
-            const settings = field("settings.json", STORAGE.settings, "{}");
-            const keys = field("keys", STORAGE.keys, "# bind  ACTION  KEYS\n# unbind  KEYS");
-            const buttons = document.createElement("div");
-            const button = (text, action) => {
-                const element = document.createElement("button");
-                element.textContent = text;
-                element.addEventListener("click", action);
-                buttons.append(element);
-            };
-            button("Cancel", () => dialog.close());
-            button("Save and reload", () => {
-                store(STORAGE.settings, settings.value);
-                store(STORAGE.keys, keys.value);
-                location.reload();
+        const edit_settings = async () => {
+            const { value, fields: [settings, keys] } = await ask({
+                fields: [
+                    ["settings.json", load(STORAGE.settings) ?? "", true],
+                    ["keys", load(STORAGE.keys) ?? "", true],
+                ],
+                buttons: [["Save and reload", true], ["Cancel", false]],
+                wide: true,
             });
-            dialog.append(buttons);
-            // The page's own keys must not act on what is typed here. Escape still closes the
-            // dialog, which is the browser's doing rather than a listener's.
-            for (const type of ["keydown", "keyup"]) {
-                dialog.addEventListener(type, (event) => event.stopPropagation());
+            if (value) {
+                store(STORAGE.settings, settings);
+                store(STORAGE.keys, keys);
+                location.reload();
             }
-            dialog.addEventListener("close", () => dialog.remove());
-            document.body.append(dialog);
-            dialog.showModal();
-            settings.focus();
         };
 
         return {
@@ -328,13 +390,19 @@ if (!("host" in window)) {
                     }));
                     return handle === null ? null : register(handle.name, { handle });
                 }
-                const chosen = window.prompt("Download the diagram as", name);
-                return chosen === null || chosen.trim() === ""
-                    ? null
-                    : register(chosen.trim(), {});
+                const { value, fields: [chosen] } = await ask({
+                    fields: [["Download the diagram as", name, false]],
+                    buttons: [["Download", true], ["Cancel", false]],
+                });
+                return !value || chosen.trim() === "" ? null : register(chosen.trim(), {});
             },
 
-            confirm: async (message) => window.confirm(message),
+            // As the desktop shell asks: Cancel is the default.
+            confirm: async (message) => (await ask({
+                message,
+                buttons: [["Discard", true], ["Cancel", false]],
+                focus: 1,
+            })).value,
 
             watch: async (path) => {
                 if (!watched.has(path)) {
