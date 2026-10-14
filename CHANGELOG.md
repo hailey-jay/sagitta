@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Sagitta runs in a browser, as a page served from any static host. In Chrome, Edge, and other Chromium browsers, opening a diagram keeps hold of the file, so saving writes it back and a macros file is reloaded when it changes. Other browsers open a copy and save by downloading. There is no `macros.tex` search, since a page sees no directories, so macros come from `f` in the macros layer or a dropped `.tex` file. Settings and the keys file live in the browser's storage, and opening the settings file edits both in the page. `npm run web` serves the repository to try it.
+
 ## 0.3.0
 
 - `; x`, or `:crossing-over`, makes an arrow cut a gap in the arrows it crosses, as tikz-cd's `crossing over` does, and stacks it above any others already crossing over. The export writes the arrows in that stacking order, since tikz-cd only cuts a gap in arrows drawn before the crossing one, and the canvas stacks them the same way, so the gaps match the PDF. `:crossing-over on` brings an arrow to the front, `off` turns it off, and hand-written `crossing over` is read back in the order it is written.

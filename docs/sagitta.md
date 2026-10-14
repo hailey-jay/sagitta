@@ -71,6 +71,7 @@ While the diagram is empty, a line of tips runs along the top.
 
 `~/.config/sagitta/keys`, if it exists, rebinds keys.
 On Windows the file is `%APPDATA%\sagitta\keys`.
+In a browser it lives in the browser's storage, and opening the settings file (`o` in the settings layer) edits it beside the settings.
 It is read at startup, and Sagitta never writes it.
 Each line names something, then its keys, which replace all of its defaults:
 
@@ -199,6 +200,7 @@ A connecting morphism with one label is one arrow instead: curved (`; b`, and `;
 ## Settings
 
 Settings live in `~/.config/sagitta/settings.json`, or in `%APPDATA%\sagitta\settings.json` on Windows.
+In a browser they live in the browser's storage, for that browser alone.
 Sagitta writes the file with every default the first time a setting changes, so the file shows each setting there is.
 It can be edited by hand, and is read at startup.
 

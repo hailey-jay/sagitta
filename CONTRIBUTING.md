@@ -30,6 +30,8 @@ There is no build step.
 - `ui.js`, `main.js`: the `UI` that holds the rest, and the startup.
 
 `electron/` is the desktop shell, which the page reaches through `window.host`.
+`web/host.js` is the same `window.host` for a browser, and does nothing under the shell, which defines it first.
+To try the page in a browser, run `npm run web` and open <http://localhost:8000>.
 `sagitta` is the launcher, which checks the arguments and picks an Electron.
 
 Match the code around a change: `///` doc comments on functions, `//` comments in full sentences, snake_case names, and lines of about 100 characters at most.

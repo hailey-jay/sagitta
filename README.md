@@ -44,6 +44,17 @@ Settings and the keys file live in `%APPDATA%\sagitta`, rather than `~/.config/s
 
 A windowed program on Windows has no console, so `--help` and `--version` open a dialog instead of printing.
 
+### In a browser
+
+Sagitta also runs as a web page, still experimental.
+Run `npm run web` in a clone and open <http://localhost:8000>, or serve the repository from any static host.
+
+Chromium browsers (Chrome, Edge, Brave) open and save the diagram file in place, as the desktop app does.
+Firefox and Safari open a copy, and saving downloads the diagram.
+A page sees no directories, so the nearest `macros.tex` is not found on its own: take macros from `f` in the macros layer, or drop a `.tex` file on the page.
+Settings and the keys file live in the browser's storage, and opening the settings file (`o` in the settings layer) edits both.
+The browser keeps `C-n` for itself, so start a new diagram with `:new`.
+
 ### From source
 
 You need git and Node.js (for npm).
