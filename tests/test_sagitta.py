@@ -1147,6 +1147,33 @@ def test_checkpoints_are_added_at_the_focus_point(sagitta, home):
     assert again["edges"][0]["route"] == [[0, 2]]
 
 
+FORK = """\
+\\begin{tikzcd}
+\tP \\arrow[dr] \\arrow[drr] & & \\\\
+\t& Q & R
+\\end{tikzcd}
+"""
+
+
+def test_a_checkpoint_comes_out_of_the_arrows_that_have_it(sagitta, home):
+    """With several arrows selected, a cell only some pass through is taken out of those, rather
+    than added to the rest."""
+    diagram = _diagram(home / "fork", FORK, "fork.tikzcd")
+    first = ("const [edge] = ui.quiver.all_cells().filter((cell) => cell.is_edge());"
+             " edge.options.route = [[0, 1]]; edge.render(ui);")
+    result = sagitta("route", diagram, json.dumps([{"js": first}, [0, 1], "checkpoint"]))
+    assert [edge["route"] for edge in result["edges"]] == [[], []]
+
+
+def test_k_takes_out_the_checkpoint_under_the_pointer(sagitta, home):
+    """Wherever the focus point is."""
+    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
+    result = sagitta("route", diagram, json.dumps(
+        ["route x", [0, 1], {"hover": 0}, {"keys": [[";"], ["k"]]}]))
+    assert result["edges"][0]["route"] == []
+    assert "checkpoint removed" in result["flashed"]
+
+
 def test_checkpoint_has_a_key_in_the_layer(sagitta, home):
     diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
     result = sagitta("route", diagram, json.dumps(

@@ -99,6 +99,11 @@ async function run(window) {
             });
             await wait(200);
         },
+        /// Move the pointer to `point`, `[x, y]` in the page, with no button held.
+        hover: async ([x, y]) => {
+            contents.sendInputEvent({ type: "mouseMove", x: Math.round(x), y: Math.round(y) });
+            await wait(100);
+        },
         /// Click with `button` (`left`, by default) at `point`, `[x, y]` in the page.
         click: async ([x, y], button = "left") => {
             for (const type of ["mouseMove", "mouseDown", "mouseUp"]) {

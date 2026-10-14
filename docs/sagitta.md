@@ -164,7 +164,8 @@ An arrow can be routed through cells instead of drawn as a curve: it runs straig
 - `; w`, or `:route`, bends the selected arrows round one corner, along the row first.
   Pressed again, it goes along the column first, and a third time it straightens them.
   `:route x`, `:route y`, and `:route none` name the step.
-- `; k`, or `:checkpoint`, adds the cell at the focus point to the selected arrows' routes, or takes it out if they already pass through it.
+- `; k`, or `:checkpoint`, adds the cell at the focus point to the selected arrows' routes, or, if any of them already passes through it, takes it out of those.
+  With the pointer resting on a selected arrow's checkpoint ring, it takes out that checkpoint instead, wherever the focus point is.
   The arrow passes through its checkpoints in the order they were added, and while it is selected, each is marked by a ring.
   A cell an arrow joins is no checkpoint.
 - `; m`, or `:move-checkpoint`, picks up the checkpoint at the focus point, which then follows the focus point.
@@ -229,8 +230,8 @@ A value the setting cannot take is refused, with what it may be.
 | `diagram.var_corner` | `false` | the corner `; p` gives first, which follows the last one used |
 | `diagram.arrow_preset` | `"plain"` | the preset new arrows take, from `plain`, `equals`, `inclusion`, `mono`, `epi`, `maps-to`, `dashed`, `dotted`, and `squiggly` |
 | `ui.dark_mode` | `false` | the grey canvas |
-| `ui.zoom` | `100` | the zoom the view starts at, and `reset-zoom` returns to, in percent (20 to 200) |
 | `ui.quiver_mode` | `false` | quiver mode (see Keys): the command layer's keys without `;`, and RET before typing a label |
+| `ui.zoom` | `100` | the zoom the view starts at, and `reset-zoom` returns to, in percent (20 to 200) |
 | `ui.cell_size` | `128` | the size of an empty column or row, in pixels (48 to 512) |
 | `ui.label_size` | `26` | the size of labels, in pixels (8 to 72) |
 | `ui.which_key_delay` | `300` | how long `;` waits for a key before listing its keys, in milliseconds (0 to 5000), or `null` for only on `?` |

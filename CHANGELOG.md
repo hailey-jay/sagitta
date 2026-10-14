@@ -4,6 +4,7 @@
 
 - Sagitta runs in a browser, as a page served from any static host. In Chrome, Edge, and other Chromium browsers, opening a diagram keeps hold of the file, so saving writes it back and a macros file is reloaded when it changes. Other browsers open a copy and save by downloading. There is no `macros.tex` search, since a page sees no directories, so macros come from `f` in the macros layer or a dropped `.tex` file. Settings and the keys file live in the browser's storage, and opening the settings file edits both in the page. `npm run web` serves the repository to try it.
 - Quiver mode, `:quiver-mode` or `q` in the settings layer, keeps the command layer open, so its keys work without `;`, and a label is typed only after RET, as in quiver. Spreadsheet mode, where typing edits the label, stays the default. The choice is `ui.quiver_mode` in the settings.
+- `; k` takes a checkpoint out of the selected arrows that pass through it, rather than adding it to the others when only some do, and with the pointer resting on a checkpoint's ring, it takes out that one, wherever the focus point is.
 
 ## 0.3.0
 

@@ -268,11 +268,15 @@ class Commands {
     }
 
     /// Add the cell at the focus point to the routes of the selected arrows, as their last
-    /// checkpoint before the target, or take it out of the routes that already pass through it.
+    /// checkpoint before the target, or, if any of them already passes through it, take it out of
+    /// those. With the pointer over a selected arrow's checkpoint, that checkpoint is the cell.
     checkpoint() {
         const ui = this.ui;
         const edges = this.routable();
-        const at = ui.focus_position.toArray();
+        const hovered = ui.pointer.hovered_checkpoint();
+        const at = hovered !== null
+            ? [...hovered.edge.options.route[hovered.index]]
+            : ui.focus_position.toArray();
         const has = (edge) => edge.options.route.some(([x, y]) => x === at[0] && y === at[1]);
         const ends = (edge) => [edge.source, edge.target]
             .some((end) => end.position.x === at[0] && end.position.y === at[1]);
@@ -280,7 +284,7 @@ class Commands {
             throw new Error("The focus point is on an end of the arrow: move it to a cell the"
                 + " arrow should pass through.");
         }
-        const remove = edges.every((edge) => has(edge) || ends(edge));
+        const remove = edges.some(has);
         const routing = new Set(edges);
         ui.arrow_options.set_route(ui, (edge) => {
             if (!routing.has(edge) || ends(edge)) {
