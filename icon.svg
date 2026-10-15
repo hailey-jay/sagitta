@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- Sagitta's icon, drawn in Inkscape (~/Port/sketch.svg), with its mesh
-     gradient rebuilt as two linear gradients and a mask, which every renderer draws. -->
+<!-- Sagitta's icon, drawn in Inkscape, with its mesh gradient rebuilt as two linear
+     gradients and a mask, which every renderer draws. -->
 
 <svg
    width="256" height="256"
