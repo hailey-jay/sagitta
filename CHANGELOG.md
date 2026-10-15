@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- In Firefox, a label typed onto an arrow is drawn. Firefox does not lay out an arrow's label in the frame the arrow redraws it, so such a label measured nothing and never showed; it is now measured again in the next frame. Labels read from a file, and the desktop app, were not affected.
+
 ## 0.4.0
 
 - Sagitta runs in a browser, as a page served from any static host. In Chrome, Edge, and other Chromium browsers, opening a diagram keeps hold of the file, so saving writes it back and a macros file is reloaded when it changes. Other browsers open a copy and save by downloading. In Chromium, `:open-folder` hands over a folder, in which the nearest `macros.tex` is found and relative paths work, and the last diagram and its folder reopen on the next visit, once the user agrees. Elsewhere, macros come from `f` in the macros layer or a dropped `.tex` file. Settings and the keys file live in the browser's storage, and opening the settings file edits both in the page.
