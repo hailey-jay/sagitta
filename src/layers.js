@@ -631,7 +631,8 @@ Layer.Settings = class extends Layer {
         }
     }
 
-    /// Open `settings.json` in the desktop's editor, writing it first if it has never been.
+    /// Open `settings.json` where the shell opens it - the desktop's editor for JSON, or the
+    /// page itself on the web - writing it first if it has never been.
     async open_file() {
         await this.ui.settings.write();
         const error = await host.open_settings();

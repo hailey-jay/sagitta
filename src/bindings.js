@@ -1,5 +1,5 @@
 /// The named bindings: every key a user may rebind, by the name of what it does, with its defaults,
-/// and the keys file (`~/.config/sagitta/keys`) that overrides them.
+/// and the keys file that overrides them, which the shell holds and `read_keys` hands over.
 ///
 /// The loader (`parse`, `words`, `resolve`, and the notation around them) names nothing of this
 /// diagram: what there is to bind arrives as a table (`Bindings.TABLE`, which `Bindings.DEFAULTS`

@@ -105,7 +105,7 @@ class UI {
         // `size_labels`).
         this.unmeasured = new WeakMap();
 
-        // The user settings, kept in `~/.config/sagitta/settings.json` (see `Settings`).
+        // The user settings, kept by the shell (see `Settings`).
         this.settings = new Settings(SETTINGS);
 
         // The arrow options of the selection, and the edits the palette makes to them.

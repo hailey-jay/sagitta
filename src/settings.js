@@ -1,5 +1,6 @@
-/// The user settings, held as JSON in `~/.config/sagitta/settings.json`, which the shell names
-/// and this class is the only writer of. `load` reads the file; every `set` rewrites it in full.
+/// The user settings, held as JSON wherever the shell keeps them (a file on the desktop, the
+/// browser's storage on the web, which `config_dir` names), and read and written only through
+/// it. `load` reads them; every `set` rewrites them in full.
 ///
 /// Which settings there are, and what each may hold, comes from the schema it is given
 /// (`src/schema.js`): nothing below names a setting, so another kind of diagram keeps all of this
