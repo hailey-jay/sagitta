@@ -1949,3 +1949,34 @@ def test_the_help_in_a_browser_says_the_diagram_stays_there(browser):
     assert result["first"].startswith(f"Sagitta {version}")
     assert "https://github.com/varkor/quiver" in result["links"]
     assert "never sent to the server" in result["last"]
+
+
+def test_a_label_measured_before_it_is_laid_out_is_measured_again(sagitta, home):
+    """Firefox does not lay out an arrow's label in the frame its `foreignObject` is inserted,
+    so a label typed onto an arrow measured nothing, and was never drawn. Chromium lays it out,
+    so the first two measurements are made to come out as Firefox's did."""
+    script = """(async () => {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetWidth");
+        let unlaid = 2;
+        Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+            configurable: true,
+            get() {
+                if (this.closest(".arrow-label") !== null && unlaid > 0) {
+                    --unlaid;
+                    return 0;
+                }
+                return descriptor.get.call(this);
+            },
+        });
+        const edge = ui.quiver.all_cells().find((cell) => cell.is_edge() && cell.label === "f");
+        ui.deselect();
+        ui.select(edge);
+        ui.keymap.begin_edit("k");
+        ui.label_input.element.blur();
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        Object.defineProperty(HTMLElement.prototype, "offsetWidth", descriptor);
+        return { unlaid, width: edge.arrow.label.size.width };
+    })()"""
+    result = sagitta("evaluate", _diagram(home / "paper"), script)
+    assert result["unlaid"] == 0
+    assert result["width"] > 0
