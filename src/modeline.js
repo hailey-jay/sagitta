@@ -318,7 +318,7 @@ class ModeLine {
             ui.grid_canvas.class_list.toggle("hidden");
         });
         this.add_action(ui, "dark-mode", "Dark mode", () => ui.toggle_dark_mode());
-        this.add_action(ui, "quiver-mode", "Quiver mode", () => ui.toggle_quiver_mode());
+        this.add_action(ui, "spreadsheet-mode", "Spreadsheet mode", () => ui.toggle_spreadsheet_mode());
         this.add_action(ui, "hide-mode-line", "Toggle mode line",
             () => ui.element.class_list.toggle("hide-mode-line"),
         );
@@ -446,13 +446,14 @@ class ModeLine {
                 return [name, null, "other"];
             }
         }
-        if (ui.keymap.active) {
-            return [...ui.keymap.describe_layer(), "layer"];
-        }
         // A mark waiting for its other corner, or a checkpoint being carried, is state the user
-        // cannot otherwise see.
-        return ["TYPE", ui.mark !== null ? "MARK" : ui.carried !== null ? "CHECKPOINT" : null,
-            "type"];
+        // cannot otherwise see, so it shows wherever the layer has nothing of its own to show.
+        const pending = ui.mark !== null ? "MARK" : ui.carried !== null ? "CHECKPOINT" : null;
+        if (ui.keymap.active) {
+            const [name, detail] = ui.keymap.describe_layer();
+            return [name, detail ?? pending, "layer"];
+        }
+        return ["TYPE", pending, "type"];
     }
 
     /// The option value for an arrow component (e.g. `top-hook`), as in `Commands.STYLES`.
