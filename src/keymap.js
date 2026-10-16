@@ -1,7 +1,8 @@
 /// The type-through keymap.
 ///
 /// quiver's stock bindings put a command on nearly every bare letter, so a label can only be typed
-/// after pressing Enter. This inverts that, spreadsheet-style:
+/// after pressing Enter. That is the default, quiver mode; spreadsheet mode (`ui.spreadsheet_mode`)
+/// inverts it:
 ///
 /// - Base layer: printable keys edit the label of the targeted cell (replacing it); Enter edits in
 ///   place (appending); Backspace clears the label; `/` searches; `:` opens the command line; `;`
@@ -11,8 +12,8 @@
 ///   live. After focusing a slider (`K`, `O`, `L`, ...), typing a signed number and pressing Enter
 ///   sets it. Punctuation applies arrow presets. `;`, Escape, or Enter (with no pending number)
 ///   leave the layer.
-///   In quiver mode (`ui.quiver_mode`), the command layer is latched open instead: its keys are live
-///   whenever nothing else has them, RET edits the label, and Escape does what it does outside
+///   In quiver mode, the command layer is latched open instead: its keys are live whenever
+///   nothing else has them, RET edits the label, and Escape does what it does outside
 ///   the layer once there is nothing in the layer to let go of. The keys are listed only on `;`.
 /// - Command line (`:`): named commands, with Tab completion, separated by `;`.
 /// - Import layer (`C-i`): pasting tikz-cd (`C-v`) replaces the diagram, as one undo step, and
@@ -194,7 +195,7 @@ class Keymap {
     /// field has the keys, so that finishing a label, a prompt, or a layer comes back to it.
     latched() {
         const ui = this.ui;
-        return ui.settings?.get("ui.quiver_mode") === true && this.layer === null
+        return ui.settings?.get("ui.spreadsheet_mode") === false && this.layer === null
             && ui.in_mode(UIMode.Default) && !ui.input_is_active();
     }
 

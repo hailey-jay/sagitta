@@ -297,20 +297,20 @@ def test_the_var_corner_can_be_chosen_on_its_own(sagitta, home):
     assert "\\ulcorner" in diagram.read_text()
 
 
-def _quiver_mode(home):
+def _spreadsheet_mode(home):
     settings = home / ".config" / "sagitta"
     settings.mkdir(parents=True, exist_ok=True)
-    (settings / "settings.json").write_text('{"ui.quiver_mode": true}\n')
+    (settings / "settings.json").write_text('{"ui.spreadsheet_mode": true}\n')
 
 
 def test_spreadsheet_mode_types_straight_into_the_label(sagitta, home):
+    _spreadsheet_mode(home)
     diagram = _diagram(home / "paper")
     sagitta("typing", diagram, json.dumps(["x", "Enter"]))
     assert "\tx & B" in diagram.read_text()
 
 
 def test_quiver_mode_types_only_after_return(sagitta, home):
-    _quiver_mode(home)
     diagram = _diagram(home / "paper")
     # `x` is the layer's crossing over, which wants an arrow, rather than a label.
     result = sagitta("typing", diagram, json.dumps(["x"]), expected_error="Select an arrow first")
@@ -324,7 +324,6 @@ def test_quiver_mode_types_only_after_return(sagitta, home):
 
 def test_quiver_mode_keeps_the_command_layer_open(sagitta, home):
     """The layer's keys work without `;`, and Escape still deselects."""
-    _quiver_mode(home)
     diagram = _diagram(home / "paper")
     sagitta("keys", diagram, json.dumps([["x"]]))
     assert '\\arrow["f", crossing over, from=1-1' in diagram.read_text()
@@ -345,8 +344,8 @@ def test_quiver_mode_keeps_the_command_layer_open(sagitta, home):
     (True, [";", ";"], False, False),
 ])
 def test_the_command_list_shows(sagitta, home, quiver, keys, main, submenu):
-    if quiver:
-        _quiver_mode(home)
+    if not quiver:
+        _spreadsheet_mode(home)
     result = sagitta("lists", _diagram(home / "paper"), json.dumps(keys))
     assert result == {"main": main, "submenu": submenu}
 
@@ -354,8 +353,8 @@ def test_the_command_list_shows(sagitta, home, quiver, keys, main, submenu):
 @pytest.mark.parametrize("quiver", [False, True])
 def test_a_key_the_command_layer_does_not_use_is_kept_from_the_browser(sagitta, home, quiver):
     """Firefox's quick find takes `'` otherwise."""
-    if quiver:
-        _quiver_mode(home)
+    if not quiver:
+        _spreadsheet_mode(home)
     script = """(() => {
         if (!ui.keymap.active) {
             ui.keymap.enter();
@@ -369,8 +368,8 @@ def test_a_key_the_command_layer_does_not_use_is_kept_from_the_browser(sagitta, 
 
 @pytest.mark.parametrize("quiver", [False, True])
 def test_return_on_an_empty_cell_makes_one_to_label(sagitta, home, quiver):
-    if quiver:
-        _quiver_mode(home)
+    if not quiver:
+        _spreadsheet_mode(home)
     diagram = _diagram(home / "paper")
     result = sagitta("typing", diagram, json.dumps(["Right", "Right", "Enter", "E", "Enter"]))
     assert result["counts"]["vertices"] == 5
@@ -386,10 +385,10 @@ def test_return_with_a_selection_still_edits_it(sagitta, home):
     assert "\tAx & B" in diagram.read_text()
 
 
-def test_quiver_mode_command_switches_it(sagitta, home):
-    sagitta("commands", _diagram(home / "paper"), json.dumps(["quiver-mode"]))
+def test_spreadsheet_mode_command_switches_it(sagitta, home):
+    sagitta("commands", _diagram(home / "paper"), json.dumps(["spreadsheet-mode"]))
     settings = json.loads((home / ".config" / "sagitta" / "settings.json").read_text())
-    assert settings["ui.quiver_mode"] is True
+    assert settings["ui.spreadsheet_mode"] is True
 
 
 def test_the_corner_takes_the_kind_last_used(sagitta, home):
@@ -460,6 +459,7 @@ def test_a_nudge_bends_the_arrow_beside_a_loop(sagitta, home):
     ([["Escape"], ["Enter"], ["["], ["Backspace"], ["Enter"]], "\tA & B"),
 ])
 def test_keys_change_the_diagram(sagitta, home, keys, expected):
+    _spreadsheet_mode(home)
     diagram = _diagram(home / "paper")
     sagitta("keys", diagram, json.dumps(keys))
     assert expected in diagram.read_text()
@@ -495,6 +495,7 @@ def _typed(*keys):
     (_typed("\\", "\\", "{"), "\\begin{array}{c} A\\\\{} \\end{array} & B"),
 ])
 def test_latex_delimiters_pair(sagitta, home, keys, expected):
+    _spreadsheet_mode(home)
     diagram = _diagram(home / "paper")
     sagitta("keys", diagram, json.dumps(keys))
     assert expected in diagram.read_text()
@@ -950,6 +951,7 @@ def test_the_mark_selects_a_rectangle_of_cells(sagitta, home):
 
 
 def test_a_preset_with_nothing_selected_sets_what_new_arrows_take(sagitta, home):
+    _spreadsheet_mode(home)
     diagram = _diagram(home / "pair", PAIR, "pair.tikzcd")
     result = sagitta("preset_default", diagram)
     assert result["preset"] == "equals"
@@ -1494,6 +1496,7 @@ def test_the_settings_buttons_step_their_settings(sagitta, home):
 
 
 def test_the_command_list_waits_for_a_key_or_for_question_mark(sagitta, home):
+    _spreadsheet_mode(home)
     found = sagitta("script", _diagram(home / "paper"), json.dumps([
         # Listed once `;` has waited 300ms for a key, and hidden and shown again by `?`.
         ["press", ";"], ["eval", _LIST_HIDDEN],
@@ -1512,6 +1515,7 @@ def test_the_command_list_waits_for_a_key_or_for_question_mark(sagitta, home):
 def test_a_key_typed_before_the_command_list_shows_keeps_it_hidden(sagitta, home):
     """`; (` does its preset and leaves the list hidden, but `; t` waits on a choice, so a pause
     there lists the tails."""
+    _spreadsheet_mode(home)
     found = sagitta("script", _diagram(home / "paper"), json.dumps([
         ["press", "a", ["control"]],
         ["press", ";"], ["press", "("], ["wait", 600], ["eval", _LIST_HIDDEN],
@@ -1524,6 +1528,7 @@ def test_a_key_typed_before_the_command_list_shows_keeps_it_hidden(sagitta, home
 
 
 def test_the_compact_command_list_shows_only_keys_and_values(sagitta, home):
+    _spreadsheet_mode(home)
     found = sagitta("script", _diagram(home / "paper"), json.dumps([
         ["press", ",", ["control"]], *_presses("k", "Escape"),
         ["press", "a", ["control"]], ["press", ";"], ["press", "?"],
@@ -1811,13 +1816,14 @@ def test_the_settings_are_edited_in_the_page(browser):
         await host.open_settings();
         const dialog = document.querySelector("dialog.web-dialog[open]");
         const areas = [...dialog.querySelectorAll("textarea")];
-        // Keys typed here are the dialog's, not the page's.
+        // Keys typed here are the dialog's, not the page's, so the mode line does not change.
+        const before = document.querySelector(".mode-line").textContent;
         const event = new KeyboardEvent("keydown", { key: "x", bubbles: true, cancelable: true });
         areas[0].dispatchEvent(event);
         return {
             fields: areas.length,
             zoom: JSON.parse(areas[0].value)["ui.zoom"],
-            mode_line: document.querySelector(".mode-line").textContent.startsWith("TYPE"),
+            mode_line: document.querySelector(".mode-line").textContent === before,
         };
     })()""")
     assert result == {"fields": 2, "zoom": 150, "mode_line": True}

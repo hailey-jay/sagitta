@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Quiver mode is the default. The setting is now `ui.spreadsheet_mode`, off unless set, with `:spreadsheet-mode` and `s` in the settings layer to switch it; `ui.quiver_mode` and `:quiver-mode` are gone, so a settings file that turned quiver mode on needs nothing, and one that relied on spreadsheet mode sets `ui.spreadsheet_mode`.
+- `ui.which_key_delay` matters only in spreadsheet mode, since quiver mode lists the command layer's keys on `;` alone.
+- In quiver mode, the mode line shows `MARK` while a mark waits for its other corner, and `CHECKPOINT` while one is carried, as spreadsheet mode always has.
+
 ## 0.4.1
 
 - In Firefox, a label typed onto an arrow is drawn. Firefox does not lay out an arrow's label in the frame the arrow redraws it, so such a label measured nothing and never showed; it is now measured again in the next frame. Labels read from a file, and the desktop app, were not affected.

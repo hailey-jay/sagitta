@@ -715,7 +715,7 @@ Layer.Settings.GROUPS = [
         ["l", "ui.label_size", "label size"],
     ]],
     ["Keys", [
-        ["q", "ui.quiver_mode", "quiver mode: RET to type"],
+        ["s", "ui.spreadsheet_mode", "spreadsheet mode: type to edit"],
     ]],
     ["Command list", [
         ["w", "ui.which_key_delay", "list keys after"],

@@ -270,7 +270,7 @@ Bindings.DEFAULTS = {
     "reset-zoom": ["C-0"],
     "hide-grid": ["; #"],
     "dark-mode": [],
-    "quiver-mode": [],
+    "spreadsheet-mode": [],
     "hide-mode-line": ["C-\\"],
     "shortcuts": ["C-/", "<f1>"],
     "settings": ["C-,"],

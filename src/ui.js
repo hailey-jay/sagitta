@@ -1245,7 +1245,7 @@ class UI {
             case "ui.hint_characters":
                 this.recode();
                 break;
-            case "ui.quiver_mode":
+            case "ui.spreadsheet_mode":
                 // Whether the command layer is open by itself changes, and with it the mode line.
                 this.keymap.leave();
                 break;
@@ -1281,11 +1281,11 @@ class UI {
         this.change_setting("ui.dark_mode", !this.settings.get("ui.dark_mode"));
     }
 
-    /// Switch quiver mode on or off (see `Keymap.latched`), and remember it.
-    toggle_quiver_mode() {
-        const value = !this.settings.get("ui.quiver_mode");
-        this.change_setting("ui.quiver_mode", value);
-        this.mode_line.flash(value ? "quiver mode: RET to type" : "spreadsheet mode: type to edit");
+    /// Switch spreadsheet mode on or off (see `Keymap.latched`), and remember it.
+    toggle_spreadsheet_mode() {
+        const value = !this.settings.get("ui.spreadsheet_mode");
+        this.change_setting("ui.spreadsheet_mode", value);
+        this.mode_line.flash(value ? "spreadsheet mode: type to edit" : "quiver mode: RET to type");
     }
 
     /// Update the grid with respect to the view and size of the window.

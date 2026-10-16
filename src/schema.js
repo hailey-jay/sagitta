@@ -19,10 +19,10 @@ const SETTINGS = {
         "diagram.var_corner": false,
         // The preset new arrows take (see `Commands.PRESETS` and `Edge.suggested_options`).
         "diagram.arrow_preset": "plain",
-        // Whether keys work as in quiver: the command layer's keys are live without `;`, and a
-        // label is typed only after RET (see `Keymap.latched`). Otherwise typing edits the label,
-        // spreadsheet-style.
-        "ui.quiver_mode": false,
+        // Whether typing edits the label, spreadsheet-style. Otherwise keys work as in quiver: the
+        // command layer's keys are live without `;`, and a label is typed only after RET (see
+        // `Keymap.latched`).
+        "ui.spreadsheet_mode": false,
         // Whether the canvas is grey, with the default colour drawn in white (see `main.css`).
         "ui.dark_mode": false,
         // The zoom the view starts at, and that `reset-zoom` returns to, in percent.
