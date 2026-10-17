@@ -8,8 +8,8 @@
 ///
 /// A name is a named action (see `ModeLine.define_actions`), one of `Bindings.HANDLERS`, or any
 /// other command (see `Commands.TABLE`), which a key runs with no arguments. Keys are written as
-/// the help shows them: `C-s` and `C-S-z` are chords, `; b` is `b` in the command layer, and
-/// `<delete>` or `<f5>` are keys of their own. The keys file is read once, at startup:
+/// the help shows them: `C-s` and `C-S-z` are chords, `; b` (or `b` alone) is `b` in the command
+/// layer, and `<delete>` or `<f5>` are keys of their own. The keys file is read once, at startup:
 ///
 ///     # A line names something, then its keys, replacing the defaults.
 ///     save        C-s
@@ -26,7 +26,7 @@ class Bindings {
     /// without its context. Throws an error explaining what is wrong with `text`.
     static parse(text) {
         let rest = text;
-        const layer = rest.startsWith(";");
+        let layer = rest.startsWith(";");
         if (layer) {
             rest = rest.slice(1).trimStart();
         }
@@ -60,6 +60,10 @@ class Bindings {
             shift = null;
         }
 
+        // The command layer stays open by itself (see `Keymap.latched`), so a character alone is its
+        // key, as with `;`.
+        layer ||= !modifier && key.length === 1;
+
         // Space keeps its meaning alone, but its chords are free (the mark has `C-SPC`).
         if (Bindings.RESERVED.has(key) && !(key === " " && modifier)) {
             throw new Error(`"${text}": ${Keymap.key_name(key)} keeps its own meaning`);
@@ -71,11 +75,6 @@ class Bindings {
             if (/^[0-9]$/.test(key) || Bindings.LAYER_RESERVED.has(key)) {
                 throw new Error(`"${text}": ${key} keeps its own meaning in the command layer`);
             }
-        } else if (!modifier && key.length === 1) {
-            // The command layer's keys are written with `;`, as the help lists them, so that a key
-            // file says which keys are the layer's.
-            throw new Error(`"${text}" needs ; or C-: "; ${rest}" for the command layer, `
-                + `or a chord`);
         }
         return { key, shift, modifier, layer };
     }

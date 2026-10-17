@@ -17,7 +17,7 @@
 - The Tab marker on the next queued cell goes once the label is finished, until the next Tab, and ESC can then still unqueue the cells.
 - While the keys are in use, the cell or arrow the pointer rests on is not highlighted, until the pointer moves.
 - `SPC` selects the arrows it draws along with their new target, so a preset or a style applies to them at once. RET on such a selection labels the cell alone, and the arrows are selected again once the label is put down.
-- The keys file's complaint about a key alone no longer says it would type.
+- A key alone in the keys file, as in `flip e`, is the command layer's, as `; e` is, since the layer stays open. It was refused.
 - Saving writes the export layer's options, which now show: saving a new file, or saving as, opens the export layer first, where RET goes on to save, and the layer lists `C-s` to save with them. The mode line follows the file's name with any export option that differs from its default.
 - Curves and loops are drawn on the canvas as TikZ draws them: a curve as quiver's `curve` cubic, and a loop as TikZ's `loop`, from the cell's border at the angles and distance the export writes, so their shapes match the PDF and not only their size. An arrow's label is set in script style, as tikz-cd sets it, and sits against the line as its node does in the PDF: by the box TeX sets it in, with tikz-cd's padding, rather than the taller line KaTeX draws it on, with 8px round that.
 - In the export layer, `q` copies the diagram's `#q=` hash, and `v` saves the diagram as an SVG image, drawn as the canvas draws it, with the fonts its labels use inside it.

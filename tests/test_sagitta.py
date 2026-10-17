@@ -823,7 +823,7 @@ def test_the_help_layer_shows_rebound_chords(sagitta, home):
 
 
 def test_the_keys_file_reports_its_problems_and_keeps_the_rest(sagitta, home):
-    _keys(home, "sav C-s\nreverse ; w\nflip a\n")
+    _keys(home, "sav C-s\nreverse ; w\nflip ; 5\n")
     opened = sagitta("open", _diagram(home / "paper"))
     assert 'line 1: nothing is called "sav" (and 1 more)' in opened["mode_line"]
     # A line replaces every default key of what it names, chords included.
@@ -832,7 +832,7 @@ def test_the_keys_file_reports_its_problems_and_keeps_the_rest(sagitta, home):
 
 @pytest.mark.parametrize("text,problem", [
     ("sav C-s", 'line 1: nothing is called "sav"'),
-    ("save s", '"s" needs ; or C-'),
+    ("save 5", "keeps its own meaning in the command layer"),
     ("save ; 5", "keeps its own meaning in the command layer"),
     ("save ; :", "keeps its own meaning in the command layer"),
     ("save C-S-#", "write the shifted character itself"),

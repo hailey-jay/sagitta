@@ -107,12 +107,12 @@ unbind        C-n
 Keys are written as the help shows them:
 
 - `; b` is `b` in the command layer, and `; F` is Shift-f there.
+  The layer stays open, so `; b` is pressed without the `;`, and `b` alone means the same; `#` alone starts a comment, though, so write `; #`.
   Digits, `;`, `:`, `/`, and `?` keep their meaning there.
 - `C-s` is a chord, and `C-S-s` the same with Shift.
   A capital letter means Shift too.
   Other characters are written as typed, as in `C-+`, without `S-`.
 - `<delete>`, `<insert>`, `<home>`, `<end>`, `<prior>`, `<next>`, and `<f1>` to `<f12>` work alone or with `C-` and `S-`.
-  Printable keys alone need `;` or `C-`, though `; b` is pressed without the `;`, since the command layer stays open.
 - RET, TAB, SPC (with any modifier), ESC, DEL, and the arrows cannot be rebound.
 
 A key that a line binds is taken from whatever had it by default.

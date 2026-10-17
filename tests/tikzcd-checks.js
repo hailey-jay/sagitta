@@ -943,10 +943,11 @@ const pending = [];
         resolve("wiggle C-q").problems, ['line 1: nothing is called "wiggle"']);
     check("a name the table knows but has no defaults for is bound",
         of(resolve("jump C-j").keys, "jump"), "C-j");
-    check("a key alone is refused",
-        resolve("walk q").problems,
-        ['line 1: "q" needs ; or C-: "; q" for the command layer,'
-            + ' or a chord']);
+    check("a key alone is the command layer's, as with ;",
+        [of(resolve("walk q").keys, "walk"), of(resolve("walk ; q").keys, "walk")], [";q", ";q"]);
+    check("as is a shifted one", of(resolve("walk Q").keys, "walk"), ";S-q");
+    check("and the layer's reserved keys stay reserved alone", resolve("walk 5").problems,
+        ['line 1: "5": 5 keeps its own meaning in the command layer']);
     check("a reserved key is refused", resolve("walk RET").problems,
         ['line 1: "RET": RET keeps its own meaning']);
     check("and the same name twice is refused",
