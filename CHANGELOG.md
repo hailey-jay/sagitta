@@ -1,46 +1,58 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
-- A standing error moves above the label input and the command line while they are open, rather than covering them.
+### Breaking changes
+
+- Keys work as in quiver, and only so: the command layer stays open by itself, so its keys work without `;`, and a label is typed only after RET. Spreadsheet mode, where typing edited the label, is gone, with `ui.quiver_mode`, `:quiver-mode`, and `ui.which_key_delay`, since `;` lists the command layer's keys at once. A settings file's old settings are ignored, and dropped the next time it is written.
+- `:snake` is gone. A routed arrow (`; w`, `; k`) draws a connecting morphism as one arrow, with one label, where the snake's chain of arrows through new empty cells needed tidying by hand.
+- `ui.cell_size` is gone, since the separations and `ui.label_size` now set the grid; an old `ui.cell_size` is ignored, and dropped the next time the settings file is written.
+
+### The canvas
+
+- The canvas is drawn to look like the PDF. It lays the diagram out as tikz-cd does, scaled to the labels: a column is its widest label, with tikz-cd's padding, and a gap that follows the column separation, and an empty column or row between the diagram's outermost cells and checkpoints is the gap alone, as in the PDF. Beyond them, an empty one is as big as one holding a bullet, so the space around a diagram keeps still as it is drawn into; when a column or row changes between the two, it grows or shrinks over a moment, unless the system asks for reduced motion. Changing the separations in the export layer redraws it. Curves, offsets, and a route's rounding are drawn at the size the export writes, so a curve on the canvas bends as much as in the PDF. Saved files are unchanged.
+- Curves and loops are drawn on the canvas as TikZ draws them: a curve as quiver's `curve` cubic, and a loop as TikZ's `loop`, from the cell's border at the angles and distance the export writes, so their shapes match the PDF and not only their size. An arrow's label is set in script style, as tikz-cd sets it, and sits against the line as its node does in the PDF: by the box TeX sets it in, with tikz-cd's padding, rather than the taller line KaTeX draws it on, with 8px round that.
 - Arrows meet a cell where they meet its node in the PDF: tikz-cd's, the box TeX sets the label in with tikz-cd's padding, centred on the maths axis rather than the middle of the box, as tikz-cd's asymmetrical rectangle is. The label sits on the axis to match. Loops in particular leave and come back where TikZ draws them, and arrows stop closer to small labels such as `\bullet`.
 - A loop's label sits where TikZ puts it: TikZ picks a corner or side of the label's node from the loop's direction and sets it on the loop, so a label inside a loop (`'`) sits in the loop rather than over the cell.
+- A route's rounded corners are exported no larger than tikz-cd's shortest legs allow. TikZ rounds a corner by the full radius however short its legs, so a route next to an empty row or column overshot, and its arrowhead pointed back along the curve.
 - An arrow between wide labels shows its label when the diagram opens. Before the columns were sized, such labels overlapped, so the arrow could not be drawn and had no label to render into, and the label stayed blank until it was edited.
-- The help says what each key does in a word or two: `;` "list the commands", RET "edit the label", and C-arrows "move, bend, or turn the selection", say. The docs give the detail.
-- In a browser that gives a page no folders, such as Firefox, `:open-folder` says only "open-folder not available on this browser", in the mode line.
-- `:help` opens the help, for a browser where `C-/` and `<f1>` never reach the page. The command line's completions list it.
-- A problem with the keys or settings file is reported in a few words, without the folder the file is in, and names the command that opens the file: `keys line 1: no command "sav" (+1 more, :keys-file)`.
-- A name in the settings file that is not a setting, such as a typo or a newer version's setting, is reported, and kept the next time the file is written. Only the settings earlier versions had are dropped.
-- `:keys-file` opens the keys file in the desktop's editor, starting it with a few lines of comments if there is none, and `:settings-file` opens the settings file, as `o` in the settings layer does.
-- With nothing selected, DEL and `<delete>` delete the cell under the focus point, so a lone cell needs no selecting first. They did nothing.
 - The first label of a session is measured once KaTeX's font has loaded, so its column fits it: the first `\bullet` of a new diagram was measured in a fallback font, and its column was a few pixels narrower than the empty ones round it.
-- Dark mode follows the system's colour scheme, as it changes, until it is set by `:dark-mode`, the settings layer, or `:set`. A settings file already holding `ui.dark_mode`, as every file written so far does, keeps it: remove the line to follow the system.
-- The interface dims what is secondary by one amount, and what is unavailable by another. The mode line's hints are a shade dimmer, and the completions' keys a shade brighter.
-- In a browser, the help says to use `:new` for a new diagram, since the browser keeps `C-n`.
-- The label input's `label` box is white, as the mode line's `EDIT` is, leaving pink to keys and the focus.
 - Dark mode's canvas is a darker grey, `#303030` (it was `#3c3c3c`), so that dark colours, such as the preset blue and grey, show a little better against it. White strokes stay well short of bleeding.
-- The label input's box reads `label` again after a code prompt. It kept the prompt's name after it, as `labelToggle`, cut short.
-- Keys work as in quiver, and only so: the command layer stays open by itself, so its keys work without `;`, and a label is typed only after RET. Spreadsheet mode, where typing edited the label, is gone, with `ui.quiver_mode`, `:quiver-mode`, and `ui.which_key_delay`, since `;` lists the command layer's keys at once. A settings file's old settings are ignored, and dropped the next time it is written.
-- The mode line shows `MARK` while a mark waits for its other corner, and `CHECKPOINT` while one is carried, with the command layer open, as it did outside it.
+
+### Keys
+
 - RET selects the whole label, so typing replaces it (a new cell's `\bullet`, say), and an arrow key goes to either end of it to edit it in place. It put the caret at the end.
 - RET after stepping a slider, or with a style list open, lets go of it, rather than going on to edit the label.
+- `SPC` selects the arrows it draws along with their new target, so a preset or a style applies to them at once. RET on such a selection labels the cell alone, and the arrows are selected again once the label is put down.
+- With nothing selected, DEL and `<delete>` delete the cell under the focus point, so a lone cell needs no selecting first. They did nothing.
+- `; i` lists the rows and columns to insert at the focus point, chosen by the arrow keys: `↑` and `↓` a row above or below, `←` and `→` a column left or right.
+- The mode line shows `MARK` while a mark waits for its other corner, and `CHECKPOINT` while one is carried, with the command layer open, as it did outside it.
 - A key the command layer has no command on says so in the mode line (`x unbound`).
-- The help and the tip on an empty diagram describe the keys as they now work: DEL deletes, and RET labels.
 - The Tab marker on the next queued cell goes once the label is finished, until the next Tab, and ESC can then still unqueue the cells.
 - While the keys are in use, the cell or arrow the pointer rests on is not highlighted, until the pointer moves.
-- `SPC` selects the arrows it draws along with their new target, so a preset or a style applies to them at once. RET on such a selection labels the cell alone, and the arrows are selected again once the label is put down.
 - A key alone in the keys file, as in `flip q`, is the command layer's, as `; q` is, since the layer stays open. It was refused.
-- Saving writes the export layer's options, which now show: saving a new file, or saving as, opens the export layer first, where RET goes on to save, and the layer lists `C-s` to save with them. The mode line follows the file's name with any export option that differs from its default.
-- Curves and loops are drawn on the canvas as TikZ draws them: a curve as quiver's `curve` cubic, and a loop as TikZ's `loop`, from the cell's border at the angles and distance the export writes, so their shapes match the PDF and not only their size. An arrow's label is set in script style, as tikz-cd sets it, and sits against the line as its node does in the PDF: by the box TeX sets it in, with tikz-cd's padding, rather than the taller line KaTeX draws it on, with 8px round that.
-- In the export layer, `q` copies the diagram's `#q=` hash, and `v` saves the diagram as an SVG image, drawn as the canvas draws it, with the fonts its labels use inside it.
-- `:snake` is gone. A routed arrow (`; w`, `; k`) draws a connecting morphism as one arrow, with one label, where the snake's chain of arrows through new empty cells needed tidying by hand.
-- `; i` lists the rows and columns to insert at the focus point, chosen by the arrow keys: `↑` and `↓` a row above or below, `←` and `→` a column left or right.
-- A route's rounded corners are exported no larger than tikz-cd's shortest legs allow. TikZ rounds a corner by the full radius however short its legs, so a route next to an empty row or column overshot, and its arrowhead pointed back along the curve.
-- The canvas is drawn to look like the PDF. It lays the diagram out as tikz-cd does, scaled to the labels: a column is its widest label, with tikz-cd's padding, and a gap that follows the column separation, and an empty column or row between the diagram's outermost cells and checkpoints is the gap alone, as in the PDF. Beyond them, an empty one is as big as one holding a bullet, so the space around a diagram keeps still as it is drawn into; when a column or row changes between the two, it grows or shrinks over a moment, unless the system asks for reduced motion. Changing the separations in the export layer redraws it. Curves, offsets, and a route's rounding are drawn at the size the export writes, so a curve on the canvas bends as much as in the PDF. Saved files are unchanged.
-- `ui.cell_size` is gone, since the separations and `ui.label_size` now set the grid; an old `ui.cell_size` is ignored, and dropped the next time the settings file is written.
-- A message in the mode line keeps its room: the file, the target, and the arrow give way first, the key hints other than `; commands` drop off whole, from the right, only where there is no room for them, and an error sits on a line of its own above the mode line, wrapping rather than being cut short.
-- Each of the interface's colours means one thing: pink marks keys and what has the focus, blue prompts, cell codes, and values, and yellow what waits. The mode line's badge names the state: `NORMAL` at rest, in grey, rather than a lone `;` in pink; `;` and the layers in pink while they await a key; `EDIT` while a label is edited; `MARK` or `CHECKPOINT` in yellow while one waits; and `MOVE`, `CONNECT`, and `PAN` apart from the layers. Unsaved changes are marked `●` after the file's name, rather than only by its colour, and messages are white.
 - While an arrow is drawn, its source is tinted blue and its target pink, over the selection's grey, so its ends are told apart from the selected cells.
+
+### Files, settings, and export
+
+- Saving writes the export layer's options, which now show: saving a new file, or saving as, opens the export layer first, where RET goes on to save, and the layer lists `C-s` to save with them. The mode line follows the file's name with any export option that differs from its default.
+- In the export layer, `q` copies the diagram's `#q=` hash, and `v` saves the diagram as an SVG image, drawn as the canvas draws it, with the fonts its labels use inside it.
+- `:keys-file` opens the keys file in the desktop's editor, starting it with a few lines of comments if there is none, and `:settings-file` opens the settings file, as `o` in the settings layer does.
+- A problem with the keys or settings file is reported in a few words, without the folder the file is in, and names the command that opens the file: `keys line 1: no command "sav" (+1 more, :keys-file)`.
+- A name in the settings file that is not a setting, such as a typo or a newer version's setting, is reported, and kept the next time the file is written. Only the settings earlier versions had are dropped.
+- Dark mode follows the system's colour scheme, as it changes, until it is set by `:dark-mode`, the settings layer, or `:set`. A settings file already holding `ui.dark_mode`, as every file written so far does, keeps it: remove the line to follow the system.
+
+### The interface
+
+- The help, and the tip on an empty diagram, describe the keys as they now work, in a word or two each: `;` "list the commands", RET "edit the label", DEL "delete", and C-arrows "move, bend, or turn the selection", say. The docs give the detail.
+- `:help` opens the help, for a browser where `C-/` and `<f1>` never reach the page. The command line's completions list it.
+- In a browser, the help says to use `:new` for a new diagram, since the browser keeps `C-n`.
+- In a browser that gives a page no folders, such as Firefox, `:open-folder` says only "open-folder not available on this browser", in the mode line.
+- A message in the mode line keeps its room: the file, the target, and the arrow give way first, the key hints other than `; commands` drop off whole, from the right, only where there is no room for them, and an error sits on a line of its own above the mode line, wrapping rather than being cut short, and above the label input and the command line while they are open.
+- Each of the interface's colours means one thing: pink marks keys and what has the focus, blue prompts, cell codes, and values, and yellow what waits. The mode line's badge names the state: `NORMAL` at rest, in grey, rather than a lone `;` in pink; `;` and the layers in pink while they await a key; `EDIT` while a label is edited; `MARK` or `CHECKPOINT` in yellow while one waits; and `MOVE`, `CONNECT`, and `PAN` apart from the layers. Unsaved changes are marked `●` after the file's name, rather than only by its colour, and messages are white.
+- The interface dims what is secondary by one amount, and what is unavailable by another. The mode line's hints are a shade dimmer, and the completions' keys a shade brighter.
+- The label input's `label` box is white, as the mode line's `EDIT` is, leaving pink to keys and the focus.
+- The label input's box reads `label` again after a code prompt. It kept the prompt's name after it, as `labelToggle`, cut short.
 
 ## 0.4.1
 
