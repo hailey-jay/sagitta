@@ -874,6 +874,21 @@ def test_a_cells_node_is_tikz_cds(sagitta, home):
     assert y["at"] == pytest.approx([12.68, 8.88, 10.27, -7.19], abs=0.05)
     assert [x["baseline"], y["baseline"]] == pytest.approx([2.5, 2.5], abs=0.05)
 
+
+def test_an_error_stands_clear_of_the_command_line(sagitta, home):
+    """A standing error takes the line above the mode line, which the command line takes while it
+    is open, so the error moves above it."""
+    boxes = sagitta("evaluate", _diagram(home / "paper"), """(async () => {
+        UI.display_error("a standing error");
+        ui.prompt.open("Command");
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+        return [box(".mode-line .message.error").bottom, box(".label-input-container").top,
+            document.activeElement === ui.label_input.element];
+    })()""", expected_error="a standing error")
+    error, prompt, focused = boxes
+    assert focused and error <= prompt + 0.5, boxes
+
 def test_a_key_press_ends_a_pan_whose_key_was_released_unseen(sagitta, home):
     result = sagitta("stale_pan", _diagram(home / "paper"))
     assert result["stuck"] == "pan"

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A standing error moves above the label input and the command line while they are open, rather than covering them.
 - Arrows meet a cell where they meet its node in the PDF: tikz-cd's, the box TeX sets the label in with tikz-cd's padding, centred on the maths axis rather than the middle of the box, as tikz-cd's asymmetrical rectangle is. The label sits on the axis to match. Loops in particular leave and come back where TikZ draws them, and arrows stop closer to small labels such as `\bullet`.
 - A loop's label sits where TikZ puts it: TikZ picks a corner or side of the label's node from the loop's direction and sets it on the loop, so a label inside a loop (`'`) sits in the loop rather than over the cell.
 - An arrow between wide labels shows its label when the diagram opens. Before the columns were sized, such labels overlapped, so the arrow could not be drawn and had no label to render into, and the label stayed blank until it was edited.

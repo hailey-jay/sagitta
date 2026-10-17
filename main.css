@@ -249,7 +249,8 @@ line. It is only visible while focused. */
     left: 0; right: 0;
     bottom: var(--mode-line-height);
     height: 32px;
-    z-index: 150;
+    /* Above the mode line's error, so the completions cover it rather than it them. */
+    z-index: 151;
 
     background: var(--ui-black);
 
@@ -782,6 +783,12 @@ button.flash {
     white-space: normal;
 
     cursor: pointer;
+}
+
+/* The minibuffer (the label input, and the prompts) takes the line above the mode line while it is
+   open, so an error moves up above it, under the list of completions. */
+body:has(.label-input-container:focus-within:not(.hidden)) .mode-line .message.error {
+    bottom: calc(100% + 32px);
 }
 
 .mode-line .message:empty {
