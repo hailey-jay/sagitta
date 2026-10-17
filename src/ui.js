@@ -1002,7 +1002,6 @@ class UI {
             width: `${
                 this.grid.column_width(position.x) - CONSTANTS.GRID_BORDER_WIDTH}px`,
             height: `${height}px`,
-            "padding-top": `${height / 2}px`,
         });
         this.update_mark_region();
         if (update_focus_position) {
