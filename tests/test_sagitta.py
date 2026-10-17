@@ -697,6 +697,15 @@ def test_the_hints_give_way_only_where_there_is_no_room(sagitta, home):
     assert narrow[0] == "layer" and len(narrow) < 5 and narrow == message[:len(narrow)]
 
 
+def test_the_first_bullet_is_as_wide_as_an_empty_column_beyond_it(sagitta, home):
+    """KaTeX's font loads only once the first label needs it, which must be waited for, or that
+    label is measured in a fallback font, and its column is narrower than the space round it."""
+    frames = sagitta("frames", home / "new.tikzcd", json.dumps([["Space"], ["Space"], ["Escape"]]))
+    # The vertex is in column 0, and columns 1 to 3 are empty, beyond the diagram.
+    columns = frames[-1]["columns"]
+    assert abs(columns[2] - columns[3]) <= 1, columns
+
+
 def _monotonic(values):
     steps = [b - a for a, b in zip(values, values[1:]) if b != a]
     return all(step > 0 for step in steps) or all(step < 0 for step in steps)

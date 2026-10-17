@@ -408,12 +408,20 @@ class UI {
         // label rendered meanwhile (a macros file reloading, or keys typed faster than the diagram
         // lays out) is sized together, before it is drawn.
         this.sizing_labels = true;
-        document.fonts.ready.then(() => requestAnimationFrame(() => {
+        // `document.fonts.ready` may have settled before a font the labels need began to load, as
+        // it does when the first label of a session is a `\bullet`, so we wait again while one is
+        // still loading.
+        const size = () => document.fonts.ready.then(() => requestAnimationFrame(() => {
+            if (document.fonts.status === "loading") {
+                size();
+                return;
+            }
             this.sizing_labels = false;
             const cells = this.unsized_labels;
             this.unsized_labels = new Set();
             this.size_labels(cells);
         }));
+        size();
     }
 
     /// The box TeX sets the label of `edge` in, as `{ width, height, shift }`, in the canvas's
