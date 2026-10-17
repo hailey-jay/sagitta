@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The label input's box reads `label` again after a code prompt. It kept the prompt's name after it, as `labelToggle`, cut short.
 - Keys work as in quiver, and only so: the command layer stays open by itself, so its keys work without `;`, and a label is typed only after RET. Spreadsheet mode, where typing edited the label, is gone, with `ui.quiver_mode`, `:quiver-mode`, and `ui.which_key_delay`, since `;` lists the command layer's keys at once. A settings file's old settings are ignored, and dropped the next time it is written.
 - The mode line shows `MARK` while a mark waits for its other corner, and `CHECKPOINT` while one is carried, with the command layer open, as it did outside it.
 - RET selects the whole label, so typing replaces it (a new cell's `\bullet`, say), and an arrow key goes to either end of it to edit it in place. It put the caret at the end.

@@ -665,6 +665,20 @@ def test_the_command_layer_opens_the_code_prompts(sagitta, home):
     assert result["mode_line"].startswith("TOGGLE")
 
 
+def test_a_prompt_leaves_the_label_input_named_label(sagitta, home):
+    """The prompt names itself in the box the label input shows "label" in."""
+    script = """(() => {
+        const press = (key) => document.dispatchEvent(
+            new KeyboardEvent("keydown", { key, cancelable: true }));
+        press(";");
+        press("s");
+        const during = document.querySelector(".input-mode").textContent;
+        ui.switch_mode(UIMode.default);
+        return [during, document.querySelector(".input-mode").textContent];
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == ["Toggle", ""]
+
+
 def test_slash_searches_in_the_command_layer_too(sagitta, home):
     result = sagitta("keys", _diagram(home / "paper"), json.dumps([[";"], ["/"]]))
     assert result["mode_line"].startswith("/ SEARCH")
