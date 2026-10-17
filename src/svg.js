@@ -95,13 +95,20 @@ class DiagramSVG {
     }
 
     /// A copy of the label `element`, in the colour `colour`, with the size it is drawn at, which
-    /// the canvas's own styles gave it.
-    static label(element, colour) {
+    /// the canvas's own styles gave it, where KaTeX's own styles will draw it at that size. With
+    /// `placed`, it is placed in its `foreignObject` as the canvas places it, which an arrow's
+    /// label is, round the box TeX sets it in.
+    static label(element, colour, placed = false) {
         const copy = element.cloneNode(true);
         copy.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
         copy.removeAttribute("class");
-        copy.setAttribute("style", `font-size: ${getComputedStyle(element).fontSize};`
-            + ` color: ${colour.css()}; white-space: nowrap; line-height: normal;`);
+        const katex = element.querySelector(".katex");
+        const size = katex === null ? parseFloat(getComputedStyle(element).fontSize)
+            : parseFloat(getComputedStyle(katex).fontSize) / CONSTANTS.TEX.KATEX_SCALE;
+        const style = getComputedStyle(element);
+        copy.setAttribute("style", `font-size: ${size}px; color: ${colour.css()};`
+            + " white-space: nowrap; line-height: normal;" + (placed ? ` position: absolute;`
+                + ` left: ${style.left}; top: ${style.top}; transform: ${style.transform};` : ""));
         return copy;
     }
 
@@ -124,9 +131,10 @@ class DiagramSVG {
         for (const path of copy.querySelectorAll(".arrow-crossing")) {
             path.setAttribute("stroke", "white");
         }
-        for (const label of copy.querySelectorAll(".label")) {
-            label.replaceWith(DiagramSVG.label(label, colour));
-        }
+        const labels = Array.from(svg.querySelectorAll(".label"));
+        Array.from(copy.querySelectorAll(".label")).forEach((label, i) => {
+            label.replaceWith(DiagramSVG.label(labels[i], colour, true));
+        });
         const style = getComputedStyle(svg);
         const [ox, oy] = style.transformOrigin.split(" ").map(parseFloat);
         const matrix = new DOMMatrix(style.transform === "none" ? undefined : style.transform);

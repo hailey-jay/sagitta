@@ -21,8 +21,6 @@ Object.assign(CONSTANTS, {
     ROUNDING: 8,
     /// How many pixels each unit of loop radius corresponds to.
     LOOP_HEIGHT: 16,
-    /// How many pixels of padding to place around labels on edges.
-    EDGE_LABEL_PADDING: 8,
     /// How much padding to try to keep around the focus point when moving it via the keyboard
     /// (in pixels).
     VIEW_PADDING: 128,
@@ -48,6 +46,8 @@ Object.assign(CONSTANTS, {
         /// The size of a bullet's node, in pt, which an empty column or row beyond the diagram
         /// takes (see `Grid`).
         BULLET: { x: 14, y: 14 },
+        /// What tikz-cd puts round a label to make its node, on each side, in pt.
+        LABEL_PADDING: 2.35,
         /// A millimetre, in pt, which a loop's distance is given in.
         PT_PER_MM: 72.27 / 25.4,
         /// The unit of tikz-cd's `shift left` and `shift right`, 0.56ex, in pt.

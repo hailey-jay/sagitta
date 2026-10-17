@@ -163,7 +163,12 @@ class ArrowStyle {
 
 class Label {
     constructor() {
+        // The size of the label's node, as tikz-cd draws it: the box TeX sets the label in, and
+        // padding (see `UI.tex_box`).
         this.size = Dimensions.zero();
+        // How far the middle of that box is from the middle of the label's element, which the
+        // element is moved back by, so that the box is in the middle of the node.
+        this.shift = Point.zero();
         this.alignment = CONSTANTS.LABEL_ALIGNMENT.CENTRE;
         this.element = null;
     }
@@ -960,6 +965,12 @@ class Arrow {
                 xmlns: "http://www.w3.org/1999/xhtml",
                 class: "label",
             })).add_to(label);
+            // The box TeX sets the label in goes in the middle of the node, rather than the
+            // element, which is as tall as a line.
+            this.label.element.set_style({
+                transform: `translate(calc(-50% - ${this.label.shift.x}px), calc(-50% - ${
+                    this.label.shift.y}px))`,
+            });
             this.svg.add(label);
         }
     }
@@ -1631,8 +1642,12 @@ class Arrow {
             const intersections = curve
                 .intersections_with_rounded_rectangle(new RoundedRectangle(
                     rect_centre,
-                    this.label.size.add(Point.diag(edge_width)),
-                    edge_width / 2,
+                    // tikz-cd sets the node against the middle of the line, so only what the
+                    // edge has beyond a single line keeps the label further off. A rectangle of
+                    // no size has no sides to meet the line with.
+                    this.label.size.add(Point.diag(Math.max(edge_width - CONSTANTS.STROKE_WIDTH,
+                        1))),
+                    0,
                 ), true);
 
             if (intersections.length === 0) {

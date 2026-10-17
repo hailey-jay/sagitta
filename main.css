@@ -648,8 +648,10 @@ label input[type="checkbox"]:checked::before {
 
 /* Arrow labels */
 
+/* tikz-cd sets labels in `\scriptstyle`, 0.7 of the cells' size, and KaTeX draws at 1.21 times its
+   font size, as it does for the cells. */
 .arrow .katex, .arrow .katex-error {
-    font-size: 1em;
+    font-size: calc(0.7 * 1.21em);
 }
 
 /* The mode line */

@@ -405,6 +405,34 @@ class UI {
         }));
     }
 
+    /// The box TeX sets the label of `edge` in, as `{ width, height, shift }`, in the canvas's
+    /// pixels: its width, its height and depth together, which KaTeX gives each part of the label
+    /// as a strut, and how far its middle is from the middle of the label's element, which is as
+    /// tall as a line. A label that is not maths (an error) is its element.
+    static tex_box(edge) {
+        const label = edge.element.query_selector(".label");
+        const katex = edge.element.query_selector(".label .katex, .label .katex-error");
+        if (label === null || katex === null) {
+            return { width: 0, height: 0, shift: Point.zero() };
+        }
+        const width = katex.element.offsetWidth;
+        const outer = label.element.getBoundingClientRect();
+        const struts = Array.from(katex.element.querySelectorAll(".katex-html .strut"))
+            .map((strut) => strut.getBoundingClientRect());
+        if (struts.length === 0 || outer.height === 0) {
+            return { width, height: katex.element.offsetHeight, shift: Point.zero() };
+        }
+        // The canvas may be zoomed, which the screen's measures include.
+        const zoom = outer.height / label.element.offsetHeight;
+        const top = Math.min(...struts.map(({ top }) => top));
+        const bottom = Math.max(...struts.map(({ bottom }) => bottom));
+        return {
+            width,
+            height: (bottom - top) / zoom,
+            shift: new Point(0, ((top + bottom) / 2 - (outer.top + outer.bottom) / 2) / zoom),
+        };
+    }
+
     /// Size the newly rendered labels of `cells`: vertices to fit their labels, resizing the grid
     /// if need be, and edges around their labels. Every label is measured before anything is
     /// resized, so that the whole batch costs one layout rather than one per label.
@@ -418,18 +446,17 @@ class UI {
         for (const vertex of vertices) {
             vertex.measure_label();
         }
-        const edge_sizes = edges.map((edge) => {
-            const katex_element = edge.element.query_selector(".label .katex, .label .katex-error");
-            return katex_element === null ? [0, 0]
-                : [katex_element.element.offsetWidth, katex_element.element.offsetHeight];
-        });
+        const edge_sizes = edges.map((edge) => UI.tex_box(edge));
 
+        // tikz-cd's padding round a label, which with the label's box makes its node.
+        const padding = CONSTANTS.TEX.LABEL_PADDING * Edge.PX_PER_PT;
         for (const [i, edge] of edges.entries()) {
-            const [width, height] = edge_sizes[i];
+            const { width, height, shift } = edge_sizes[i];
             edge.arrow.label.size = new Dimensions(
-                width + (width > 0 ? CONSTANTS.EDGE_LABEL_PADDING * 2 : 0),
-                height + (height > 0 ? CONSTANTS.EDGE_LABEL_PADDING * 2 : 0),
+                width + (width > 0 ? padding * 2 : 0),
+                height + (height > 0 ? padding * 2 : 0),
             );
+            edge.arrow.label.shift = shift;
             // An edge's label sits in a `foreignObject`, which the edge replaces as it redraws. A
             // browser may not lay out one inserted in the frame the label is measured in, as
             // Firefox does not, so that a label typed onto an arrow measures nothing, and is never
