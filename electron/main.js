@@ -112,6 +112,13 @@ if (args.switches.length > 0) {
 // `%APPDATA%\sagitta` on Windows.
 app.setName("sagitta");
 
+// What `:keys-file` starts a new keys file with (see `Bindings.words` for comments).
+const KEYS_HEADER = `\
+# Sagitta's keys. Each line names a command, then its keys, which replace its defaults:
+# \`flip q\` puts flip on q in the command layer, and \`copy C-S-y\` copies with Control-Shift-y.
+# See "The keys file" in docs/sagitta.md. Changes take effect when Sagitta restarts.
+`;
+
 // Dialogs offer these, diagrams first.
 const FILTERS = {
     diagram: [{ name: "tikz-cd diagrams", extensions: ["tikzcd"] }, { name: "All files", extensions: ["*"] }],
@@ -252,13 +259,15 @@ app.whenReady().then(() => {
         },
         // Open the settings in the desktop's editor for JSON. Returns the error, or "".
         open_settings: () => shell.openPath(settings),
-        // Open the keys file in the desktop's editor, making it, empty, if there is none, so that
-        // there is something to open. Returns the error, or "".
+        // Open the keys file in the desktop's editor, starting it with a comment if there is none,
+        // or it is empty: a desktop takes an empty file for no kind of file at all, and may have
+        // nothing to open it with, where a file of text opens in its text editor. Returns the
+        // error, or "".
         open_keys: () => {
             const keys = path.join(app.getPath("userData"), "keys");
-            if (!fs.existsSync(keys)) {
+            if (!fs.existsSync(keys) || fs.statSync(keys).size === 0) {
                 fs.mkdirSync(path.dirname(keys), { recursive: true });
-                write_file(keys, "");
+                write_file(keys, KEYS_HEADER);
             }
             return shell.openPath(keys);
         },

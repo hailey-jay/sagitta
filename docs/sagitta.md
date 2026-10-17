@@ -90,9 +90,9 @@ While the diagram is empty, a line of tips runs along the top.
 
 `~/.config/sagitta/keys`, if it exists, rebinds keys.
 On Windows the file is `%APPDATA%\sagitta\keys`.
-`:keys-file` opens it in the desktop's editor, making it, empty, if there is none.
+`:keys-file` opens it in the desktop's editor, starting it with a few lines of comments if there is none.
 In a browser it lives in the browser's storage, and `:keys-file`, `:settings-file`, or `o` in the settings layer edits it beside the settings.
-It is read at startup, and Sagitta never writes anything into it.
+It is read at startup, and Sagitta writes nothing else into it.
 Each line names something, then its keys, which replace all of its defaults:
 
 ```

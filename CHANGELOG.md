@@ -10,7 +10,7 @@
 - `:help` opens the help, for a browser where `C-/` and `<f1>` never reach the page.
 - A problem with the keys or settings file is reported in a few words, without the folder the file is in, and names the command that opens the file: `keys line 1: no command "sav" (+1 more, :keys-file)`.
 - A name in the settings file that is not a setting, such as a typo or a newer version's setting, is reported, and kept the next time the file is written. Only the settings earlier versions had are dropped.
-- `:keys-file` opens the keys file in the desktop's editor, making it if there is none, and `:settings-file` opens the settings file, as `o` in the settings layer does.
+- `:keys-file` opens the keys file in the desktop's editor, starting it with a few lines of comments if there is none, and `:settings-file` opens the settings file, as `o` in the settings layer does.
 - With nothing selected, DEL and `<delete>` delete the cell under the focus point, so a lone cell needs no selecting first. They did nothing.
 - The first label of a session is measured once KaTeX's font has loaded, so its column fits it: the first `\bullet` of a new diagram was measured in a fallback font, and its column was a few pixels narrower than the empty ones round it.
 - Dark mode follows the system's colour scheme, as it changes, until it is set by `:dark-mode`, the settings layer, or `:set`. A settings file already holding `ui.dark_mode`, as every file written so far does, keeps it: remove the line to follow the system.
