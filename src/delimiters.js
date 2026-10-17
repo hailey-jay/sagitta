@@ -3,16 +3,13 @@
 /// key should do to a value and a selection, and `UI.create_label_input` does it.
 const Delimiters = {};
 
-/// The opening delimiters that wrap a label, or the selected part of one, rather than replacing
-/// it, and otherwise bring the delimiter they close with (see `UI.create_label_input`).
+/// The opening delimiters that wrap the selected part of a label, and otherwise bring the
+/// delimiter they close with (see `UI.create_label_input`).
 Delimiters.PLAIN = { "(": ")", "[": "]", "{": "}" };
 
 /// The delimiters that pair only after `\left`: `.`, and `|`, which in a label is as often a
 /// restriction or "divides" as an absolute value.
 Delimiters.LEFT = { ".": ".", "|": "|" };
-
-/// `text` between the delimiter `open` and its closing one.
-Delimiters.wrap = (text, open) => `${open}${text}${Delimiters.PLAIN[open]}`;
 
 /// The LaTeX delimiters that pair in a label too. An escaped one pairs as its last character is
 /// typed, and a command once a character that cannot continue its name follows it. `\(` and `\[`

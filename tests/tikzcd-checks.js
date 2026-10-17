@@ -347,12 +347,7 @@ const pending = [];
     ], [true, false]);
     check("and said in words", settings.expected("ui.zoom"), "a number from 20 to 200");
 
-    check("null is a value where it is allowed", [
-        settings.parse("ui.which_key_delay", "null"), settings.allows("ui.which_key_delay", null),
-        settings.allows("ui.zoom", null),
-    ], [null, true, false]);
-    check("which the words say too", settings.expected("ui.which_key_delay"),
-        "a number from 0 to 5000, or null");
+    check("null is no number", settings.allows("ui.zoom", null), false);
 
     check("a preset is checked against the list", [
         settings.allows("diagram.arrow_preset", "equals"),
@@ -470,8 +465,6 @@ const pending = [];
     check("and nonsense for them is refused",
         set("ui.dark_mode", "sometimes"),
         '"sometimes" is not a value for ui.dark_mode, which should be true or false.');
-    check("null is a value where the setting takes one",
-        [set("ui.which_key_delay", "null"), ui.settings.get("ui.which_key_delay")], [null, null]);
     check("a preset is set by name",
         [set("diagram.arrow_preset", "mono"), ui.settings.get("diagram.arrow_preset")],
         [null, "mono"]);
@@ -937,7 +930,7 @@ const pending = [];
         of(resolve("jump C-j").keys, "jump"), "C-j");
     check("a key alone is refused",
         resolve("walk q").problems,
-        ['line 1: "q" needs ; or C-: "; q" for the command layer, which quiver mode keeps open,'
+        ['line 1: "q" needs ; or C-: "; q" for the command layer,'
             + ' or a chord']);
     check("a reserved key is refused", resolve("walk RET").problems,
         ['line 1: "RET": RET keeps its own meaning']);

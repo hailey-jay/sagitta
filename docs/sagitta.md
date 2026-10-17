@@ -41,21 +41,15 @@ The macros reload whenever the file changes.
 
 ## Keys
 
-Sagitta's keys work as quiver's do, in quiver mode, the default: the command layer stays open by itself, so its keys work without `;`, and a label is typed only after RET, which selects the whole label, so that typing replaces it and an arrow key edits it in place; RET again, or ESC, puts it down.
-Backspace deletes, as in the layer, and ESC does what it does outside the layer once there is nothing in the layer to let go of.
+Sagitta's keys work as quiver's do: the command layer stays open by itself, so its keys work without `;`, and a label is typed only after RET, which selects the whole label, so that typing replaces it and an arrow key edits it in place; RET again, or ESC, puts it down.
+On an empty cell with nothing selected, RET makes a cell there to label.
+Backspace deletes, and ESC lets go of whatever the layer holds, then does what it does outside the layer.
 The layer's keys are listed only on `;`, never by waiting, though a list of choices, such as after `t`, shows at once.
 
-Spreadsheet mode (`:spreadsheet-mode`, or `s` in the settings layer) works the other way round.
-Typing edits the label of the targeted cell, spreadsheet-style, except that `(`, `[`, and `{` wrap the label (or the selected part of it) instead of replacing it.
-Elsewhere they bring their closing delimiter, as in most editors, unless it is already next; typing the closing one steps over it, and Backspace in an empty pair deletes both.
-RET selects the whole label to edit instead, and on an empty cell with nothing selected, makes a cell there to label, in either mode.
-`\{` and `\|` pair the same way, and `\langle`, `\lvert`, `\lVert`, `\lceil`, and `\lfloor` once something other than a letter follows them.
-After `\left`, the closing delimiter comes with `\right`.
-`|` pairs only there, since it is as often a restriction or "divides" as an absolute value: elsewhere it types itself, and `\|` or `\lvert` gives a pair.
-The commands live one key away:
+The rest live one key away:
 
-- `;` the command layer: arrow styles and label alignment (a key, then the choice's own key, as listed), sliders (a key, then a number and RET), and presets.
-  In spreadsheet mode, its keys are listed once it has waited 300ms for one, so a key typed straight after `;` does not flash the list up, and `?` shows or hides the list at once.
+- `;` lists the command layer's keys: arrow styles and label alignment (a key, then the choice's own key, as listed), sliders (a key, then a number and RET), and presets.
+  `?` shows or hides the list too.
   Its capitals act on the label, and curve sets a loop's radius instead.
   A preset with no arrow selected sets `diagram.arrow_preset`, the preset new arrows take, and the list marks the one they take now; a style still needs an arrow to apply to.
 - `:` the command line: named commands, with Tab completion.
@@ -76,7 +70,10 @@ The commands live one key away:
   The keys file can move it (`mark`, and `mark-add` for a key of its own that adds); Space alone cannot be bound, but its chords can.
   Input methods such as IBus and Fcitx take Control-Space to switch input method, so where one runs, `C-SPC` never reaches Sagitta: bind `mark` to another key in the keys file (`mark C-g`, say, which is free), or change the input method's own key.
 
-`:`, `/`, and the chords work the same in either mode.
+In a label, `(`, `[`, and `{` wrap the selected part of it, and otherwise bring their closing delimiter, as in most editors, unless it is already next; typing the closing one steps over it, and Backspace in an empty pair deletes both.
+`\{` and `\|` pair the same way, and `\langle`, `\lvert`, `\lVert`, `\lceil`, and `\lfloor` once something other than a letter follows them.
+After `\left`, the closing delimiter comes with `\right`.
+`|` pairs only there, since it is as often a restriction or "divides" as an absolute value: elsewhere it types itself, and `\|` or `\lvert` gives a pair.
 
 The mouse works too.
 Click a cell to select it, and again to edit its label; click an empty space twice for a new cell; drag from a cell to draw an arrow, by the edge of its space to move it, an arrow's end to reconnect it, and a selected arrow's checkpoint, by its ring, to move it.
@@ -112,7 +109,7 @@ Keys are written as the help shows them:
   A capital letter means Shift too.
   Other characters are written as typed, as in `C-+`, without `S-`.
 - `<delete>`, `<insert>`, `<home>`, `<end>`, `<prior>`, `<next>`, and `<f1>` to `<f12>` work alone or with `C-` and `S-`.
-  Printable keys alone need `;` or `C-`: in quiver mode, `; b` works without the `;`, since the command layer stays open, and in spreadsheet mode, `b` alone types.
+  Printable keys alone need `;` or `C-`, though `; b` is pressed without the `;`, since the command layer stays open.
 - RET, TAB, SPC (with any modifier), ESC, DEL, and the arrows cannot be rebound.
 
 A key that a line binds is taken from whatever had it by default.
@@ -135,7 +132,7 @@ The names and their defaults:
 | `flip-hor`, `flip-ver`, `rotate` | none |
 | `centre-view`, `hide-grid` | `; z`, `; #` |
 | `zoom-out`, `zoom-in`, `reset-zoom` | `C--`, `C-=`, `C-0` |
-| `dark-mode`, `spreadsheet-mode`, `hide-mode-line`, `shortcuts`, `settings` | none, none, `C-\`, `C-/` `<f1>`, `C-,` |
+| `dark-mode`, `hide-mode-line`, `shortcuts`, `settings` | none, `C-\`, `C-/` `<f1>`, `C-,` |
 | `level`, `curve`, `offset`, `radius`, `length`, `position` | `; n`, `; b` (on loops alone, the radius; on routes alone, the rounding), `; o`, none, `; l`, `; P` |
 | `tail`, `body`, `head` | `; t`, `; d`, `; h` |
 | `arrow`, `adjunction`, `corner` | `; a`, `; j`, `; p` |
@@ -240,7 +237,7 @@ A setting that is on or off flips; a number is typed and set with RET, or steppe
 
 `:set SETTING VALUE` names any setting and the value to give it, which the layer cannot: it steps numbers by key, and lists only some of them.
 Tab lists the settings.
-`true`, `on`, and `yes` all mean true, as `false`, `off`, and `no` mean false, and `null` is a value where the table below allows one.
+`true`, `on`, and `yes` all mean true, as `false`, `off`, and `no` mean false.
 `:set SETTING` alone reports what the setting holds.
 A value the setting cannot take is refused, with what it may be.
 
@@ -253,10 +250,8 @@ A value the setting cannot take is refused, with what it may be.
 | `diagram.var_corner` | `false` | the corner `; p` gives first, which follows the last one used |
 | `diagram.arrow_preset` | `"plain"` | the preset new arrows take, from `plain`, `equals`, `inclusion`, `mono`, `epi`, `maps-to`, `dashed`, `dotted`, and `squiggly` |
 | `ui.dark_mode` | `false` | the grey canvas |
-| `ui.spreadsheet_mode` | `false` | spreadsheet mode (see Keys): typing edits the label, and the command layer's keys need `;` |
 | `ui.zoom` | `100` | the zoom the view starts at, and `reset-zoom` returns to, in percent (20 to 200) |
 | `ui.label_size` | `26` | the size of labels, in pixels (8 to 72), which the whole diagram is drawn to the scale of (see The canvas) |
-| `ui.which_key_delay` | `300` | how long `;` waits for a key before listing its keys in spreadsheet mode, in milliseconds (0 to 5000), or `null` for only on `?` |
 | `ui.which_key_compact` | `false` | list only the command layer's keys and their values, with what each does on hovering |
 | `ui.hint_characters` | `"ASDF...7890"` | the characters of the codes `/` selects cells by, in order |
 

@@ -75,9 +75,8 @@ class ModeLine {
         // What a newcomer needs first, until there is a diagram to work on.
         const shortcuts = Keymap.describe(this.actions.get("shortcuts").combinations.slice(0, 1));
         this.tip = new DOM.Div({ class: "tip hidden" }).add_to(ui.element);
-        // How to label, which depends on the mode, and so is filled in by `update`.
-        this.tip.add(new DOM.Element("span", { class: "labelling" }));
         for (const [keys, description] of [
+            ["RET", "label"],
             ["click twice", "new cell"],
             ["drag", "arrow"],
             ["; or right-click", "commands"],
@@ -320,7 +319,6 @@ class ModeLine {
             ui.grid_canvas.class_list.toggle("hidden");
         });
         this.add_action(ui, "dark-mode", "Dark mode", () => ui.toggle_dark_mode());
-        this.add_action(ui, "spreadsheet-mode", "Spreadsheet mode", () => ui.toggle_spreadsheet_mode());
         this.add_action(ui, "hide-mode-line", "Toggle mode line",
             () => ui.element.class_list.toggle("hide-mode-line"),
         );
@@ -428,12 +426,6 @@ class ModeLine {
             .add(`${Math.round(2 ** ui.scale * 100)}%`);
         this.element.query_selector(".layer").class_list.toggle("active", ui.keymap.active);
         this.tip.class_list.toggle("hidden", !ui.quiver.is_empty());
-        if (ui.quiver.is_empty()) {
-            this.tip.query_selector(".labelling").clear()
-                .add(new DOM.Element("kbd").add(ui.settings?.get("ui.spreadsheet_mode")
-                    ? "type" : "RET"))
-                .add(" label");
-        }
 
         ui.keymap.update_which_key();
     }

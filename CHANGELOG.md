@@ -2,17 +2,16 @@
 
 ## Unreleased
 
-- Quiver mode is the default. The setting is now `ui.spreadsheet_mode`, off unless set, with `:spreadsheet-mode` and `s` in the settings layer to switch it; `ui.quiver_mode` and `:quiver-mode` are gone, so a settings file that turned quiver mode on needs nothing, and one that relied on spreadsheet mode sets `ui.spreadsheet_mode`.
-- `ui.which_key_delay` matters only in spreadsheet mode, since quiver mode lists the command layer's keys on `;` alone.
-- In quiver mode, the mode line shows `MARK` while a mark waits for its other corner, and `CHECKPOINT` while one is carried, as spreadsheet mode always has.
+- Keys work as in quiver, and only so: the command layer stays open by itself, so its keys work without `;`, and a label is typed only after RET. Spreadsheet mode, where typing edited the label, is gone, with `ui.quiver_mode`, `:quiver-mode`, and `ui.which_key_delay`, since `;` lists the command layer's keys at once. A settings file's old settings are ignored, and dropped the next time it is written.
+- The mode line shows `MARK` while a mark waits for its other corner, and `CHECKPOINT` while one is carried, with the command layer open, as it did outside it.
 - RET selects the whole label, so typing replaces it (a new cell's `\bullet`, say), and an arrow key goes to either end of it to edit it in place. It put the caret at the end.
-- In quiver mode, RET after stepping a slider, or with a style list open, lets go of it, as in spreadsheet mode, rather than going on to edit the label.
+- RET after stepping a slider, or with a style list open, lets go of it, rather than going on to edit the label.
 - A key the command layer has no command on says so in the mode line (`x unbound`).
-- The help and the tip on an empty diagram describe the mode in force: in quiver mode, DEL deletes and RET labels.
+- The help and the tip on an empty diagram describe the keys as they now work: DEL deletes, and RET labels.
 - The Tab marker on the next queued cell goes once the label is finished, until the next Tab, and ESC can then still unqueue the cells.
 - While the keys are in use, the cell or arrow the pointer rests on is not highlighted, until the pointer moves.
 - `SPC` selects the arrows it draws along with their new target, so a preset or a style applies to them at once. RET on such a selection labels the cell alone, and the arrows are selected again once the label is put down.
-- The keys file's complaint about a key alone no longer says it would type, which it does only in spreadsheet mode.
+- The keys file's complaint about a key alone no longer says it would type.
 - Saving writes the export layer's options, which now show: saving a new file, or saving as, opens the export layer first, where RET goes on to save, and the layer lists `C-s` to save with them. The mode line follows the file's name with any export option that differs from its default.
 - Curves and loops are drawn on the canvas as TikZ draws them: a curve as quiver's `curve` cubic, and a loop as TikZ's `loop`, from the cell's border at the angles and distance the export writes, so their shapes match the PDF and not only their size. An arrow's label is set in script style, as tikz-cd sets it, and sits against the line as its node does in the PDF: by the box TeX sets it in, with tikz-cd's padding, rather than the taller line KaTeX draws it on, with 8px round that.
 - In the export layer, `q` copies the diagram's `#q=` hash, and `v` saves the diagram as an SVG image, drawn as the canvas draws it, with the fonts its labels use inside it.

@@ -98,7 +98,6 @@ sagitta [--macros FILE] [--devtools] [DIAGRAM.tikzcd] [-- SWITCHES]
 
 Keys work as in quiver: a letter runs a command, and `RET` edits the label of the cell under the cursor.
 `:` opens the command line, and `C-/` the help, which lists every key.
-Spreadsheet mode (`:spreadsheet-mode`) types straight into the label instead, with the commands behind `;`; there, `RET` focuses the text interface for a label starting with `;` or `:`.
 With a mouse, right-click or the `; commands` button opens the command layer, and clicking a line of its list runs it.
 `C-s` saves.
 

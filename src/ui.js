@@ -1340,10 +1340,6 @@ class UI {
             case "ui.hint_characters":
                 this.recode();
                 break;
-            case "ui.spreadsheet_mode":
-                // Whether the command layer is open by itself changes, and with it the mode line.
-                this.keymap.leave();
-                break;
         }
         // An export setting changes what saving would write, so whether there are unsaved changes
         // may have changed with it, and the mode line has to be told. The export layer sets these
@@ -1446,13 +1442,6 @@ class UI {
     /// Switch dark mode on or off, and remember it. Only how the diagram is shown changes.
     toggle_dark_mode() {
         this.change_setting("ui.dark_mode", !this.settings.get("ui.dark_mode"));
-    }
-
-    /// Switch spreadsheet mode on or off (see `Keymap.latched`), and remember it.
-    toggle_spreadsheet_mode() {
-        const value = !this.settings.get("ui.spreadsheet_mode");
-        this.change_setting("ui.spreadsheet_mode", value);
-        this.mode_line.flash(value ? "spreadsheet mode: type to edit" : "quiver mode: RET to type");
     }
 
     /// Update the grid with respect to the view and size of the window.

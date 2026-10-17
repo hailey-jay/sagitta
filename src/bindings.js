@@ -72,10 +72,10 @@ class Bindings {
                 throw new Error(`"${text}": ${key} keeps its own meaning in the command layer`);
             }
         } else if (!modifier && key.length === 1) {
-            // Alone, the key is the command layer's, latched open in quiver mode, or a label's, in
-            // spreadsheet mode, so it has to say which.
+            // The command layer's keys are written with `;`, as the help lists them, so that a key
+            // file says which keys are the layer's.
             throw new Error(`"${text}" needs ; or C-: "; ${rest}" for the command layer, `
-                + `which quiver mode keeps open, or a chord`);
+                + `or a chord`);
         }
         return { key, shift, modifier, layer };
     }
@@ -272,7 +272,6 @@ Bindings.DEFAULTS = {
     "reset-zoom": ["C-0"],
     "hide-grid": ["; #"],
     "dark-mode": [],
-    "spreadsheet-mode": [],
     "hide-mode-line": ["C-\\"],
     "shortcuts": ["C-/", "<f1>"],
     "settings": ["C-,"],

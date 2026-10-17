@@ -320,14 +320,11 @@ Layer.Help = class extends Layer {
         const sections = new Map(
             ["Typing", "Moving", "Mouse", "Layers", "Chords", "Help"].map((section) => [section, []]),
         );
-        const mode = this.ui.settings.get("ui.spreadsheet_mode") ? "spreadsheet" : "quiver";
         const elsewhere = (lines) => {
-            for (const [section, description, key, only = mode] of lines) {
-                if (only === mode) {
-                    sections.get(section).push([
-                        typeof key === "function" ? key(this.keymap) : key, description,
-                    ]);
-                }
+            for (const [section, description, key] of lines) {
+                sections.get(section).push([
+                    typeof key === "function" ? key(this.keymap) : key, description,
+                ]);
             }
         };
         elsewhere(Keymap.HELP_ELSEWHERE.before);
@@ -782,11 +779,7 @@ Layer.Settings.GROUPS = [
         ["z", "ui.zoom", "zoom to start at"],
         ["l", "ui.label_size", "label size"],
     ]],
-    ["Keys", [
-        ["s", "ui.spreadsheet_mode", "spreadsheet mode: type to edit"],
-    ]],
     ["Command list", [
-        ["w", "ui.which_key_delay", "list keys after"],
         ["k", "ui.which_key_compact", "compact"],
     ]],
     ["Diagram", [
@@ -799,14 +792,12 @@ Layer.Settings.GROUPS = [
 Layer.Settings.STEPS = {
     "ui.zoom": 10,
     "ui.label_size": 2,
-    "ui.which_key_delay": 100,
 };
 
 /// The units the numeric settings are listed in.
 Layer.Settings.UNITS = {
     "ui.zoom": "%",
     "ui.label_size": "px",
-    "ui.which_key_delay": " ms",
 };
 
 /// The keys of the presets new arrows may take, by name: the command layer's defaults for the

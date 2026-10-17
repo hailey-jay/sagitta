@@ -297,20 +297,7 @@ def test_the_var_corner_can_be_chosen_on_its_own(sagitta, home):
     assert "\\ulcorner" in diagram.read_text()
 
 
-def _spreadsheet_mode(home):
-    settings = home / ".config" / "sagitta"
-    settings.mkdir(parents=True, exist_ok=True)
-    (settings / "settings.json").write_text('{"ui.spreadsheet_mode": true}\n')
-
-
-def test_spreadsheet_mode_types_straight_into_the_label(sagitta, home):
-    _spreadsheet_mode(home)
-    diagram = _diagram(home / "paper")
-    sagitta("typing", diagram, json.dumps(["x", "Enter"]))
-    assert "\tx & B" in diagram.read_text()
-
-
-def test_quiver_mode_types_only_after_return(sagitta, home):
+def test_a_label_is_typed_only_after_return(sagitta, home):
     diagram = _diagram(home / "paper")
     # `x` is the layer's crossing over, which wants an arrow, rather than a label.
     result = sagitta("typing", diagram, json.dumps(["x"]), expected_error="Select an arrow first")
@@ -323,7 +310,7 @@ def test_quiver_mode_types_only_after_return(sagitta, home):
     assert "\tx & B" in diagram.read_text()
 
 
-def test_quiver_mode_keeps_the_command_layer_open(sagitta, home):
+def test_the_command_layer_stays_open(sagitta, home):
     """The layer's keys work without `;`, and Escape still deselects."""
     diagram = _diagram(home / "paper")
     sagitta("keys", diagram, json.dumps([["x"]]))
@@ -333,33 +320,22 @@ def test_quiver_mode_keeps_the_command_layer_open(sagitta, home):
     assert result["mode_line"].startswith(";")
 
 
-@pytest.mark.parametrize("quiver,keys,main,submenu", [
-    # Spreadsheet mode lists the keys after a pause, as it always has.
-    (False, [";"], True, False),
-    (False, [";", "t"], False, True),
-    # Quiver mode lists them only on `;`, though a component's choices show at once.
-    (True, [], False, False),
-    (True, ["b"], False, False),
-    (True, ["t"], False, True),
-    (True, [";"], True, False),
-    (True, [";", ";"], False, False),
+@pytest.mark.parametrize("keys,main,submenu", [
+    # The keys are listed only on `;`, though a component's choices show at once.
+    ([], False, False),
+    (["b"], False, False),
+    (["t"], False, True),
+    ([";"], True, False),
+    ([";", ";"], False, False),
 ])
-def test_the_command_list_shows(sagitta, home, quiver, keys, main, submenu):
-    if not quiver:
-        _spreadsheet_mode(home)
+def test_the_command_list_shows(sagitta, home, keys, main, submenu):
     result = sagitta("lists", _diagram(home / "paper"), json.dumps(keys))
     assert result == {"main": main, "submenu": submenu}
 
 
-@pytest.mark.parametrize("quiver", [False, True])
-def test_a_key_the_command_layer_does_not_use_is_kept_from_the_browser(sagitta, home, quiver):
+def test_a_key_the_command_layer_does_not_use_is_kept_from_the_browser(sagitta, home):
     """Firefox's quick find takes `'` otherwise."""
-    if not quiver:
-        _spreadsheet_mode(home)
     script = """(() => {
-        if (!ui.keymap.active) {
-            ui.keymap.enter();
-        }
         const event = new KeyboardEvent("keydown", { key: "'", cancelable: true });
         document.dispatchEvent(event);
         return event.defaultPrevented;
@@ -367,10 +343,7 @@ def test_a_key_the_command_layer_does_not_use_is_kept_from_the_browser(sagitta, 
     assert sagitta("evaluate", _diagram(home / "paper"), script)
 
 
-@pytest.mark.parametrize("quiver", [False, True])
-def test_return_on_an_empty_cell_makes_one_to_label(sagitta, home, quiver):
-    if not quiver:
-        _spreadsheet_mode(home)
+def test_return_on_an_empty_cell_makes_one_to_label(sagitta, home):
     diagram = _diagram(home / "paper")
     result = sagitta("typing", diagram, json.dumps(["Right", "Right", "Enter", "E", "Enter"]))
     assert result["counts"]["vertices"] == 5
@@ -378,7 +351,7 @@ def test_return_on_an_empty_cell_makes_one_to_label(sagitta, home, quiver):
 
 
 @pytest.mark.parametrize("key", ["b", "t"])
-def test_quiver_mode_return_lets_go_of_a_slider_or_list_without_editing(sagitta, home, key):
+def test_return_lets_go_of_a_slider_or_list_without_editing(sagitta, home, key):
     """RET after stepping a slider, or with a style list open, only lets go of it."""
     script = """(() => {
         const press = (key) => document.dispatchEvent(
@@ -450,12 +423,6 @@ def test_return_with_a_selection_still_edits_it(sagitta, home):
     assert "\tx & B" in diagram.read_text()
 
 
-def test_spreadsheet_mode_command_switches_it(sagitta, home):
-    sagitta("commands", _diagram(home / "paper"), json.dumps(["spreadsheet-mode"]))
-    settings = json.loads((home / ".config" / "sagitta" / "settings.json").read_text())
-    assert settings["ui.spreadsheet_mode"] is True
-
-
 def test_the_corner_takes_the_kind_last_used(sagitta, home):
     settings = home / ".config" / "sagitta"
     settings.mkdir(parents=True)
@@ -506,25 +473,24 @@ def test_a_nudge_bends_the_arrow_beside_a_loop(sagitta, home):
 # ── Key bindings ──────────────────────────────────────────────────────────────
 #
 # Every binding goes through `Keymap.dispatch`. A binding marked `layer` runs only in the command
-# layer; outside it, the same key types a label.
+# layer, which is open whenever no label, prompt, or other layer has the keys.
 
 
 @pytest.mark.parametrize("keys,expected", [
     ([[";"], ["r"], ["Escape"]], '\\arrow["f"\', from=1-2, to=1-1]'),
     ([["r", ["control"]]], '\\arrow["f"\', from=1-2, to=1-1]'),
-    ([["r"], ["Enter"]], '\\arrow["r", from=1-1, to=1-2]'),
-    # An opening delimiter wraps the label it would replace, or the selected part of one, and
+    ([["Enter"], ["r"], ["Enter"]], '\\arrow["r", from=1-1, to=1-2]'),
+    # An opening delimiter wraps the selected part of a label, as RET leaves the whole of it, and
     # otherwise brings its closing one, which typing steps over.
-    ([["Escape"], ["("], ["Enter"]], "\t{(A)} & B"),
+    ([["Escape"], ["Enter"], ["("], ["Enter"]], "\t{(A)} & B"),
     ([["Escape"], ["Enter"], ["Right"], ["Left", ["shift"]], ["["], ["{"], ["Enter"]], "\t{[{A}]} & B"),
-    ([["Escape"], ["Backspace"], ["Escape"], ["("], ["x"], ["Enter"]], "\t{(x)} & B"),
+    ([["Escape"], ["Enter"], ["Backspace"], ["("], ["x"], ["Enter"]], "\t{(x)} & B"),
     ([["Escape"], ["Enter"], ["Right"], ["("], ["x"], [")"], ["Enter"]], "\t{A(x)} & B"),
     # Not before its closing one; and deleting an empty pair deletes both.
     ([["Escape"], ["Enter"], ["Right"], ["("], ["("], ["Enter"]], "\t{A(()} & B"),
     ([["Escape"], ["Enter"], ["Right"], ["["], ["Backspace"], ["Enter"]], "\tA & B"),
 ])
 def test_keys_change_the_diagram(sagitta, home, keys, expected):
-    _spreadsheet_mode(home)
     diagram = _diagram(home / "paper")
     sagitta("keys", diagram, json.dumps(keys))
     assert expected in diagram.read_text()
@@ -552,7 +518,7 @@ def _typed(*keys):
     (_typed("\\", *"left|x|"), "\t{A\\left|x\\right|} & B"),
     (_typed("\\", "|", "x"), "\t{A\\|x\\|} & B"),
     # `|` alone is as often a restriction as a delimiter, so it neither wraps nor pairs.
-    ([["Escape"], ["|"], ["Enter"]], "\t{|} & B"),
+    ([["Escape"], ["Enter"], ["|"], ["Enter"]], "\t{|} & B"),
     (_typed("|", "U"), "\t{A|U} & B"),
     (_typed("|", "|", "Backspace"), "\t{A|} & B"),
     # `\(` and `\[` are left alone, as is a delimiter after a line break.
@@ -560,7 +526,6 @@ def _typed(*keys):
     (_typed("\\", "\\", "{"), "\\begin{array}{c} A\\\\{} \\end{array} & B"),
 ])
 def test_latex_delimiters_pair(sagitta, home, keys, expected):
-    _spreadsheet_mode(home)
     diagram = _diagram(home / "paper")
     sagitta("keys", diagram, json.dumps(keys))
     assert expected in diagram.read_text()
@@ -584,7 +549,7 @@ def test_the_help_layer_lists_every_binding(sagitta, home):
     for the keys handled elsewhere."""
     help = dict(sagitta("help", _diagram(home / "paper")))
     assert list(help) == ["Typing", "Moving", "Mouse", "Layers", "Chords", "Help", "About"]
-    # Quiver mode, the default: letters are commands, and DEL deletes.
+    # Letters are commands, and DEL deletes.
     assert help["Typing"][0] == ["( [ { | \\{ \\langle …", "pair, or wrap the selection, in a label"]
     assert ["DEL", "delete the selection"] in help["Typing"]
     assert ["RET", "edit the label (selected whole), or label a new cell"] in help["Typing"]
@@ -599,14 +564,6 @@ def test_the_help_layer_lists_every_binding(sagitta, home):
     assert ["C-r", "reverse"] in help["Chords"]
     assert ["C-x", "cut"] in help["Chords"]
     assert not any(keys.startswith(";") for keys, _ in help["Chords"])
-
-
-def test_the_help_layer_describes_spreadsheet_mode_in_it(sagitta, home):
-    _spreadsheet_mode(home)
-    help = dict(sagitta("help", _diagram(home / "paper")))
-    assert help["Typing"][0] == ["a \\ 2 …", "replace the label"]
-    assert ["DEL", "clear the label"] in help["Typing"]
-    assert [";", "commands (lists its keys)"] in help["Layers"]
 
 
 def test_flip_is_on_f(sagitta, home):
@@ -1055,7 +1012,6 @@ def test_the_mark_selects_a_rectangle_of_cells(sagitta, home):
 
 
 def test_a_preset_with_nothing_selected_sets_what_new_arrows_take(sagitta, home):
-    _spreadsheet_mode(home)
     diagram = _diagram(home / "pair", PAIR, "pair.tikzcd")
     result = sagitta("preset_default", diagram)
     assert result["preset"] == "equals"
@@ -1085,12 +1041,12 @@ def test_set_names_a_setting_and_its_value(sagitta, home):
     result = sagitta("set_command", _diagram(home / "paper"), json.dumps([
         "set ui.zoom 150",
         "set ui.dark_mode on",
-        "set ui.which_key_delay null",
+        "set ui.which_key_compact yes",
         "set diagram.arrow_preset equals",
     ]))
     assert result["settings"]["ui.zoom"] == 150
     assert result["settings"]["ui.dark_mode"] is True
-    assert result["settings"]["ui.which_key_delay"] is None
+    assert result["settings"]["ui.which_key_compact"] is True
     assert result["settings"]["diagram.arrow_preset"] == "equals"
     # Every change is reported, and reaches the file.
     assert all("is now" in line for line in result["lines"])
@@ -1577,43 +1533,19 @@ def test_the_settings_buttons_step_their_settings(sagitta, home):
     assert (settings["ui.zoom"], settings["ui.label_size"]) == (110, 24)
 
 
-def test_the_command_list_waits_for_a_key_or_for_question_mark(sagitta, home):
-    _spreadsheet_mode(home)
+def test_question_mark_shows_or_hides_the_command_list(sagitta, home):
     found = sagitta("script", _diagram(home / "paper"), json.dumps([
-        # Listed once `;` has waited 300ms for a key, and hidden and shown again by `?`.
         ["press", ";"], ["eval", _LIST_HIDDEN],
-        ["wait", 300], ["eval", _LIST_HIDDEN],
         ["press", "?"], ["eval", _LIST_HIDDEN],
-        ["press", "Escape"],
-        # Stepping the wait below none at all sets it to never: 200, 100, 0, then never.
-        ["press", ",", ["control"]], *_presses("w", "Left", "Left", "Left", "Left", "Escape"),
-        ["press", ";"], ["wait", 600], ["eval", _LIST_HIDDEN],
         ["press", "?"], ["eval", _LIST_HIDDEN],
     ]))
-    assert found == [True, False, True, True, False]
-    assert _saved_settings(home)["ui.which_key_delay"] is None
-
-
-def test_a_key_typed_before_the_command_list_shows_keeps_it_hidden(sagitta, home):
-    """`; (` does its preset and leaves the list hidden, but `; t` waits on a choice, so a pause
-    there lists the tails."""
-    _spreadsheet_mode(home)
-    found = sagitta("script", _diagram(home / "paper"), json.dumps([
-        ["press", "a", ["control"]],
-        ["press", ";"], ["press", "("], ["wait", 600], ["eval", _LIST_HIDDEN],
-        ["press", "Escape"],
-        ["press", ";"], ["press", "t"], ["eval", _LIST_HIDDEN],
-        ["wait", 400], ["eval", _LIST_HIDDEN],
-        ["eval", 'document.querySelector(".which-key .submenu h3").textContent'],
-    ]))
-    assert found == [True, True, False, "tail (again to cancel)"]
+    assert found == [False, True, False]
 
 
 def test_the_compact_command_list_shows_only_keys_and_values(sagitta, home):
-    _spreadsheet_mode(home)
     found = sagitta("script", _diagram(home / "paper"), json.dumps([
         ["press", ",", ["control"]], *_presses("k", "Escape"),
-        ["press", "a", ["control"]], ["press", ";"], ["press", "?"],
+        ["press", "a", ["control"]], ["press", ";"],
         ["eval", """[
             document.querySelector(".which-key").classList.contains("compact"),
             [...document.querySelectorAll(".which-key .main .entry kbd:first-child + span")]

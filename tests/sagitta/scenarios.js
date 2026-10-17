@@ -468,19 +468,15 @@ module.exports = {
         return { lines, settings: await ctx.js("ui.settings.data") };
     },
 
-    /// A preset key with nothing selected sets the preset new arrows take: `; =` for equals, then
+    /// A preset key with nothing selected sets the preset new arrows take: `=` for equals, then
     /// Space twice to draw an arrow with it, and save. Returns the mode line, the setting, and
     /// whether the command layer marks equals as the one in force.
     preset_default: async (ctx) => {
-        await ctx.press(";");
         await ctx.press("=");
         const mode_line = await ctx.mode_line();
         const preset = await ctx.js(`ui.settings.get("diagram.arrow_preset")`);
-        // The list marks the preset only while it is shown, so Escape closes whatever the preset
-        // key left open, `;` enters the layer again, and `?` lists the keys at once.
-        await ctx.press("Escape");
+        // The list marks the preset only while it is shown, which `;` does.
         await ctx.press(";");
-        await ctx.press("?");
         const shown = `document.querySelector(".which-key") !== null`
             + ` && !document.querySelector(".which-key").classList.contains("hidden")`;
         for (let tries = 0; !await ctx.js(shown); ++tries) {
