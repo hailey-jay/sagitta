@@ -137,8 +137,10 @@ class UI {
 
     /// Bring the grid's extent in line with the diagram's, its outermost cells and checkpoints,
     /// laying it out afresh if that changed, since empty columns and rows beyond it are sized
-    /// differently from those within (see `Grid`). Returns whether it changed.
-    update_extent() {
+    /// differently from those within (see `Grid`). Returns whether it changed. `previous` holds
+    /// the sizes, by axis and index, that columns and rows just fitted had before, which the layout
+    /// grows or shrinks them from, rather than from the sizes they were fitted to.
+    update_extent(previous = null) {
         const xs = [];
         const ys = [];
         for (const cell of this.quiver.all_cells()) {
@@ -158,6 +160,13 @@ class UI {
             // emptied, is laid out at once.
             const animate = extent !== null && !this.buffer_updates && this.layout_settled;
             const before = animate ? this.layout_sizes(this.layout_range()) : null;
+            for (const axis of before !== null && previous !== null ? ["x", "y"] : []) {
+                for (const [index, size] of previous[axis]) {
+                    if (before[axis].has(index)) {
+                        before[axis].set(index, size);
+                    }
+                }
+            }
             this.grid.extent = extent;
             this.relayout(before);
             this.layout_settled = extent !== null;
@@ -898,9 +907,22 @@ class UI {
         // We keep the view centred as best we can, so we have to adjust the view if anything is
         // resized.
         let view_offset = Offset.zero();
+        // The sizes before of the resized columns and rows that no vertex is left in, for
+        // `update_extent`. Those with vertices keep the size they were fitted to, which the
+        // vertices' own rendering fits them to again.
+        const previous = { x: new Map(), y: new Map() };
+        const vacated = (constraints, index) => (constraints.get(index)?.size ?? 0) === 0;
 
         for (const position of positions) {
             const [delta_x, delta_y] = this.grid.fit(position);
+            if (delta_x !== 0 && !previous.x.has(position.x)
+                && vacated(this.grid.width_constraints, position.x)) {
+                previous.x.set(position.x, this.grid.column_width(position.x) - delta_x);
+            }
+            if (delta_y !== 0 && !previous.y.has(position.y)
+                && vacated(this.grid.height_constraints, position.y)) {
+                previous.y.set(position.y, this.grid.row_height(position.y) - delta_y);
+            }
 
             if (delta_x !== 0 || delta_y !== 0) {
                 // Compute how much to adjust the view in order to keep it centred appropriately.
@@ -922,6 +944,13 @@ class UI {
             // Nothing moved. This is the usual case, as every vertex rendered checks its own
             // column and row, so it must not cost a pass over the quiver.
             return new Set();
+        }
+        // A vertex joining or leaving the diagram's edge changes its extent too, and the grid is
+        // then laid out afresh (see `update_extent`), from the sizes the columns and rows had
+        // before this fit. Otherwise a column a vertex left would shrink to the size of an empty one
+        // within the extent, only for the new layout to grow it back to that of one beyond it.
+        if (this.update_extent(previous)) {
+            return new Set(this.quiver.all_cells());
         }
         const beyond = (index, resized) => resized.some((resized) => {
             return resized >= 0 ? index >= resized : index <= resized;
@@ -1188,13 +1217,7 @@ class UI {
             this.deselect(removed);
             removed.element.remove();
         }
-        // A vertex at the diagram's edge changes its extent, and the grid is then laid out afresh
-        // from the sizes it had (see `update_extent`). Fitting the columns and rows the vertex left
-        // first would shrink them to the size of an empty one within the extent, only for the new
-        // layout to grow them back to the size of one beyond it.
-        if (!this.update_extent()) {
-            this.update_col_row_size(...update_positions);
-        }
+        this.update_col_row_size(...update_positions);
         this.recode();
         this.colour_picker.update_diagram_colours(this);
     }
@@ -1396,9 +1419,14 @@ class UI {
 
     /// Draw every cell, the grid, and the focus point where the grid now puts them.
     draw_layout() {
+        // The layout has sized the columns and rows, so drawing the vertices into it does not fit
+        // them again, which, between an animation's sizes, would snap them and pan the view.
+        const buffered = this.buffer_updates;
+        this.buffer_updates = true;
         for (const cell of this.quiver.transitive_dependencies(this.quiver.all_cells())) {
             cell.render(this);
         }
+        this.buffer_updates = buffered;
         this.pan_view(Offset.zero());
         this.reposition_focus_point(this.focus_position);
     }

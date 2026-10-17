@@ -355,6 +355,11 @@ class Vertex extends Cell {
     set_position(ui, position) {
         ui.grid.unconstrain(this);
         this.position = position;
+        // Its size holds its new column and row open at once, so that resizing those it left (or
+        // laying out the grid afresh) before it is rendered there sees it.
+        if (this.label_size !== undefined && this.label_size !== null) {
+            ui.grid.constrain(this, ...this.label_size);
+        }
         this.shape.origin = ui.grid.centre_offset_from_position(this.position);
     }
 

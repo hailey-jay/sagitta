@@ -697,12 +697,29 @@ def test_the_hints_give_way_only_where_there_is_no_room(sagitta, home):
     assert narrow[0] == "layer" and len(narrow) < 5 and narrow == message[:len(narrow)]
 
 
-def test_deleting_a_vertex_at_the_edge_leaves_its_column_as_it_was(sagitta, home):
-    """The column a `\\bullet` leaves at the diagram's edge is as wide as it was, so the focus
-    point there neither shrinks to an empty column's width within the diagram nor grows back."""
-    keys = [["Space"], ["Space"], ["Right"], ["Space"], ["Backspace"]]
+def _monotonic(values):
+    steps = [b - a for a, b in zip(values, values[1:]) if b != a]
+    return all(step > 0 for step in steps) or all(step < 0 for step in steps)
+
+
+@pytest.mark.parametrize("keys", [
+    # Delete a vertex at the edge, whose column stays as it was.
+    [["Space"], ["Space"], ["Right"], ["Space"], ["Backspace"]],
+    # Move the only vertex either way, and the second of two away from the first.
+    [["Space"], ["Space"], ["Right", ["control"]]],
+    [["Space"], ["Space"], ["Left", ["control"]]],
+    [["Space"], ["Space"], ["Right"], ["Space"], ["Right", ["control"]]],
+])
+def test_a_column_a_vertex_leaves_or_joins_changes_size_one_way(sagitta, home, keys):
+    """From before the last key, each column grows or shrinks straight to its new size, rather
+    than shrinking to an empty column's size within the diagram and growing back, and the view
+    keeps still. A vertex moves to its new cell at once, and then only one way, with the columns."""
     frames = sagitta("frames", home / "new.tikzcd", json.dumps(keys))
-    assert len({tuple(frame["focus"]) for frame in frames}) == 1, frames
+    assert len({frame["view"] for frame in frames}) == 1, frames
+    for column in zip(*(frame["columns"] for frame in frames)):
+        assert _monotonic(column), frames
+    for left in zip(*(frame["left"] for frame in frames[1:])):
+        assert _monotonic(left), frames
 
 
 def test_slash_searches_in_the_command_layer_too(sagitta, home):
