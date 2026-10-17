@@ -741,6 +741,11 @@ label input[type="checkbox"]:checked::before {
     color: var(--ui-accent);
 }
 
+/* The export options other than the defaults, which saving writes too. */
+.mode-line .file .export-options {
+    color: var(--ui-secondary);
+}
+
 .mode-line .target {
     max-width: 40vw;
     overflow: hidden;

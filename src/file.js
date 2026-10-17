@@ -207,7 +207,14 @@ class DiagramFile {
 
     /// Save the diagram to `path`, or to its own path, asking for one if it has none. Returns
     /// whether the diagram was saved.
-    async save(path = this.path) {
+    async save(path = this.path, review = false) {
+        // A new file is the export, so the options it is written with are shown first (see
+        // `Layer.Export.review`), unless they are being shown already.
+        const exporting = this.ui.keymap.layers.export;
+        if (review && path === null && !exporting.active) {
+            exporting.review();
+            return false;
+        }
         try {
             path = path === null
                 ? await host.save_dialog(this.path
@@ -257,8 +264,8 @@ class DiagramFile {
     }
 
     /// Ask where to save the diagram, then save it there.
-    save_as() {
-        return this.save(null);
+    save_as(review = false) {
+        return this.save(null, review);
     }
 
     /// Take macros from `path` (resolved against the diagram's directory; asking for one if

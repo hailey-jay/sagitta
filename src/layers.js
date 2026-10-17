@@ -413,8 +413,39 @@ Layer.Help.SOURCE = "https://github.com/hailey-jay/sagitta";
 /// The export layer (`C-e`): the diagram's tikz-cd encoding as an object, whose options are toggled
 /// and stepped by key, and which `y` or Enter copies to the clipboard.
 Layer.Export = class extends Layer {
+    constructor(keymap) {
+        super(keymap);
+        // Whether the layer was opened to review the options before saving as (see `review`).
+        this.saving = false;
+    }
+
     describe() {
-        return ["EXPORT", "tikz-cd"];
+        return ["EXPORT", this.saving ? "save as" : "tikz-cd"];
+    }
+
+    entered() {
+        this.saving = false;
+    }
+
+    /// Open the layer to review the options a diagram is saved with, before saving it as a new
+    /// file: the file is the export, so these are what it will hold. RET goes on to save it.
+    review() {
+        this.enter();
+        this.saving = true;
+        this.keymap.render();
+    }
+
+    /// The export options that differ from their defaults, briefly, for the mode line: what saving
+    /// writes besides the plain diagram.
+    static differences(ui) {
+        const toggles = Layer.Export.TOGGLES
+            .filter(([, , setting]) => ui.settings.get(setting) !== SETTINGS.defaults[setting])
+            .map(([, description, setting]) => SETTINGS.defaults[setting]
+                ? `no ${description.replace(/ diagram$/, "")}` : description);
+        const seps = Layer.Export.SEPS
+            .filter(([, axis]) => ui.sep[axis] !== DiagramFile.SEPS.normal)
+            .map(([, axis]) => `${axis} sep ${Layer.Export.describe_sep(ui.sep[axis])}`);
+        return [...toggles, ...seps];
     }
 
     /// The diagram's tikz-cd encoding under the current export options: `{ data, metadata }`.
@@ -437,7 +468,11 @@ Layer.Export = class extends Layer {
                 key, `${axis} sep`, false, Layer.Export.describe_sep(ui.sep[axis]),
             ])],
             ["Result", [
-                ["y RET", "copy to clipboard", false, `${lines} line${lines === 1 ? "" : "s"}`],
+                ...(this.saving ? [["RET", "save as, with these options"]] : []),
+                [this.saving ? "y" : "y RET", "copy to clipboard", false,
+                    `${lines} line${lines === 1 ? "" : "s"}`],
+                [Keymap.describe(this.keymap.combinations("save").slice(0, 1)),
+                    "save, with these options"],
                 ["; ESC", "leave"],
             ]],
         ];

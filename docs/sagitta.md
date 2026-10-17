@@ -23,6 +23,13 @@ quiver's own `% https://q.uiver.app/#q=...` first line is read too, and prefixin
 
 Opening and saving an unchanged file leaves it byte-for-byte the same.
 
+Since the file is the export, saving writes it with the export layer's options (`C-e`).
+Saving a new file, or saving as, opens that layer first, so the options can be checked: RET goes on to save, and `C-s` there saves too.
+The mode line follows the file's name with any option that differs from its default, as in `square.tikzcd [no centre, column sep large]`.
+
+The file is centred in `\[ \]` by default (`export.centre_diagram`), which a paper wants.
+A `\documentclass{standalone}` document typesets what it inputs in a box, where display math is not allowed, so it stops with "Bad math environment delimiter": turn centring off (`c` in the export layer) for a diagram such a document inputs.
+
 ## Macros
 
 Labels render with the nearest `macros.tex`, searched from the diagram's directory upward, stopping at the git repository's root and never reaching the home directory.

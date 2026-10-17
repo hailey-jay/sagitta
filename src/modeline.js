@@ -148,8 +148,9 @@ class ModeLine {
         );
 
         // The diagram's file (see `DiagramFile`).
-        this.add_action(ui, "save", "Save", () => ui.file.save());
-        this.add_action(ui, "save-as", "Save as", () => ui.file.save_as());
+        // Saving a new file shows the export options first (see `DiagramFile.save`).
+        this.add_action(ui, "save", "Save", () => ui.file.save(ui.file.path, true));
+        this.add_action(ui, "save-as", "Save as", () => ui.file.save_as(true));
         this.add_action(ui, "open", "Open", () => ui.file.open());
         this.add_action(ui, "new", "New", () => ui.file.new_diagram());
         // Only a host that sees no directory it is not handed (a browser) needs a folder, and only
@@ -396,8 +397,14 @@ class ModeLine {
 
         // The diagram's file, marked `+` with unsaved changes.
         ui.file.update();
+        // Export options other than the defaults, which saving writes too, follow it.
+        const differences = Layer.Export.differences(ui);
         this.element.query_selector(".file").clear()
             .add(`${ui.file.name()}${ui.file.dirty ? " +" : ""}`)
+            .add(differences.length === 0 ? "" : new DOM.Element("span", {
+                class: "export-options",
+                title: "Export options, which saving writes too (C-e)",
+            }).add(` [${differences.join(", ")}]`))
             .class_list.toggle("dirty", ui.file.dirty);
 
         // What typing would edit.

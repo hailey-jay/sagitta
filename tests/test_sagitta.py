@@ -392,6 +392,26 @@ def test_quiver_mode_return_lets_go_of_a_slider_or_list_without_editing(sagitta,
     assert sagitta("evaluate", _diagram(home / "paper"), script) == [False, None, None]
 
 
+def test_saving_as_shows_the_export_options_first(sagitta, home):
+    """Save as opens the export layer, which lists saving; RET there goes on to the dialog, and
+    the mode line names the options that differ from the defaults."""
+    script = """(async () => {
+        ui.settings.set("export.standalone", true);
+        ui.mode_line.run(ui, "save-as");
+        const layer = ui.keymap.current_layer() === ui.keymap.layers.export;
+        const lines = [...document.querySelectorAll(".which-key .submenu .entry span:first-of-type")]
+            .map((span) => span.textContent);
+        // The dialog itself is the host's, so what RET asks for is recorded instead.
+        const asked = [];
+        ui.file.save = async (...args) => { asked.push(args); return false; };
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
+        return { layer, asked, saving: lines.includes("save as, with these options"),
+            marker: document.querySelector(".mode-line .export-options")?.textContent };
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == {
+        "layer": True, "asked": [[None]], "saving": True, "marker": " [standalone]"}
+
+
 def test_return_with_a_selection_still_edits_it(sagitta, home):
     """The focus point on an empty cell leaves a selection's label to RET, as it always has."""
     diagram = _diagram(home / "paper")
