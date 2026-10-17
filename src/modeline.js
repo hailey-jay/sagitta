@@ -63,9 +63,12 @@ class ModeLine {
                 ui.keymap.enter(true);
             }
         }).add(new DOM.Element("kbd").add(";")).add(" commands"));
+        // The other hints, which drop off whole, from the right, where the mode line is short of
+        // room (see `main.css`).
+        const hints = new DOM.Element("span", { class: "hints" }).add_to(this.element);
         for (const name of ["undo", "save", "export", "shortcuts"]) {
             const { label, combinations } = this.actions.get(name);
-            this.element.add(button({ class: "hint", "data-action": name }, "", () => {
+            hints.add(button({ class: "hint", "data-action": name }, "", () => {
                 this.run(ui, name);
             }).add(new DOM.Element("kbd").add(Keymap.describe(combinations.slice(0, 1)))).add(` ${
                 label.toLowerCase()

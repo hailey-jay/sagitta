@@ -796,16 +796,16 @@ button.flash {
     opacity: var(--ui-dim);
 }
 
-/* The hints other than the command layer's are in the help too, so they give their room to a
-   message, and to a narrow window. */
-.mode-line:has(.message:not(:empty):not(.error)) .hint:not(.layer) {
-    display: none;
-}
-
-@media (max-width: 1000px) {
-    .mode-line .hint:not(.layer) {
-        display: none;
-    }
+/* The hints other than the command layer's are in the help too, so they give way before anything
+   else: where the mode line is short of room, those that do not fit wrap onto a line of their own,
+   which is out of sight, so that they drop off whole, from the right, and come back as room does. */
+.mode-line .hints {
+    display: flex;
+    flex-wrap: wrap;
+    flex-shrink: 100;
+    min-width: 0;
+    height: var(--mode-line-height);
+    overflow: hidden;
 }
 
 .mode-line kbd {

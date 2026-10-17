@@ -679,6 +679,24 @@ def test_a_prompt_leaves_the_label_input_named_label(sagitta, home):
     assert sagitta("evaluate", _diagram(home / "paper"), script) == ["Toggle", ""]
 
 
+def test_the_hints_give_way_only_where_there_is_no_room(sagitta, home):
+    """A short message leaves every hint showing; a narrow mode line drops them whole, from the
+    right, and keeps `; commands`."""
+    script = """(() => {
+        const line = document.querySelector(".mode-line");
+        const shown = () => Array.from(line.querySelectorAll(".hint"))
+            .filter((hint) => hint.offsetTop === 0 && hint.offsetWidth > 0)
+            .map((hint) => hint.dataset.action ?? "layer");
+        ui.mode_line.flash("v unbound");
+        const message = shown();
+        line.style.right = `${window.innerWidth - 700}px`;
+        return [message, shown()];
+    })()"""
+    message, narrow = sagitta("evaluate", _diagram(home / "paper"), script)
+    assert message == ["layer", "undo", "save", "export", "shortcuts"]
+    assert narrow[0] == "layer" and len(narrow) < 5 and narrow == message[:len(narrow)]
+
+
 def test_slash_searches_in_the_command_layer_too(sagitta, home):
     result = sagitta("keys", _diagram(home / "paper"), json.dumps([[";"], ["/"]]))
     assert result["mode_line"].startswith("/ SEARCH")
