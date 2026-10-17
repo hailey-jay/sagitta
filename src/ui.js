@@ -622,6 +622,17 @@ class UI {
 
     initialise() {
         this.element.class_list.add("ui");
+        // Dark mode follows the system's colour scheme until it is set (see `Settings.follow`).
+        if (typeof matchMedia === "function") {
+            const scheme = matchMedia("(prefers-color-scheme: dark)");
+            this.settings.follow("ui.dark_mode", scheme.matches);
+            scheme.addEventListener("change", () => {
+                if (this.settings.follow("ui.dark_mode", scheme.matches)) {
+                    document.body.classList.toggle("dark", scheme.matches);
+                    this.update_grid();
+                }
+            });
+        }
         document.body.classList.toggle("dark", this.settings.get("ui.dark_mode"));
         document.body.style.setProperty("--label-size", `${this.settings.get("ui.label_size")}px`);
         this.update_scale();

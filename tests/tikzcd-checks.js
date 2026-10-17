@@ -872,6 +872,21 @@ const pending = [];
         await settings.write();
         check("and the next write drops it",
             Object.hasOwn(JSON.parse(host.written.at(-1)), "ui.gone"), false);
+
+        settings = await read('{"ui.zoom": 120}');
+        check("a setting the file does not hold follows the system",
+            [settings.follow("ui.dark_mode", true), settings.get("ui.dark_mode")], [true, true]);
+        await settings.write();
+        check("and is left out of the file",
+            Object.hasOwn(JSON.parse(host.written.at(-1)), "ui.dark_mode"), false);
+        settings.set("ui.dark_mode", false);
+        await settings.write();
+        check("until it is set", [settings.follow("ui.dark_mode", true),
+            JSON.parse(host.written.at(-1))["ui.dark_mode"]], [false, false]);
+
+        settings = await read('{"ui.dark_mode": false}');
+        check("one the file holds keeps the file's",
+            [settings.follow("ui.dark_mode", true), settings.get("ui.dark_mode")], [false, false]);
     })());
 }
 

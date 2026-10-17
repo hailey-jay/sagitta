@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Dark mode follows the system's colour scheme, as it changes, until it is set by `:dark-mode`, the settings layer, or `:set`. A settings file already holding `ui.dark_mode`, as every file written so far does, keeps it: remove the line to follow the system.
 - The interface dims what is secondary by one amount, and what is unavailable by another. The mode line's hints are a shade dimmer, and the completions' keys a shade brighter.
 - In a browser, the help says to use `:new` for a new diagram, since the browser keeps `C-n`.
 - The label input's `label` box is white, as the mode line's `EDIT` is, leaving pink to keys and the focus.

@@ -1410,6 +1410,8 @@ def test_a_changed_setting_is_written_to_the_settings_file(sagitta, home):
     assert settings["export.ampersand_replacement"] is True
     # The defaults are written alongside it, so the file shows every setting there is.
     assert settings["export.centre_diagram"] is True
+    # But for dark mode, which follows the system's colour scheme until it is set.
+    assert "ui.dark_mode" not in settings
 
 
 def _settings(home, text):
@@ -1699,6 +1701,19 @@ def test_dark_mode_draws_black_in_white_and_changes_nothing_saved(sagitta, home)
     result = sagitta("dark_mode", diagram)
     assert result == {"dark": False, "stroke": "rgb(0, 0, 0)", "label": "rgb(0, 0, 0)"}
     assert json.loads(settings.read_text())["ui.dark_mode"] is False
+
+
+def test_dark_mode_follows_the_system_until_it_is_set(sagitta, home, monkeypatch):
+    monkeypatch.setenv("SAGITTA_TEST_SCHEME", "dark")
+    diagram = _diagram(home / "paper")
+    script = 'document.body.classList.contains("dark")'
+    assert sagitta("evaluate", diagram, script) is True
+    # Set, it stays as set, whatever the system's scheme.
+    assert sagitta("dark_mode", diagram)["dark"] is False
+    assert sagitta("evaluate", diagram, script) is False
+    monkeypatch.setenv("SAGITTA_TEST_SCHEME", "light")
+    _settings(home, "{}")
+    assert sagitta("evaluate", diagram, script) is False
 
 
 def test_the_page_never_navigates_away(sagitta, home):

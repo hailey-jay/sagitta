@@ -62,6 +62,7 @@ The rest live one key away:
 - `C-/` (or `<f1>`) help, which ends with what Sagitta is made from and where its source is, `C-e` export, `C-i` import (paste tikz-cd), `C-m` macros (paste definitions), `C-,` settings, and `C-s` save.
 - `:dark-mode`: a grey canvas, with the default colour drawn in white.
   Other colours are drawn exactly, and nothing saved changes.
+  It follows the system's colour scheme until it is first set.
 - `C-arrows` move the selection; on arrows alone they bend or shift them, and on loops alone they resize or turn them.
 - `SPC` makes a cell at the focus point, or takes the one there, joined by arrows from the selected cells, and `S-SPC` selects or deselects the cell there.
   The new cell is selected with the arrows just drawn to it, so a preset or a style restyles them at once, while RET labels the cell alone; the arrows are selected again once the label is put down.
@@ -253,7 +254,7 @@ A value the setting cannot take is refused, with what it may be.
 | `export.standalone` | `false` | wrap the export in a standalone document |
 | `diagram.var_corner` | `false` | the corner `; p` gives first, which follows the last one used |
 | `diagram.arrow_preset` | `"plain"` | the preset new arrows take, from `plain`, `equals`, `inclusion`, `mono`, `epi`, `maps-to`, `dashed`, `dotted`, and `squiggly` |
-| `ui.dark_mode` | `false` | the grey canvas |
+| `ui.dark_mode` | the system's | the grey canvas, which follows the system's colour scheme, and is left out of the file, until it is set |
 | `ui.zoom` | `100` | the zoom the view starts at, and `reset-zoom` returns to, in percent (20 to 200) |
 | `ui.label_size` | `26` | the size of labels, in pixels (8 to 72), which the whole diagram is drawn to the scale of (see The canvas) |
 | `ui.which_key_compact` | `false` | list only the command layer's keys and their values, with what each does on hovering |

@@ -19,6 +19,12 @@ class Settings {
         // Whether `set` may rewrite the file, which it may not while the file is malformed, so
         // that a hand edit gone wrong is not lost.
         this.writable = true;
+
+        // The settings the file holds, which `follow` leaves alone.
+        this.saved = new Set();
+
+        // The settings that follow the system (see `follow`), which the file leaves out.
+        this.following = new Set();
     }
 
     /// Read the saved settings over the defaults. A malformed file is ignored, and left alone, and
@@ -43,6 +49,7 @@ class Settings {
             }
             if (this.allows(setting, value)) {
                 this.data[setting] = value;
+                this.saved.add(setting);
             } else {
                 this.problems.push(`${setting} should be ${this.expected(setting)}`);
             }
@@ -67,7 +74,21 @@ class Settings {
     /// Saves a user setting. The file is rewritten as a whole, and the write is not waited on.
     set(setting, value) {
         this.data[setting] = value;
+        this.following.delete(setting);
+        this.saved.add(setting);
         this.write();
+    }
+
+    /// Take `value`, the system's (dark mode from its colour scheme, say), for a setting the file
+    /// does not hold, and keep taking it until the setting is set, leaving it out of the file till
+    /// then. Returns whether the setting follows the system.
+    follow(setting, value) {
+        if (this.saved.has(setting)) {
+            return false;
+        }
+        this.data[setting] = value;
+        this.following.add(setting);
+        return true;
     }
 
     /// The numbers a numeric setting may be, as `[least, most]`, or `undefined` if it is not one.
@@ -113,10 +134,13 @@ class Settings {
         return typeof expected === "function" ? expected() : expected;
     }
 
-    /// Write every setting to the file, unless it is malformed. Returns the write, to wait on.
+    /// Write every setting but those following the system to the file, unless it is malformed.
+    /// Returns the write, to wait on.
     async write() {
         if (this.writable) {
-            await host.write_settings(`${JSON.stringify(this.data, null, 4)}\n`);
+            const data = Object.fromEntries(Object.entries(this.data)
+                .filter(([setting]) => !this.following.has(setting)));
+            await host.write_settings(`${JSON.stringify(data, null, 4)}\n`);
         }
     }
 }

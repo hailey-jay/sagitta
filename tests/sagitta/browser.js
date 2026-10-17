@@ -10,7 +10,7 @@
 /// `RESULT <json>`, holding that, what the script returned, and every console error the page
 /// logged.
 
-const { app, BrowserWindow, Menu } = require("electron");
+const { app, BrowserWindow, Menu, nativeTheme } = require("electron");
 
 const [url, script] = process.argv.slice(-2);
 
@@ -19,6 +19,8 @@ app.setName("sagitta-browser-test");
 app.whenReady().then(async () => {
     // Headless, Electron's default menu takes the process down.
     Menu.setApplicationMenu(null);
+    // Dark mode follows the system's colour scheme, so this fixes it, as `driver.js` does.
+    nativeTheme.themeSource = "light";
     const window = new BrowserWindow({ width: 1200, height: 800 });
     const errors = [];
     window.webContents.on("console-message", (event) => {

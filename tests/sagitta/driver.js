@@ -8,7 +8,7 @@
 /// scenario's return value and every console error the page logged. Key and mouse input goes
 /// through `sendInputEvent`, so the page sees trusted events, as it would from a real keyboard.
 
-const { app } = require("electron");
+const { app, nativeTheme } = require("electron");
 const path = require("node:path");
 
 const [appdir, scenario, diagram, argument = null] =
@@ -166,6 +166,12 @@ app.on("browser-window-created", (_, window) => {
         console.log(`RESULT ${JSON.stringify({ result, errors })}`);
         app.exit(0);
     });
+});
+
+// Dark mode follows the system's colour scheme until it is set, so the tests fix the scheme, as
+// light unless `SAGITTA_TEST_SCHEME` says otherwise, whatever the machine running them has.
+app.whenReady().then(() => {
+    nativeTheme.themeSource = process.env.SAGITTA_TEST_SCHEME ?? "light";
 });
 
 require(path.join(appdir, "electron", "main.js"));
