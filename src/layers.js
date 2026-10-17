@@ -354,7 +354,7 @@ Layer.Help = class extends Layer {
                     const browser = name === "new" && which === "chords"
                         && typeof host.open_folder === "function";
                     sections.get(which === "plain" ? "Typing" : "Chords").push([
-                        key, browser ? "new (the browser keeps it: use :new)" : label.toLowerCase(),
+                        key, browser ? "new (use :new on browser)" : label.toLowerCase(),
                     ]);
                 }
             }

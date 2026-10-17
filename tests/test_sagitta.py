@@ -1908,7 +1908,7 @@ def test_the_page_runs_on_the_web_host(browser):
 def test_the_help_says_a_browser_keeps_c_n(browser, sagitta, home):
     lines = """ui.keymap.layers.help.groups().find(([section]) => section === "Chords")[1]
         .filter(([key]) => key === "C-n")"""
-    assert browser(lines) == [["C-n", "new (the browser keeps it: use :new)"]]
+    assert browser(lines) == [["C-n", "new (use :new on browser)"]]
     assert ["C-n", "new"] in dict(sagitta("help", _diagram(home / "paper")))["Chords"]
 
 
