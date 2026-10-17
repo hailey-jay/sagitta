@@ -1817,6 +1817,13 @@ def test_the_page_runs_on_the_web_host(browser):
     assert result == {"built": 1, "title": "untitled - Sagitta", "web": True}
 
 
+def test_the_help_says_a_browser_keeps_c_n(browser, sagitta, home):
+    lines = """ui.keymap.layers.help.groups().find(([section]) => section === "Chords")[1]
+        .filter(([key]) => key === "C-n")"""
+    assert browser(lines) == [["C-n", "new (the browser keeps it: use :new)"]]
+    assert ["C-n", "new"] in dict(sagitta("help", _diagram(home / "paper")))["Chords"]
+
+
 def test_a_device_with_no_mouse_is_told_what_works(browser):
     fine, notice = browser('matchMedia("(any-pointer: fine)").matches', notice=True)
     if fine:

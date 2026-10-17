@@ -151,6 +151,8 @@ The names and their defaults:
 | `select-at-focus`, `toggle-selection`, `create-arrows` | none (`S-SPC` does it), `; s`, `; e` |
 | `change-source`, `change-target` | `; ,`, `; .` |
 
+A browser keeps `C-n` for a new window, so there `:new` starts a new diagram.
+
 Any other command (Tab at `:` lists them) can be bound too, and its keys run it with no arguments.
 
 ## Crossing over

@@ -350,8 +350,12 @@ Layer.Help = class extends Layer {
                         sections.get("Layers").push([key, layers[name]]);
                     }
                 } else {
-                    sections.get(which === "plain" ? "Typing" : "Chords")
-                        .push([key, label.toLowerCase()]);
+                    // A browser keeps `C-n` for a new window, whatever the keys file says.
+                    const browser = name === "new" && which === "chords"
+                        && typeof host.open_folder === "function";
+                    sections.get(which === "plain" ? "Typing" : "Chords").push([
+                        key, browser ? "new (the browser keeps it: use :new)" : label.toLowerCase(),
+                    ]);
                 }
             }
         }
