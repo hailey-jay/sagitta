@@ -72,8 +72,10 @@ class Bindings {
                 throw new Error(`"${text}": ${key} keeps its own meaning in the command layer`);
             }
         } else if (!modifier && key.length === 1) {
-            throw new Error(`"${text}" would type: use "; ${rest}" for the command layer, `
-                + `or a chord`);
+            // Alone, the key is the command layer's, latched open in quiver mode, or a label's, in
+            // spreadsheet mode, so it has to say which.
+            throw new Error(`"${text}" needs ; or C-: "; ${rest}" for the command layer, `
+                + `which quiver mode keeps open, or a chord`);
         }
         return { key, shift, modifier, layer };
     }

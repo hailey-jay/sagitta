@@ -279,6 +279,10 @@ class UI {
                 // a discrete event, so if we modify again, we'll need to undo both
                 // modifications to completely undo the label change.
                 ui.history.permanentise();
+                // Finishing a label stops cycling the queue, so its Tab marker goes until the
+                // next Tab. The cells stay queued.
+                ui.element.class_list.remove("show-queue");
+                ui.keymap.restore_selection();
             } else {
                 ui.switch_mode(UIMode.default);
             }

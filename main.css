@@ -204,7 +204,8 @@ kbd {
     text-align: center;
 }
 
-.grid:not(.hidden) + .container .vertex.empty:not(.selected) .content:not(:hover) {
+.grid:not(.hidden) + .container .vertex.empty:not(.selected) .content:not(:hover),
+.ui.keyboard .grid:not(.hidden) + .container .vertex.empty:not(.selected) .content {
     border: var(--cell-hover) 2px solid;
 }
 
@@ -212,9 +213,10 @@ kbd {
     cursor: default;
 }
 
-/* This is so explicit because of the CSS specificity rules. */
-.ui.default .vertex:not(.selected):not(.source):not(.target) .content:hover,
-.ui.command .vertex:not(.selected):not(.source):not(.target) .content:hover {
+/* This is so explicit because of the CSS specificity rules. While the keys are in use
+   (`.keyboard`, see `Pointer.initialise`), nothing is highlighted for the pointer resting on it. */
+.ui.default:not(.keyboard) .vertex:not(.selected):not(.source):not(.target) .content:hover,
+.ui.command:not(.keyboard) .vertex:not(.selected):not(.source):not(.target) .content:hover {
     background: var(--cell-hover);
 }
 
@@ -614,12 +616,13 @@ label input[type="checkbox"]:checked::before {
 }
 
 .arrow:not(.target):not(.selected):not(.in-mark) > svg:first-child:not(:hover) > .arrow-background,
+.ui.keyboard .arrow:not(.target):not(.selected):not(.in-mark) > svg:first-child > .arrow-background,
 .ui.connect .cell:not(.target):not(.selected) > svg:first-child:hover > .arrow-background,
 .ui.pointer-move .cell:not(.selected) > svg:first-child:hover > .arrow-background {
     opacity: 0;
 }
 
-.arrow:not(.target):not(.selected) > svg:first-child:hover {
+.ui:not(.keyboard) .arrow:not(.target):not(.selected) > svg:first-child:hover {
     opacity: 0.1 !important;
 }
 
@@ -627,7 +630,8 @@ label input[type="checkbox"]:checked::before {
     display: none;
 }
 
-.ui.default .arrow:hover .arrow-endpoint, .ui.default .arrow.selected .arrow-endpoint {
+.ui.default:not(.keyboard) .arrow:hover .arrow-endpoint,
+.ui.default .arrow.selected .arrow-endpoint {
     display: block;
 }
 

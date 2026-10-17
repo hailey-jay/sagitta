@@ -317,9 +317,10 @@ def test_quiver_mode_types_only_after_return(sagitta, home):
     assert result["mode_line"].startswith(";")
     assert not result["editing"]
     assert "\tA & B" in diagram.read_text()
+    # RET selects the whole label, so typing replaces it.
     result = sagitta("typing", diagram, json.dumps(["Enter", "x", "Enter"]))
     assert result["mode_line"].startswith(";")
-    assert "\tAx & B" in diagram.read_text()
+    assert "\tx & B" in diagram.read_text()
 
 
 def test_quiver_mode_keeps_the_command_layer_open(sagitta, home):
@@ -376,13 +377,28 @@ def test_return_on_an_empty_cell_makes_one_to_label(sagitta, home, quiver):
     assert "& B & E" in diagram.read_text()
 
 
+@pytest.mark.parametrize("key", ["b", "t"])
+def test_quiver_mode_return_lets_go_of_a_slider_or_list_without_editing(sagitta, home, key):
+    """RET after stepping a slider, or with a style list open, only lets go of it."""
+    script = """(() => {
+        const press = (key) => document.dispatchEvent(
+            new KeyboardEvent("keydown", { key, cancelable: true }));
+        ui.select(...ui.quiver.all_cells());
+        press("%s");
+        press("ArrowRight");
+        press("Enter");
+        return [ui.input_is_active() !== false, ui.keymap.property, ui.keymap.component];
+    })()""" % key
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == [False, None, None]
+
+
 def test_return_with_a_selection_still_edits_it(sagitta, home):
     """The focus point on an empty cell leaves a selection's label to RET, as it always has."""
     diagram = _diagram(home / "paper")
     result = sagitta("typing", diagram, json.dumps(
         [["Space", ["shift"]], "Right", "Right", "Enter", "x", "Enter"]))
     assert result["counts"]["vertices"] == 4
-    assert "\tAx & B" in diagram.read_text()
+    assert "\tx & B" in diagram.read_text()
 
 
 def test_spreadsheet_mode_command_switches_it(sagitta, home):
@@ -451,12 +467,12 @@ def test_a_nudge_bends_the_arrow_beside_a_loop(sagitta, home):
     # An opening delimiter wraps the label it would replace, or the selected part of one, and
     # otherwise brings its closing one, which typing steps over.
     ([["Escape"], ["("], ["Enter"]], "\t{(A)} & B"),
-    ([["Escape"], ["Enter"], ["Left", ["shift"]], ["["], ["{"], ["Enter"]], "\t{[{A}]} & B"),
+    ([["Escape"], ["Enter"], ["Right"], ["Left", ["shift"]], ["["], ["{"], ["Enter"]], "\t{[{A}]} & B"),
     ([["Escape"], ["Backspace"], ["Escape"], ["("], ["x"], ["Enter"]], "\t{(x)} & B"),
-    ([["Escape"], ["Enter"], ["("], ["x"], [")"], ["Enter"]], "\t{A(x)} & B"),
+    ([["Escape"], ["Enter"], ["Right"], ["("], ["x"], [")"], ["Enter"]], "\t{A(x)} & B"),
     # Not before its closing one; and deleting an empty pair deletes both.
-    ([["Escape"], ["Enter"], ["("], ["("], ["Enter"]], "\t{A(()} & B"),
-    ([["Escape"], ["Enter"], ["["], ["Backspace"], ["Enter"]], "\tA & B"),
+    ([["Escape"], ["Enter"], ["Right"], ["("], ["("], ["Enter"]], "\t{A(()} & B"),
+    ([["Escape"], ["Enter"], ["Right"], ["["], ["Backspace"], ["Enter"]], "\tA & B"),
 ])
 def test_keys_change_the_diagram(sagitta, home, keys, expected):
     _spreadsheet_mode(home)
@@ -466,8 +482,8 @@ def test_keys_change_the_diagram(sagitta, home, keys, expected):
 
 
 def _typed(*keys):
-    """Edit `A` in place, type `keys`, and commit."""
-    return [["Escape"], ["Enter"], *([key] for key in keys), ["Enter"]]
+    """Edit `A` in place, after it rather than over it, type `keys`, and commit."""
+    return [["Escape"], ["Enter"], ["Right"], *([key] for key in keys), ["Enter"]]
 
 
 @pytest.mark.parametrize("keys,expected", [
@@ -519,8 +535,10 @@ def test_the_help_layer_lists_every_binding(sagitta, home):
     for the keys handled elsewhere."""
     help = dict(sagitta("help", _diagram(home / "paper")))
     assert list(help) == ["Typing", "Moving", "Mouse", "Layers", "Chords", "Help", "About"]
-    assert help["Typing"][0] == ["a \\ 2 …", "replace the label"]
-    assert ["RET", "edit the label in place, or label a new cell"] in help["Typing"]
+    # Quiver mode, the default: letters are commands, and DEL deletes.
+    assert help["Typing"][0] == ["( [ { | \\{ \\langle …", "pair, or wrap the selection, in a label"]
+    assert ["DEL", "delete the selection"] in help["Typing"]
+    assert ["RET", "edit the label (selected whole), or label a new cell"] in help["Typing"]
     assert ["<delete>", "delete"] in help["Typing"]
     assert help["Moving"][0] == ["arrows", "move the focus point"]
     assert help["Mouse"][0] == ["click", "select; again to edit the label"]
@@ -532,6 +550,14 @@ def test_the_help_layer_lists_every_binding(sagitta, home):
     assert ["C-r", "reverse"] in help["Chords"]
     assert ["C-x", "cut"] in help["Chords"]
     assert not any(keys.startswith(";") for keys, _ in help["Chords"])
+
+
+def test_the_help_layer_describes_spreadsheet_mode_in_it(sagitta, home):
+    _spreadsheet_mode(home)
+    help = dict(sagitta("help", _diagram(home / "paper")))
+    assert help["Typing"][0] == ["a \\ 2 …", "replace the label"]
+    assert ["DEL", "clear the label"] in help["Typing"]
+    assert [";", "commands (lists its keys)"] in help["Layers"]
 
 
 def test_flip_is_on_f(sagitta, home):
@@ -758,7 +784,7 @@ def test_the_keys_file_reports_its_problems_and_keeps_the_rest(sagitta, home):
 
 @pytest.mark.parametrize("text,problem", [
     ("sav C-s", 'line 1: nothing is called "sav"'),
-    ("save s", '"s" would type'),
+    ("save s", '"s" needs ; or C-'),
     ("save ; 5", "keeps its own meaning in the command layer"),
     ("save ; :", "keeps its own meaning in the command layer"),
     ("save C-S-#", "write the shifted character itself"),
@@ -920,6 +946,35 @@ def test_shift_space_selects_and_space_connects(sagitta, home):
     assert steps["deselect B"] == {"vertices": 4, "edges": 4, "selected": 1}
     assert steps["empty cell"] == {"vertices": 4, "edges": 4, "selected": 2}
     assert steps["connect to D"]["edges"] == 6
+    # `D` is selected, with the two arrows just drawn to it.
+    assert steps["connect to D"]["selected"] == 3
+
+
+def test_space_selects_the_arrow_it_draws_and_return_labels_the_cell(sagitta, home):
+    """A preset then restyles the new arrow, RET labels the new cell alone, and the arrow is
+    selected again once the label is put down."""
+    script = """(() => {
+        const press = (key, init = {}) => document.dispatchEvent(
+            new KeyboardEvent("keydown", { key, cancelable: true, ...init }));
+        ui.deselect();
+        ui.select(ui.positions.get("0 0"));
+        ui.focus_point.class_list.add("focused");
+        ui.reposition_focus_point(new Position(0, 0));
+        press("ArrowRight");
+        press("ArrowRight");
+        press(" ");
+        const drawn = [ui.selection.size, ui.selection_contains_edge()];
+        press("Enter");
+        const editing = Array.from(ui.selection).map((cell) => cell.is_vertex());
+        ui.label_input.element.value = "E";
+        ui.label_input.element.dispatchEvent(new Event("input"));
+        press("Enter");
+        return { drawn, editing, after: ui.selection.size,
+            labels: ui.quiver.all_cells().filter((cell) => cell.is_edge()
+                && cell.target.label === "E").map((cell) => cell.label) };
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == {
+        "drawn": [2, True], "editing": [True], "after": 2, "labels": [""]}
 
 
 def test_the_mark_selects_a_rectangle_of_cells(sagitta, home):

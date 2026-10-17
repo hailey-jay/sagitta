@@ -1057,9 +1057,10 @@ const pending = [];
         resolve("wiggle C-q").problems, ['line 1: nothing is called "wiggle"']);
     check("a name the table knows but has no defaults for is bound",
         of(resolve("jump C-j").keys, "jump"), "C-j");
-    check("a key that would type is refused",
+    check("a key alone is refused",
         resolve("walk q").problems,
-        ['line 1: "q" would type: use "; q" for the command layer, or a chord']);
+        ['line 1: "q" needs ; or C-: "; q" for the command layer, which quiver mode keeps open,'
+            + ' or a chord']);
     check("a reserved key is refused", resolve("walk RET").problems,
         ['line 1: "RET": RET keeps its own meaning']);
     check("and the same name twice is refused",

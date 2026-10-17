@@ -32,14 +32,14 @@ The macros reload whenever the file changes.
 
 ## Keys
 
-Sagitta's keys work as quiver's do, in quiver mode, the default: the command layer stays open by itself, so its keys work without `;`, and a label is typed only after RET, which edits it in place; RET again, or ESC, puts it down.
+Sagitta's keys work as quiver's do, in quiver mode, the default: the command layer stays open by itself, so its keys work without `;`, and a label is typed only after RET, which selects the whole label, so that typing replaces it and an arrow key edits it in place; RET again, or ESC, puts it down.
 Backspace deletes, as in the layer, and ESC does what it does outside the layer once there is nothing in the layer to let go of.
 The layer's keys are listed only on `;`, never by waiting, though a list of choices, such as after `t`, shows at once.
 
 Spreadsheet mode (`:spreadsheet-mode`, or `s` in the settings layer) works the other way round.
 Typing edits the label of the targeted cell, spreadsheet-style, except that `(`, `[`, and `{` wrap the label (or the selected part of it) instead of replacing it.
 Elsewhere they bring their closing delimiter, as in most editors, unless it is already next; typing the closing one steps over it, and Backspace in an empty pair deletes both.
-RET edits the label in place instead, and on an empty cell with nothing selected, makes a cell there to label, in either mode.
+RET selects the whole label to edit instead, and on an empty cell with nothing selected, makes a cell there to label, in either mode.
 `\{` and `\|` pair the same way, and `\langle`, `\lvert`, `\lVert`, `\lceil`, and `\lfloor` once something other than a letter follows them.
 After `\left`, the closing delimiter comes with `\right`.
 `|` pairs only there, since it is as often a restriction or "divides" as an absolute value: elsewhere it types itself, and `\|` or `\lvert` gives a pair.
@@ -58,6 +58,8 @@ The commands live one key away:
 - `:dark-mode`: a grey canvas, with the default colour drawn in white.
   Other colours are drawn exactly, and nothing saved changes.
 - `C-arrows` move the selection; on arrows alone they bend or shift them, and on loops alone they resize or turn them.
+- `SPC` makes a cell at the focus point, or takes the one there, joined by arrows from the selected cells, and `S-SPC` selects or deselects the cell there.
+  The new cell is selected with the arrows just drawn to it, so a preset or a style restyles them at once, while RET labels the cell alone; the arrows are selected again once the label is put down.
 - `C-SPC` marks one corner of a rectangle of cells, as Emacs sets a mark: press it, move the focus point, and press it again to select every cell between the two corners, along with the arrows whose both ends are among them.
   `C-S-SPC` adds that rectangle to the selection rather than replacing it, and ESC lets go of the mark.
   While there is a mark, the mode line shows `MARK`, and a dashed rectangle runs from it to the focus point, over the cells it would take.
@@ -101,7 +103,7 @@ Keys are written as the help shows them:
   A capital letter means Shift too.
   Other characters are written as typed, as in `C-+`, without `S-`.
 - `<delete>`, `<insert>`, `<home>`, `<end>`, `<prior>`, `<next>`, and `<f1>` to `<f12>` work alone or with `C-` and `S-`.
-  Printable keys alone would type, so they need `;` or `C-`.
+  Printable keys alone need `;` or `C-`: in quiver mode, `; b` works without the `;`, since the command layer stays open, and in spreadsheet mode, `b` alone types.
 - RET, TAB, SPC (with any modifier), ESC, DEL, and the arrows cannot be rebound.
 
 A key that a line binds is taken from whatever had it by default.

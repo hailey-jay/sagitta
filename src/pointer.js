@@ -18,7 +18,16 @@ class Pointer {
         document.addEventListener("pointermove", (event) => {
             this.client = [event.clientX, event.clientY];
             this.stop_stale_pan(event);
+            ui.element.class_list.remove("keyboard");
         });
+        // While the keys are in use, what the pointer happens to rest on is not highlighted, as it
+        // would compete with the focus point and the selection, until the pointer moves again. A
+        // modifier alone may be the start of a click, so it leaves the highlight.
+        document.addEventListener("keydown", (event) => {
+            if (!Keymap.MODIFIERS.has(event.key)) {
+                ui.element.class_list.add("keyboard");
+            }
+        }, true);
         document.documentElement.addEventListener("pointerleave", () => {
             this.client = null;
         });

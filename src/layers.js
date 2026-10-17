@@ -320,10 +320,17 @@ Layer.Help = class extends Layer {
         const sections = new Map(
             ["Typing", "Moving", "Mouse", "Layers", "Chords", "Help"].map((section) => [section, []]),
         );
-        const elsewhere = (key) => typeof key === "function" ? key(this.keymap) : key;
-        for (const [section, description, key] of Keymap.HELP_ELSEWHERE.before) {
-            sections.get(section).push([elsewhere(key), description]);
-        }
+        const mode = this.ui.settings.get("ui.spreadsheet_mode") ? "spreadsheet" : "quiver";
+        const elsewhere = (lines) => {
+            for (const [section, description, key, only = mode] of lines) {
+                if (only === mode) {
+                    sections.get(section).push([
+                        typeof key === "function" ? key(this.keymap) : key, description,
+                    ]);
+                }
+            }
+        };
+        elsewhere(Keymap.HELP_ELSEWHERE.before);
         for (const { combinations, help = [] } of Keymap.BINDINGS) {
             for (const [section, description, key = Keymap.describe(combinations)] of help) {
                 sections.get(section).push([key, description]);
@@ -351,9 +358,7 @@ Layer.Help = class extends Layer {
                 }
             }
         }
-        for (const [section, description, key] of Keymap.HELP_ELSEWHERE.after) {
-            sections.get(section).push([elsewhere(key), description]);
-        }
+        elsewhere(Keymap.HELP_ELSEWHERE.after);
         const shortcuts = keys(this.keymap.combinations("shortcuts"), "chords");
         sections.get("Help").push([`${shortcuts} RET ; ESC`.trim(), "leave"]);
         sections.set("About", this.about());
