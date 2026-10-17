@@ -187,6 +187,9 @@ Shape.RoundedRect = class extends Shape {
         this.origin = origin;
         this.size = size;
         this.radius = radius;
+        // Where the middle of the rectangle is from its origin, which a tikz-cd cell puts on the
+        // maths axis (see `Vertex.resize_content`).
+        this.offset = Point.zero();
     }
 }
 
@@ -291,15 +294,20 @@ class Arrow {
 
     /// Where a line from the centre of `shape` leaving at `direction` (on the canvas) meets its
     /// border, from the centre, as TikZ finds a rectangular node's border: the centre itself for
-    /// a point.
+    /// a point. The centre is the shape's origin, which a tikz-cd cell puts on the maths axis
+    /// rather than in the middle of its box (see `Vertex.resize_content`).
     static border(shape, direction) {
         if (shape instanceof Shape.Endpoint || shape.size.is_zero()) {
             return Point.zero();
         }
         const [cos, sin] = [Math.cos(direction), Math.sin(direction)];
+        const { x, y } = shape.offset;
+        // How far the line goes to reach the side it leaves by, along each axis.
+        const reach = (component, middle, half) => Math.abs(component) > EPSILON
+            ? (middle + Math.sign(component) * half) / component : Infinity;
         const distance = Math.min(
-            Math.abs(cos) > EPSILON ? shape.size.width / 2 / Math.abs(cos) : Infinity,
-            Math.abs(sin) > EPSILON ? shape.size.height / 2 / Math.abs(sin) : Infinity,
+            reach(cos, x, shape.size.width / 2),
+            reach(sin, y, shape.size.height / 2),
         );
         return Point.lendir(distance, direction);
     }
@@ -370,7 +378,7 @@ class Arrow {
             // The following function call may throw an error, which should be caught by the caller.
             const intersections = curve.intersections_with_rounded_rectangle(
                 new RoundedRectangle(
-                    endpoint_origin,
+                    endpoint_origin.add(endpoint_shape.offset),
                     endpoint_shape.size,
                     endpoint_shape.radius,
                 ),
@@ -394,7 +402,8 @@ class Arrow {
             if (this.style.shape === CONSTANTS.ARROW_SHAPE.BEZIER) {
                 if (intersections.length > 1 && Curve.point_inside_polygon(
                         origin[prefer_min ? "target" : "source"],
-                        new RoundedRectangle(endpoint_origin, endpoint_shape.size, 0)
+                        new RoundedRectangle(endpoint_origin.add(endpoint_shape.offset),
+                            endpoint_shape.size, 0)
                             .points(),
                 )) {
                     // It's difficult to draw this case gracefully, so we bail out here too.

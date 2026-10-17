@@ -337,6 +337,8 @@ class Vertex extends Cell {
         this.phantom_shape = this.shape;
         // The label's `[width, height]`, as last measured (see `measure_label`), or `null`.
         this.label_size = null;
+        // The box TeX sets the label in, as last measured (see `UI.cell_box`), or `null`.
+        this.box = null;
 
         this.render(ui);
         super.initialise(ui);
@@ -435,6 +437,7 @@ class Vertex extends Cell {
     measure_label() {
         const { offsetWidth, offsetHeight } = this.element.query_selector(".label").element;
         this.label_size = [offsetWidth, offsetHeight];
+        this.box = UI.cell_box(this);
         return this.label_size;
     }
 
@@ -446,14 +449,38 @@ class Vertex extends Cell {
         return new Dimensions(Math.max(minimum, node.width), Math.max(minimum, node.height));
     }
 
-    /// Resize the cell content to match the label width.
+    /// Resize the cell content to match the label width, and make the node arrows meet: tikz-cd's,
+    /// the box TeX sets the label in with its padding, centred on the maths axis rather than in the
+    /// middle of the box, with the label set on the axis to match. A label that is not maths (an
+    /// error) has no such box, and arrows meet the content, as the label is centred in it.
     resize_content(ui, sizes) {
         const size = this.content_size(ui, sizes);
         this.content_element.set_style({
             width: `${size.width}px`,
             height: `${size.height}px`,
         });
-        this.shape.size = size;
+        const label = this.element.query_selector(".label");
+        if (this.box === null) {
+            this.shape.size = size;
+            this.shape.radius = ui.grid.content_minimum() / 4;
+            this.shape.offset = Point.zero();
+            label.set_style({ transform: null });
+            return;
+        }
+        const { width, height, depth, shift, em } = this.box;
+        const { CELL_SEP, EX, AXIS, OUTER_SEP, EM } = CONSTANTS.TEX;
+        const outer = OUTER_SEP * em / EM;
+        const sep = { x: CELL_SEP.x * EX * em + outer, y: CELL_SEP.y * EX * em + outer };
+        this.shape.size = new Dimensions(width + sep.x * 2, height + depth + sep.y * 2);
+        this.shape.radius = 0;
+        // The axis is the origin, so the baseline is below it, and the box's middle is between
+        // its top (`height` above the baseline) and its bottom (`depth` below it).
+        this.shape.offset = new Point(0, AXIS * em + (depth - height) / 2);
+        // The box's middle is `shift` below the label's, which is centred on the origin (as the
+        // stylesheet's transform, kept here, centres it).
+        label.set_style({
+            transform: `translate(-50%, calc(-50% + ${this.shape.offset.y - shift}px))`,
+        });
     }
 }
 

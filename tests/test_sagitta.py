@@ -835,6 +835,45 @@ def test_a_loops_label_on_its_inside_sits_in_the_loop(sagitta, home):
     cell, top, bottom, lowest = place
     assert cell <= top and bottom <= lowest + 2, place
 
+PAIR_OF_CELLS = """\\begin{tikzcd}
+\tX & {Y \\oplus Y'}
+\\end{tikzcd}
+"""
+
+
+def test_a_cells_node_is_tikz_cds(sagitta, home):
+    """tikz-cd's node round a cell is its box with `inner ysep` and `outer sep`, centred on the
+    maths axis, and the label's baseline sits that far below it. The figures, in pt from the
+    centre, are TikZ's own, from `Y.north`, `Y.south`, `Y.35`, and `Y.325`."""
+    nodes = sagitta("evaluate", _diagram(home / "pair", PAIR_OF_CELLS), """(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const pt = Edge.PX_PER_PT;
+        return ui.quiver.all_cells().filter((cell) => cell.is_vertex()).map((vertex) => {
+            const shape = vertex.shape;
+            const at = (degrees) => {
+                const point = Arrow.border(shape, -degrees * Math.PI / 180);
+                return [point.x / pt, -point.y / pt];
+            };
+            const strut = vertex.element.query_selector(".label .strut").element;
+            const depth = -(parseFloat(strut.style.verticalAlign) || 0)
+                * parseFloat(getComputedStyle(strut).fontSize);
+            const content = vertex.element.query_selector(".content").element
+                .getBoundingClientRect();
+            return {
+                up: (shape.size.height / 2 - shape.offset.y) / pt,
+                down: (shape.size.height / 2 + shape.offset.y) / pt,
+                at: [...at(35), ...at(325)],
+                baseline: (strut.getBoundingClientRect().bottom - depth
+                    - (content.top + content.bottom) / 2) / pt,
+            };
+        });
+    })()""")
+    x, y = nodes
+    assert [x["up"], x["down"]] == pytest.approx([8.19, 6.36], abs=0.05)
+    assert [y["up"], y["down"]] == pytest.approx([8.88, 7.19], abs=0.05)
+    assert y["at"] == pytest.approx([12.68, 8.88, 10.27, -7.19], abs=0.05)
+    assert [x["baseline"], y["baseline"]] == pytest.approx([2.5, 2.5], abs=0.05)
+
 def test_a_key_press_ends_a_pan_whose_key_was_released_unseen(sagitta, home):
     result = sagitta("stale_pan", _diagram(home / "paper"))
     assert result["stuck"] == "pan"

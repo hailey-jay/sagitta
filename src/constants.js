@@ -48,6 +48,16 @@ Object.assign(CONSTANTS, {
         BULLET: { x: 14, y: 14 },
         /// What tikz-cd puts round a label to make its node, on each side, in pt.
         LABEL_PADDING: 2.35,
+        /// What tikz-cd puts round a cell's box to make the node arrows meet, on each side, in ex
+        /// (its `inner xsep` and `inner ysep`).
+        CELL_SEP: { x: 1, y: 0.85 },
+        /// TikZ's `outer sep`, half its line width, which a node's border, where arrows meet it,
+        /// lies beyond its padding by, in pt.
+        OUTER_SEP: 0.2,
+        /// Computer Modern's ex, and the height of the maths axis above the baseline, in em. A
+        /// cell's node is centred on the axis.
+        EX: 0.430555,
+        AXIS: 0.25,
         /// A millimetre, in pt, which a loop's distance is given in.
         PT_PER_MM: 72.27 / 25.4,
         /// The unit of tikz-cd's `shift left` and `shift right`, 0.56ex, in pt.

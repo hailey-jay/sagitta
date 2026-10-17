@@ -452,6 +452,40 @@ class UI {
         };
     }
 
+    /// The box TeX sets the label of `vertex` in, as `{ width, height, depth, shift, em }`, in the
+    /// canvas's pixels: its width, how far it reaches above and below the baseline, how far its
+    /// middle is below the middle of the label's element, and the size of KaTeX's em. KaTeX gives
+    /// each line of the label a strut as tall as the line's box, set as far below the baseline as
+    /// the box goes. A label that is not maths, or is empty, has none, and no box (`null`).
+    static cell_box(vertex) {
+        const label = vertex.element.query_selector(".label");
+        const katex = vertex.element.query_selector(".label .katex-html");
+        const struts = katex === null ? []
+            : Array.from(katex.element.querySelectorAll(".strut"));
+        const outer = label.element.getBoundingClientRect();
+        if (struts.length === 0 || outer.height === 0) {
+            return null;
+        }
+        const em = parseFloat(getComputedStyle(struts[0]).fontSize);
+        const length = (value) => (parseFloat(value) || 0) * em;
+        const depth = Math.max(...struts.map((strut) => -length(strut.style.verticalAlign)));
+        const height = Math.max(...struts.map((strut) => {
+            return length(strut.style.height) + length(strut.style.verticalAlign);
+        }));
+        // The canvas may be zoomed, which the screen's measures include.
+        const zoom = outer.height / label.element.offsetHeight;
+        const rects = struts.map((strut) => strut.getBoundingClientRect());
+        const top = Math.min(...rects.map(({ top }) => top));
+        const bottom = Math.max(...rects.map(({ bottom }) => bottom));
+        return {
+            width: katex.element.offsetWidth,
+            height,
+            depth,
+            shift: ((top + bottom) / 2 - (outer.top + outer.bottom) / 2) / zoom,
+            em,
+        };
+    }
+
     /// Size the newly rendered labels of `cells`: vertices to fit their labels, resizing the grid
     /// if need be, and edges around their labels. Every label is measured before anything is
     /// resized, so that the whole batch costs one layout rather than one per label.
