@@ -236,6 +236,7 @@ Settings live in `~/.config/sagitta/settings.json`, or in `%APPDATA%\sagitta\set
 In a browser they live in the browser's storage, for that browser alone.
 Sagitta writes the file with every default the first time a setting changes, so the file shows each setting there is.
 It can be edited by hand, and is read at startup.
+A name that is not a setting, such as a typo or a newer version's setting, is reported, and kept in the file; one that earlier versions had is dropped.
 
 The settings layer (`C-,`, or the mode line's `⚙`) lists them, each on a key, and shows every change straight away.
 A setting that is on or off flips; a number is typed and set with RET, or stepped with the arrow keys or its `−` and `+` buttons; and `a` lists the presets for new arrows.

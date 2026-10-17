@@ -25,6 +25,10 @@ class Settings {
 
         // The settings that follow the system (see `follow`), which the file leaves out.
         this.following = new Set();
+
+        // What the file holds that is not a setting here (a typo, or a newer version's setting),
+        // kept as it was, so that writing the file does not lose it.
+        this.unknown = {};
     }
 
     /// Read the saved settings over the defaults. A malformed file is ignored, and left alone, and
@@ -42,9 +46,15 @@ class Settings {
             this.writable = false;
             return;
         }
-        // Settings the app no longer has are ignored, and the next `set` drops them.
+        // Settings the app no longer has are ignored, and the next `set` drops them. Any other
+        // name is reported, and kept.
         for (const [setting, value] of Object.entries(saved)) {
+            if (Settings.RETIRED.has(setting)) {
+                continue;
+            }
             if (!Object.hasOwn(this.data, setting)) {
+                this.unknown[setting] = value;
+                this.problems.push(`unknown setting ${setting}`);
                 continue;
             }
             if (this.allows(setting, value)) {
@@ -134,13 +144,20 @@ class Settings {
         return typeof expected === "function" ? expected() : expected;
     }
 
-    /// Write every setting but those following the system to the file, unless it is malformed.
-    /// Returns the write, to wait on.
+    /// Write every setting but those following the system to the file, with whatever it held that
+    /// is not a setting, unless it is malformed. Returns the write, to wait on.
     async write() {
         if (this.writable) {
             const data = Object.fromEntries(Object.entries(this.data)
                 .filter(([setting]) => !this.following.has(setting)));
+            Object.assign(data, this.unknown);
             await host.write_settings(`${JSON.stringify(data, null, 4)}\n`);
         }
     }
 }
+
+/// The settings earlier versions had, which a file may still hold. They are ignored, and dropped the
+/// next time the file is written.
+Settings.RETIRED = new Set([
+    "ui.cell_size", "ui.quiver_mode", "ui.spreadsheet_mode", "ui.which_key_delay",
+]);

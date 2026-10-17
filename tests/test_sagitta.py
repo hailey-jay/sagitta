@@ -1575,9 +1575,12 @@ def test_the_panel_is_gone(sagitta, home):
 def test_a_setting_the_app_no_longer_has_is_dropped(sagitta, home):
     settings = home / ".config" / "sagitta"
     settings.mkdir(parents=True)
-    (settings / "settings.json").write_text('{"ui.side_panel": true}\n')
+    (settings / "settings.json").write_text('{"ui.cell_size": 3, "ui.later": true}\n')
     sagitta("settings", _diagram(home / "paper"))
-    assert "ui.side_panel" not in json.loads((settings / "settings.json").read_text())
+    written = json.loads((settings / "settings.json").read_text())
+    assert "ui.cell_size" not in written
+    # A name that is not a setting, such as a newer version's, is kept.
+    assert written["ui.later"] is True
 
 
 # ── The settings layer ────────────────────────────────────────────────────────

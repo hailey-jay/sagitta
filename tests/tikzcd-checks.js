@@ -865,13 +865,20 @@ const pending = [];
         await settings.write();
         check("so a change writes nothing", host.written.length, 0);
 
-        settings = await read('{"ui.gone": 1, "ui.zoom": 120}');
+        settings = await read('{"ui.cell_size": 1, "ui.zoom": 120}');
         check("a setting the app no longer has is ignored",
-            [settings.has("ui.gone"), settings.get("ui.zoom")], [false, 120]);
+            [settings.has("ui.cell_size"), settings.get("ui.zoom")], [false, 120]);
         check("without being reported", settings.problems, []);
         await settings.write();
         check("and the next write drops it",
-            Object.hasOwn(JSON.parse(host.written.at(-1)), "ui.gone"), false);
+            Object.hasOwn(JSON.parse(host.written.at(-1)), "ui.cell_size"), false);
+
+        settings = await read('{"ui.zoon": 120}');
+        check("a name that is not a setting is ignored",
+            [settings.has("ui.zoon"), settings.get("ui.zoom")], [false, 100]);
+        check("and reported", settings.problems, ["unknown setting ui.zoon"]);
+        await settings.write();
+        check("but the next write keeps it", JSON.parse(host.written.at(-1))["ui.zoon"], 120);
 
         settings = await read('{"ui.zoom": 120}');
         check("a setting the file does not hold follows the system",
