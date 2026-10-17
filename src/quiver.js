@@ -412,6 +412,20 @@ QuiverExport.route_lengths = (points) => {
     });
 };
 
+/// The loop TikZ draws for a loop with `options`, as `{ in, out, distance }`: the angles, in
+/// degrees, it comes back in at and leaves at, and how far its control points lie beyond the
+/// node, in mm. The canvas draws it from these too (see `Arrow.tikz_loop`).
+QuiverExport.loop = (options) => {
+    const clockwise = options.radius >= 0 ? 1 : -1;
+    const loop_angle = (180 - 90 * clockwise - options.angle);
+    const angle_spread = 30 + 5 * (Math.abs(options.radius) - 1) / 2;
+    return {
+        in: mod(loop_angle - angle_spread * clockwise, 360),
+        out: mod(loop_angle + angle_spread * clockwise, 360),
+        distance: 5 + 5 * (Math.abs(options.radius) - 1) / 2,
+    };
+};
+
 /// The radius, in pt, to round the corners of a route through `points` by, for `wanted` at most, in
 /// a diagram whose separations are `sep` (in em, as `options.sep`). TikZ's `rounded corners` takes
 /// the radius along each leg whatever its length, so a corner on a leg too short for it overshoots,
@@ -1097,12 +1111,10 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                 // Loops.
                 if (edge.target === edge.source) {
                     parameters.loop = "";
-                    const clockwise = edge.options.radius >= 0 ? 1 : -1;
-                    const loop_angle = (180 - 90 * clockwise - edge.options.angle);
-                    const angle_spread = 30 + 5 * (Math.abs(edge.options.radius) - 1) / 2;
-                    parameters.in = mod(loop_angle - angle_spread * clockwise, 360);
-                    parameters.out = mod(loop_angle + angle_spread * clockwise, 360);
-                    parameters.distance = `${5 + 5 * (Math.abs(edge.options.radius) - 1) / 2}mm`;
+                    const loop = QuiverExport.loop(edge.options);
+                    parameters.in = loop.in;
+                    parameters.out = loop.out;
+                    parameters.distance = `${loop.distance}mm`;
                 }
 
                 const object_to_list = (object) => {

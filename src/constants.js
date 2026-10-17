@@ -48,6 +48,8 @@ Object.assign(CONSTANTS, {
         /// The size of a bullet's node, in pt, which an empty column or row beyond the diagram
         /// takes (see `Grid`).
         BULLET: { x: 14, y: 14 },
+        /// A millimetre, in pt, which a loop's distance is given in.
+        PT_PER_MM: 72.27 / 25.4,
         /// The unit of tikz-cd's `shift left` and `shift right`, 0.56ex, in pt.
         SHIFT: 2.41,
     },

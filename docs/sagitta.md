@@ -224,8 +224,8 @@ An empty column or row between the diagram's outermost cells and checkpoints is 
 Beyond them, an empty column or row is as big as one holding a bullet, so the space around a diagram keeps still as it is drawn into, and only shrinks to the gap once the diagram reaches past it.
 That change, and its reverse, take a moment rather than happening at once, so that what moves is seen to move, unless the system asks for reduced motion, or the diagram has more than 300 cells.
 The separations are the export layer's (`w` and `h` there), so changing them redraws the canvas.
-Curves, offsets, and a route's rounding are drawn at the size the export writes them.
-Loops are not yet.
+Curves, offsets, loops, and a route's rounding are drawn as the export writes them: a curve as quiver's `curve` cubic, and a loop as TikZ's `loop`, leaving and coming back to its cell's border at the angles, and with the distance, the export gives it.
+Labels sit a little further from their arrows than in the PDF, since the canvas keeps them clear of the whole line their maths is set on.
 
 ## Settings
 

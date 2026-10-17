@@ -181,6 +181,12 @@ class Path {
         return this;
     }
 
+    /// A cubic Bézier curve, with its control points and end relative to where the path is.
+    cubic_by(c1, c2, d) {
+        this.commands.push(`c ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${d.x} ${d.y}`);
+        return this;
+    }
+
     arc_by(r, angle, large_arc, clockwise, next) {
         // The arrow heads pass radii that carry a sign (see `src/arrow.js`). SVG ignores the sign
         // of `rx` and `ry` (https://www.w3.org/TR/SVG2/paths.html#ArcOutOfRangeParameters), so

@@ -835,3 +835,163 @@ class Route extends Curve {
         return path;
     }
 }
+
+/// A curve made of straight lines and cubic Bézier curves, end to end, as TikZ draws a `to path`
+/// of them: quiver's `curve` style and TikZ's `loop` are each a line from the node's centre to its
+/// border, a cubic, and a line back in, of which the arrow shows the part outside the nodes, which
+/// is TikZ's cubic exactly. Each piece is `[from, to]` for a line or `[from, control, control, to]`
+/// for a cubic, relative to `origin` before rotating by `angle`, as the other curves are.
+///
+/// The curve is followed along a polyline close to it, which its length, the points along it, and
+/// where it meets a rectangle are measured on, and is drawn exactly. `t` is the fraction of the
+/// way along.
+class Spline extends Curve {
+    constructor(origin, pieces, angle) {
+        super();
+        this.origin = origin;
+        this.angle = angle;
+        // Pieces of no length have no direction, and draw nothing.
+        this.pieces = pieces.filter((piece) => piece.some((point) => {
+            return point.sub(piece[0]).length() > EPSILON;
+        }));
+        if (this.pieces.length === 0) {
+            this.pieces = [[pieces[0][0], pieces[0][0]]];
+        }
+
+        // The polyline, as `{ point, before }`, where `before` is the length along it to `point`.
+        this.samples = [];
+        for (const piece of this.pieces) {
+            const steps = piece.length === 2 ? 1 : Spline.STEPS;
+            for (let i = this.samples.length === 0 ? 0 : 1; i <= steps; ++i) {
+                const point = Spline.at(piece, i / steps);
+                const previous = this.samples[this.samples.length - 1];
+                const before = previous === undefined ? 0
+                    : previous.before + point.sub(previous.point).length();
+                this.samples.push({ point, before });
+            }
+        }
+        this.length = this.samples[this.samples.length - 1].before;
+    }
+
+    /// The point `s` of the way along `piece`, by its own parameter.
+    static at(piece, s) {
+        if (piece.length === 2) {
+            return piece[0].lerp(piece[1], s);
+        }
+        const [p0, p1, p2, p3] = piece;
+        return p0.mul((1 - s) ** 3).add(p1.mul(3 * (1 - s) ** 2 * s))
+            .add(p2.mul(3 * (1 - s) * s ** 2)).add(p3.mul(s ** 3));
+    }
+
+    /// The index of the polyline's segment `t` falls in, and how far along it (from 0 to 1).
+    locate(t) {
+        const length = clamp(0, t, 1) * this.length;
+        let i = 0;
+        while (i < this.samples.length - 2 && this.samples[i + 1].before < length) {
+            ++i;
+        }
+        const [a, b] = [this.samples[i], this.samples[Math.min(i + 1, this.samples.length - 1)]];
+        const span = b.before - a.before;
+        return { i, along: span > 0 ? (length - a.before) / span : 0 };
+    }
+
+    /// Returns the (x, y)-point at t = `t`. This does not take `angle` into account.
+    point(t) {
+        const { i, along } = this.locate(t);
+        const next = this.samples[Math.min(i + 1, this.samples.length - 1)];
+        return this.samples[i].point.lerp(next.point, along);
+    }
+
+    /// Returns the angle of the tangent to the curve at t = `t`. This does not take `angle` into
+    /// account.
+    tangent(t) {
+        const { i } = this.locate(t);
+        const next = this.samples[Math.min(i + 1, this.samples.length - 1)];
+        return next.point.sub(this.samples[i].point).angle();
+    }
+
+    /// Returns the arc length of the curve from t = 0 to t = `t`.
+    arc_length(t) {
+        return t * this.length;
+    }
+
+    /// Returns a function giving the parameter t of the point a given length along the curve. If
+    /// `clamp` is true, we clamp any `t`s less than 0 or greater than 1. Otherwise, we throw an
+    /// error.
+    t_after_length(clamp = false) {
+        return (length) => {
+            if (length < 0 || length > this.length) {
+                if (!clamp) {
+                    throw new Error(`Length was ${
+                        length < 0 ? "less than 0" : "greater than the arc length"}.`);
+                }
+                return length < 0 ? 0 : 1;
+            }
+            return this.length > 0 ? length / this.length : 0;
+        };
+    }
+
+    /// The farthest the curve strays from the line through its ends, on either side.
+    get height() {
+        return Math.max(0, ...this.samples.map(({ point }) => Math.abs(point.y)));
+    }
+
+    /// The width to draw the curve in, centred on the middle of the line through its ends, as the
+    /// arrow centres every curve.
+    get width() {
+        const end = this.samples[this.samples.length - 1].point.x;
+        return Math.max(end, ...this.samples.map(({ point }) => Math.abs(2 * point.x - end)));
+    }
+
+    /// Intersect the curve with the given rounded rectangle (approximated by a polygon, as for the
+    /// other curves), in order along the curve. If the rectangle entirely contains the curve, and
+    /// `permit_containment` is true, a single intersection point (the centre of the rectangle) is
+    /// returned; otherwise, an error is thrown.
+    intersections_with_rounded_rectangle(rect, permit_containment) {
+        const polygon = rect.points().map((p) => p.sub(this.origin).rotate(-this.angle));
+        const found = [];
+        for (let i = 0; i < polygon.length; ++i) {
+            const [p, q] = [polygon[i], polygon[(i + 1) % polygon.length]];
+            const edge = q.sub(p);
+            for (let j = 0; j < this.samples.length - 1; ++j) {
+                const [a, b] = [this.samples[j], this.samples[j + 1]];
+                const direction = b.point.sub(a.point);
+                const denominator = direction.x * edge.y - direction.y * edge.x;
+                if (Math.abs(denominator) <= EPSILON) {
+                    continue;
+                }
+                const offset = p.sub(a.point);
+                const along = (offset.x * edge.y - offset.y * edge.x) / denominator;
+                const across = (offset.x * direction.y - offset.y * direction.x) / denominator;
+                if (along >= 0 && along <= 1 && across >= 0 && across <= 1) {
+                    const t = this.length > 0
+                        ? (a.before + (b.before - a.before) * along) / this.length : 0;
+                    if (!found.some((other) => Math.abs(other - t) <= EPSILON)) {
+                        found.push(t);
+                    }
+                }
+            }
+        }
+        if (found.length === 0) {
+            return Curve.check_for_containment(this.origin, rect, permit_containment);
+        }
+        return found.sort((a, b) => a - b)
+            .map((t) => new CurvePoint(this.point(t), t, this.tangent(t)));
+    }
+
+    /// Render the curve to an SVG path, from wherever the path is.
+    render(path) {
+        for (const piece of this.pieces) {
+            const from = piece[0];
+            if (piece.length === 2) {
+                path.line_by(piece[1].sub(from));
+            } else {
+                path.cubic_by(piece[1].sub(from), piece[2].sub(from), piece[3].sub(from));
+            }
+        }
+        return path;
+    }
+}
+
+/// How many straight segments a cubic is followed along (see `Spline`).
+Spline.STEPS = 48;

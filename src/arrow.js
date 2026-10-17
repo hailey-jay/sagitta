@@ -154,6 +154,10 @@ class ArrowStyle {
         this.crossing_over = false;
         // The radius (in pixels) of the corners of a route.
         this.rounding = 0;
+        // A loop as TikZ draws it, as `{ out, in, distance }`: the angles (in radians, on the
+        // canvas) it leaves and comes back to its cell at, and how far (in pixels) its control
+        // points lie beyond the cell's border; or `null`, for the arc quiver draws.
+        this.loop = null;
     }
 }
 
@@ -256,9 +260,15 @@ class Arrow {
         const length = this.length();
         switch (this.style.shape) {
             case CONSTANTS.ARROW_SHAPE.BEZIER:
-                return new Bezier(origin, length, this.style.curve, angle);
+                if (this.style.curve === 0) {
+                    return new Bezier(origin, length, 0, angle);
+                }
+                return this.tikz_curve(origin, angle);
             case CONSTANTS.ARROW_SHAPE.ARC:
                 if (this.source === this.target) {
+                    if (this.style.loop !== null) {
+                        return this.tikz_loop(origin, angle);
+                    }
                     return new Arc(origin, length, true, this.style.curve, angle);
                 }
                 return this.arc_for_chord(origin, length, this.style.curve, angle);
@@ -272,6 +282,58 @@ class Arrow {
                 return new Route(origin, points, this.style.rounding, angle);
             }
         }
+    }
+
+    /// Where a line from the centre of `shape` leaving at `direction` (on the canvas) meets its
+    /// border, from the centre, as TikZ finds a rectangular node's border: the centre itself for
+    /// a point.
+    static border(shape, direction) {
+        if (shape instanceof Shape.Endpoint || shape.size.is_zero()) {
+            return Point.zero();
+        }
+        const [cos, sin] = [Math.cos(direction), Math.sin(direction)];
+        const distance = Math.min(
+            Math.abs(cos) > EPSILON ? shape.size.width / 2 / Math.abs(cos) : Infinity,
+            Math.abs(sin) > EPSILON ? shape.size.height / 2 / Math.abs(sin) : Infinity,
+        );
+        return Point.lendir(distance, direction);
+    }
+
+    /// The curve quiver's `curve={height=H}` draws, in the frame of the line from source to target:
+    /// a cubic whose control points are 0.35 and 0.65 of the way along that line and `H` to one
+    /// side of it (`this.style.curve` pixels), from the source's border towards the first to the
+    /// target's border towards the second, with lines in to the centres either side.
+    tikz_curve(origin, angle) {
+        const frame = this.angle();
+        const length = this.length();
+        const end = new Point(length, 0);
+        const controls = [0.35, 0.65].map((pos) => new Point(length * pos, this.style.curve));
+        const leave = Arrow.border(this.source, controls[0].angle() + frame).rotate(-frame);
+        const enter = end.add(Arrow.border(this.target, controls[1].sub(end).angle() + frame)
+            .rotate(-frame));
+        return new Spline(origin, [
+            [Point.zero(), leave], [leave, ...controls, enter], [enter, end],
+        ], angle);
+    }
+
+    /// The loop TikZ draws for `loop, out=..., in=..., distance=...`, in the frame of the arrow:
+    /// from the cell's border at `out` to its border at `in`, with control points `distance`
+    /// beyond each in those directions, with lines in to the centre either side.
+    tikz_loop(origin, angle) {
+        const frame = this.angle();
+        const { out, distance } = this.style.loop;
+        const local = (direction) => direction - frame;
+        const leave = Arrow.border(this.source, out).rotate(-frame);
+        const enter = Arrow.border(this.source, this.style.loop.in).rotate(-frame);
+        const end = this.vector().rotate(-frame);
+        return new Spline(origin, [
+            [Point.zero(), leave],
+            [
+                leave, leave.add(Point.lendir(distance, local(out))),
+                enter.add(Point.lendir(distance, local(this.style.loop.in))), enter,
+            ],
+            [enter, end],
+        ], angle);
     }
 
     /// Returns the points along the Bézier curve associated to the arrow that intersect with the
@@ -1496,6 +1558,11 @@ class Arrow {
         // want to adjust the label in the direct of the normal to the centre point of the label.
         if (this.style.shape === CONSTANTS.ARROW_SHAPE.ARC) {
             offset_angle = curve.tangent(this.style.label_position);
+        }
+        // A curve drawn as TikZ draws it turns, so the label is pushed off it where it is, as for
+        // an arc.
+        if (this.style.shape === CONSTANTS.ARROW_SHAPE.BEZIER && curve instanceof Spline) {
+            offset_angle = curve.tangent(start.t + (end.t - start.t) * this.style.label_position);
         }
         // A route turns, so the label is pushed off the leg it is on. TikZ puts it `pos` of the
         // way along one leg, which is where the canvas puts it too, so that the two agree; the

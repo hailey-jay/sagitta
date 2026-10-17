@@ -575,13 +575,13 @@ class Edge extends Cell {
                             break;
                         }
                         style.shape = CONSTANTS.ARROW_SHAPE.BEZIER;
-                        // The export writes quiver's `curve={height=H}`, a cubic whose control
-                        // points are `H` from the line, and so whose middle is three quarters of
-                        // `H` from it; the canvas's quadratic, whose middle is half its control
-                        // point's height, is given the same middle, in the canvas's pixels.
-                        style.curve = 2 * 0.75 * options.curve * CONSTANTS.CURVE_HEIGHT
-                            * QuiverExport.tikz_multiplier(
-                                arrow.target.origin.sub(arrow.source.origin).angle())
+                        // The export writes quiver's `curve={height=H}`, whose control points are
+                        // `H` from the line, which the canvas draws as TikZ does (see
+                        // `Arrow.tikz_curve`), in the canvas's pixels.
+                        // The export, and the parser, scale every curve the same way, whatever its
+                        // angle (see `QuiverExport`).
+                        style.curve = options.curve * CONSTANTS.CURVE_HEIGHT
+                            * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER
                             * Edge.PX_PER_PT;
                         break;
                     case "arc":
@@ -589,6 +589,15 @@ class Edge extends Cell {
                         const radius = [2, 3, 4][Math.floor(Math.abs(options.radius) / 2)];
                         style.curve = radius * Math.sign(options.radius) * CONSTANTS.LOOP_HEIGHT;
                         style.angle = deg_to_rad(options.angle);
+                        // The loop the export writes, which the canvas draws as TikZ does (see
+                        // `Arrow.tikz_loop`): TikZ's angles run anticlockwise with y upwards, and
+                        // the canvas's clockwise with y downwards.
+                        const { in: into, out, distance } = QuiverExport.loop(options);
+                        style.loop = {
+                            out: -deg_to_rad(out),
+                            in: -deg_to_rad(into),
+                            distance: distance * CONSTANTS.TEX.PT_PER_MM * Edge.PX_PER_PT,
+                        };
                         break;
                 }
 
