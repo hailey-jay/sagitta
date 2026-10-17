@@ -471,6 +471,8 @@ Layer.Export = class extends Layer {
                 ...(this.saving ? [["RET", "save as, with these options"]] : []),
                 [this.saving ? "y" : "y RET", "copy to clipboard", false,
                     `${lines} line${lines === 1 ? "" : "s"}`],
+                ["q", "copy the #q= hash"],
+                ["v", "save as SVG"],
                 [Keymap.describe(this.keymap.combinations("save").slice(0, 1)),
                     "save, with these options"],
                 ["; ESC", "leave"],
@@ -526,6 +528,13 @@ Layer.Export = class extends Layer {
                 case "y":
                     this.copy();
                     break;
+                case "q":
+                    this.copy_hash();
+                    break;
+                case "v":
+                    this.leave();
+                    this.ui.file.export_svg();
+                    return true;
                 case "Escape":
                     // As elsewhere, Escape first dismisses an error banner (e.g. a failed copy).
                     if (!UI.dismiss_error()) {
@@ -543,6 +552,17 @@ Layer.Export = class extends Layer {
         }
         this.keymap.render();
         return true;
+    }
+
+    /// Copy the diagram's encoding as the end of an address, `#q=...`, which quiver's links, and
+    /// Sagitta's page, open: after `https://q.uiver.app/`, it opens the diagram in quiver.
+    async copy_hash() {
+        const ui = this.ui;
+        const { data } = QuiverImportExport.base64.export(
+            ui.quiver, ui.settings, ui.options(), ui.definitions());
+        await host.write_clipboard(`#q=${data}`);
+        this.leave();
+        ui.mode_line.flash("copied the #q= hash");
     }
 
     /// Copy the export to the clipboard, leaving the layer.

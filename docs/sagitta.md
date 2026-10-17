@@ -25,6 +25,8 @@ Opening and saving an unchanged file leaves it byte-for-byte the same.
 
 Since the file is the export, saving writes it with the export layer's options (`C-e`).
 Saving a new file, or saving as, opens that layer first, so the options can be checked: RET goes on to save, and `C-s` there saves too.
+In the export layer, `q` copies the diagram's `#q=...` hash, which opens it after `https://q.uiver.app/` or the address of Sagitta's page, and `v` saves it as an SVG image, beside the diagram by default.
+The SVG is drawn as the canvas draws it in light mode, with KaTeX's styles and the fonts its labels use inside it, so it shows the same anywhere a browser draws it; editors that ignore `foreignObject` show its arrows without their labels.
 The mode line follows the file's name with any option that differs from its default, as in `square.tikzcd [no centre, column sep large]`.
 
 The file is centred in `\[ \]` by default (`export.centre_diagram`), which a paper wants.

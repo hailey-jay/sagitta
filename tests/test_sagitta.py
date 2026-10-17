@@ -425,6 +425,22 @@ def test_saving_as_shows_the_export_options_first(sagitta, home):
         "layer": True, "asked": [[None]], "saving": True, "marker": " [standalone]"}
 
 
+def test_the_export_layer_copies_the_hash_and_draws_an_svg(sagitta, home):
+    """`q` copies the `#q=` hash that opens the diagram; the SVG holds a label per labelled cell
+    and per labelled arrow, the arrows, and the fonts the labels use."""
+    script = """(async () => {
+        await ui.keymap.layers.export.copy_hash();
+        const hash = await host.read_clipboard();
+        const svg = await DiagramSVG.build(ui);
+        const count = (text) => svg.split(text).length - 1;
+        return { hash: hash.startsWith("#q=") && ui.file.text().includes(`%${hash}`),
+            svg: svg.startsWith("<svg"), labels: count("<foreignObject"),
+            arrows: count("<g transform="), fonts: count("@font-face") > 0 };
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == {
+        "hash": True, "svg": True, "labels": 8, "arrows": 4, "fonts": True}
+
+
 def test_return_with_a_selection_still_edits_it(sagitta, home):
     """The focus point on an empty cell leaves a selection's label to RET, as it always has."""
     diagram = _diagram(home / "paper")

@@ -39,6 +39,7 @@ if (!("host" in window)) {
         const TYPES = {
             diagram: [{ description: "tikz-cd diagrams", accept: { "text/plain": [".tikzcd"] } }],
             macros: [{ description: "LaTeX", accept: { "text/plain": [".tex", ".sty"] } }],
+            svg: [{ description: "SVG images", accept: { "image/svg+xml": [".svg"] } }],
         };
         /// The extensions of `kind`, as `<input type="file">` takes them.
         const accept = (kind) => Object.values(TYPES[kind][0].accept).flat().join(",");
@@ -610,12 +611,12 @@ if (!("host" in window)) {
                 return file === null ? null : register(file.name, { file });
             },
 
-            save_dialog: async (default_path) => {
+            save_dialog: async (default_path, kind = "diagram") => {
                 const name = default_path === null ? "diagram.tikzcd" : basename(default_path);
                 if (has_api) {
                     const handle = await pick(() => window.showSaveFilePicker({
                         suggestedName: name,
-                        types: TYPES.diagram,
+                        types: TYPES[kind],
                         startIn: folder?.handle,
                     }));
                     return handle === null ? null : path_for(handle);

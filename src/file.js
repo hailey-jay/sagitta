@@ -264,6 +264,26 @@ class DiagramFile {
     }
 
     /// Ask where to save the diagram, then save it there.
+    /// Write the diagram as an SVG image (see `DiagramSVG`), asking where, beside the diagram by
+    /// default. The diagram's own file is unchanged.
+    async export_svg() {
+        let path = null;
+        try {
+            const name = `${this.path === null ? "diagram"
+                : DiagramFile.basename(this.path).replace(/\.[^.]*$/, "")}.svg`;
+            const directory = this.directory();
+            path = await host.save_dialog(directory === null ? name : `${directory}/${name}`, "svg");
+            if (path === null) {
+                return;
+            }
+            await host.write(path, await DiagramSVG.build(this.ui));
+            this.ui.mode_line.flash(`wrote ${host.describe(path)}`);
+        } catch (error) {
+            UI.display_error(`Could not write ${path === null ? "the SVG" : host.describe(path)}: ${
+                error.message}`);
+        }
+    }
+
     save_as(review = false) {
         return this.save(null, review);
     }

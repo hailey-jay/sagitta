@@ -14,6 +14,7 @@
 - `SPC` selects the arrows it draws along with their new target, so a preset or a style applies to them at once. RET on such a selection labels the cell alone, and the arrows are selected again once the label is put down.
 - The keys file's complaint about a key alone no longer says it would type, which it does only in spreadsheet mode.
 - Saving writes the export layer's options, which now show: saving a new file, or saving as, opens the export layer first, where RET goes on to save, and the layer lists `C-s` to save with them. The mode line follows the file's name with any export option that differs from its default.
+- In the export layer, `q` copies the diagram's `#q=` hash, and `v` saves the diagram as an SVG image, drawn as the canvas draws it, with the fonts its labels use inside it.
 - `:snake` is gone. A routed arrow (`; w`, `; k`) draws a connecting morphism as one arrow, with one label, where the snake's chain of arrows through new empty cells needed tidying by hand.
 - `; i` lists the rows and columns to insert at the focus point: `r` and `R` a row above or below, `c` and `C` a column left or right.
 - A route's rounded corners are exported no larger than tikz-cd's shortest legs allow. TikZ rounds a corner by the full radius however short its legs, so a route next to an empty row or column overshot, and its arrowhead pointed back along the curve.

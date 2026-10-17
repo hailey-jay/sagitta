@@ -116,6 +116,7 @@ app.setName("sagitta");
 const FILTERS = {
     diagram: [{ name: "tikz-cd diagrams", extensions: ["tikzcd"] }, { name: "All files", extensions: ["*"] }],
     macros: [{ name: "LaTeX", extensions: ["tex", "sty"] }, { name: "All files", extensions: ["*"] }],
+    svg: [{ name: "SVG images", extensions: ["svg"] }, { name: "All files", extensions: ["*"] }],
 };
 
 /// The file's contents, or `null` if it does not exist.
@@ -286,9 +287,9 @@ app.whenReady().then(() => {
             });
             return paths === undefined ? null : paths[0];
         },
-        save_dialog: (default_path) => dialog.showSaveDialogSync(window, {
+        save_dialog: (default_path, kind = "diagram") => dialog.showSaveDialogSync(window, {
             defaultPath: default_path ?? undefined,
-            filters: FILTERS.diagram,
+            filters: FILTERS[kind],
         }) ?? null,
         confirm: (message) => dialog.showMessageBoxSync(window, {
             type: "question",
