@@ -1115,7 +1115,14 @@ class Edge extends Cell {
         this.arrow.label_leg = this.is_routed() ? QuiverExport.route_leg(
             QuiverExport.route_points(this), this.options.label_position / 100) : null;
         Edge.update_style(this.arrow, this.options);
+        const label = this.arrow.label.element;
         this.arrow.redraw();
+        // An arrow that could not be drawn (its ends overlapping, as wide labels do before their
+        // columns are sized) has no label element for `render_maths` to fill, so the first drawing
+        // that makes one renders the label into it.
+        if (this.arrow.label.element !== label && label === null) {
+            ui.render_maths(this);
+        }
 
         // Update the origin, which is given by the centre of the edge.
         const curve = this.arrow.curve(Point.zero(), 0);

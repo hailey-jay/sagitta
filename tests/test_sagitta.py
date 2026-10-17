@@ -793,6 +793,24 @@ def test_delete_takes_only_the_selection_when_there_is_one(sagitta, home):
         assert removed == (["A", "D", "F"], ["AD", "DF"]), key
 
 
+WIDE = """\\begin{tikzcd}
+\t{X \\times_{S} Y \\times_{S} W} & {\\mathrm{Hom}(X \\otimes Y, Z)} & {M \\otimes N \\otimes P}
+\t\\arrow["f", from=1-1, to=1-2]
+\t\\arrow["g", from=1-2, to=1-3]
+\\end{tikzcd}
+"""
+
+
+def test_an_arrow_between_wide_labels_shows_its_label(sagitta, home):
+    """Before their columns are sized, wide labels overlap, so the arrows between them cannot be
+    drawn at first, and had no label to render into."""
+    labels = sagitta("evaluate", _diagram(home / "wide", WIDE), """(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return ui.quiver.all_cells().filter((cell) => cell.is_edge())
+            .map((edge) => edge.arrow.label.element.element.textContent.length > 0);
+    })()""")
+    assert labels == [True, True]
+
 def test_a_key_press_ends_a_pan_whose_key_was_released_unseen(sagitta, home):
     result = sagitta("stale_pan", _diagram(home / "paper"))
     assert result["stuck"] == "pan"
