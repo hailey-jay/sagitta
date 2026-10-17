@@ -977,3 +977,16 @@ const pending = [];
         "Unidentified");
     check("and an identified key is left alone", pressed("x", "KeyQ"), ["x", true, true]);
 }
+
+// A route's corners are rounded no more than tikz-cd's shortest legs allow, at normal separations
+// (18pt): a corner overshooting a short leg turns the arrowhead back along the curve.
+{
+    const sep = { column: 1.8, row: 1.8 };
+    const points = (...cells) => cells.map(([x, y]) => new Position(x, y));
+    check("a route round one cell keeps its radius to a leg less its arrowhead",
+        QuiverExport.route_radius(points([0, 0], [0, 1], [1, 1], [1, 0]), sep, 16), 9);
+    check("a smaller radius is kept as it is",
+        QuiverExport.route_radius(points([0, 0], [0, 1], [1, 1], [1, 0]), sep, 6), 6);
+    check("long legs leave a radius as it is",
+        QuiverExport.route_radius(points([0, 0], [0, 3], [3, 3], [3, 0]), sep, 16), 16);
+}

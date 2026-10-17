@@ -363,6 +363,11 @@ QuiverExport.CONSTANTS = {
     // I do not currently possess the skills to create.
     TIKZ_HORIZONTAL_MULTIPLIER: 1/4,
     TIKZ_VERTICAL_MULTIPLIER: 1/6,
+    // An em of tikz-cd's separations, in pt, in a 10pt document, which is the least a paper's
+    // em is likely to be.
+    EM: 10,
+    // What an end of a route keeps straight for its arrowhead or tail, in pt (see `route_radius`).
+    TIP_ROOM: 5,
 };
 
 /// The multiplier for a length along an edge at `angle`: the radius, at that angle, of the ellipse
@@ -398,6 +403,24 @@ QuiverExport.route_lengths = (points) => {
         const leg = point.sub(points[i]);
         return Math.hypot(leg.x * horizontal, leg.y * vertical);
     });
+};
+
+/// The radius, in pt, to round the corners of a route through `points` by, for `wanted` at most, in
+/// a diagram whose separations are `sep` (in em, as `options.sep`). TikZ's `rounded corners` takes
+/// the radius along each leg whatever its length, so a corner on a leg too short for it overshoots,
+/// and an arrowhead on what is left of the last leg points back along the curve. The canvas rounds
+/// such a corner less (see `Route`), but its legs are a whole cell long, where tikz-cd's may be
+/// little more than a separation, as next to a row or a column of empty cells. So the radius is
+/// kept to what the shortest leg tikz-cd could draw allows: half of a leg between two corners, and
+/// an end leg less the room an arrowhead or tail takes.
+QuiverExport.route_radius = (points, sep, wanted) => {
+    const legs = points.slice(1).map((point, i) => Math.hypot(
+        Math.abs(point.x - points[i].x) * sep.column * QuiverExport.CONSTANTS.EM,
+        Math.abs(point.y - points[i].y) * sep.row * QuiverExport.CONSTANTS.EM,
+    ));
+    const room = legs.map((leg, i) => i === 0 || i === legs.length - 1
+        ? leg - QuiverExport.CONSTANTS.TIP_ROOM : leg / 2);
+    return Math.max(0, Math.min(wanted, ...room));
 };
 
 /// The leg of a route through `points` that is `fraction` of the way along, and how far along that
@@ -782,8 +805,11 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                     const legs = edge.options.route.map((cell) => `-- ${checkpoint(cell)}`)
                         .concat(["-- (\\tikztotarget)"]);
                     legs[route_label.leg] += " \\tikztonodes";
-                    const radius = edge.options.rounding * CONSTANTS.ROUNDING
-                        * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER;
+                    const radius = Number(QuiverExport.route_radius(
+                        QuiverExport.route_points(edge), options.sep,
+                        edge.options.rounding * CONSTANTS.ROUNDING
+                            * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER,
+                    ).toFixed(1));
                     // The corners are rounded only while the route is built: rounded corners
                     // still in force when a squiggly arrow is drawn round every zigzag too.
                     parameters["to path"] = `{${radius > 0 ? `[rounded corners=${radius}pt] ` : ""

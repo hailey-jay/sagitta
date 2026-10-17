@@ -1185,7 +1185,9 @@ def test_the_gap_is_saved_as_an_empty_row(sagitta, home):
     (["route"], "-- (\\tikzcdmatrixname-2-2.center |- \\tikzcdmatrixname-1-1.center)"),
     (["route", "route"], "-- (\\tikzcdmatrixname-1-1.center |- \\tikzcdmatrixname-2-2.center)"),
     (["route x", "rounding 0"], "to path={-- (\\tikzcdmatrixname-2-2.center"),
-    (["route x", "rounding 8"], "to path={[rounded corners=16pt] --"),
+    # A one-cell end leg holds no more than 13pt at normal separations, with room for the head
+    # (see `QuiverExport.route_radius`).
+    (["route x", "rounding 8"], "to path={[rounded corners=13pt] --"),
     (["route x", "squiggly"], "[sharp corners]}, squiggly, from=1-1, to=2-2]"),
 ])
 def test_route_commands_write_a_to_path(sagitta, home, commands, expected):

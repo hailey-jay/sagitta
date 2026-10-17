@@ -618,8 +618,9 @@ class Arc extends Curve {
 /// curves are, so that the arrow draws it in the same frame: the source at `(0, 0)` and the target
 /// on the positive x axis.
 ///
-/// Like TikZ, a corner whose legs are too short for the radius is rounded less, so that no arc
-/// takes more than half a leg. The curve is parametrised by arc length, so `t` is the fraction of
+/// A corner whose legs are too short for the radius is rounded less, so that no arc takes more
+/// than half a leg. TikZ does not do this, so the export keeps the radius small enough itself (see
+/// `QuiverExport.route_radius`). The curve is parametrised by arc length, so `t` is the fraction of
 /// the way along.
 class Route extends Curve {
     constructor(origin, points, radius, angle) {

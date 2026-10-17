@@ -192,6 +192,7 @@ A route moves with its arrow when the whole arrow moves, and a gap opened across
 Reversing an arrow passes through its route the other way.
 
 The export writes a route as a `to path` through the centres of the nodes in its cells, with `rounded corners`.
+TikZ rounds a corner by the same radius however short its legs are, so the export rounds no more than tikz-cd's shortest legs allow, which can be less than the canvas shows; otherwise a corner on a short leg overshoots, and turns the arrowhead back.
 An empty cell takes its centre from a node in its column and one in its row; a cell with neither is written out empty, and the diagram gets an `execute at empty cell` option, which is TikZ's `nodes in empty cells` with nodes of no size, so that the spacing is what it would be without the route.
 tikz-cd puts all an arrow's labels on one leg of a route, so the label goes on the leg its position falls on, and `pos` is measured along that leg.
 A shortened route is written with `shorten` lengths, since quiver's `between` does not follow a `to path`.
