@@ -259,7 +259,11 @@ class DiagramFile {
             this.ui.mode_line.flash(`opened the folder${this.path === null
                 ? this.describe_macros() : ""}`);
         } catch (error) {
-            UI.display_error(`Could not open the folder: ${error.message}`);
+            if (error.brief) {
+                this.ui.mode_line.flash(error.message, true);
+            } else {
+                UI.display_error(`Could not open the folder: ${error.message}`);
+            }
         }
     }
 

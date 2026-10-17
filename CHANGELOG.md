@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- In a browser that gives a page no folders, such as Firefox, `:open-folder` says only "open-folder not available on this browser", in the mode line.
 - `:help` opens the help, for a browser where `C-/` and `<f1>` never reach the page.
 - A problem with the keys or settings file is reported in a few words, without the folder the file is in, and names the command that opens the file: `keys line 1: no command "sav" (+1 more, :keys-file)`.
 - A name in the settings file that is not a setting, such as a typo or a newer version's setting, is reported, and kept the next time the file is written. Only the settings earlier versions had are dropped.

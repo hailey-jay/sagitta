@@ -670,12 +670,14 @@ if (!("host" in window)) {
 
             /// Ask for a folder to find files in by name, as the desktop finds them on disk.
             /// Returns its path, or `null` if none was chosen. Where the browser gives a page no
-            /// folders, says why, which the page reports.
+            /// folders, says so, in a `brief` error the page reports as it is.
             open_folder: async () => {
                 if (!has_api) {
-                    throw new Error(window.isSecureContext
-                        ? "this browser gives a page no folders, which Chrome and Edge do"
-                        : UNSAFE);
+                    if (!window.isSecureContext) {
+                        throw new Error(UNSAFE);
+                    }
+                    throw Object.assign(new Error("open-folder not available on this browser"),
+                        { brief: true });
                 }
                 const handle = await pick(() => window.showDirectoryPicker({
                     mode: "readwrite",
