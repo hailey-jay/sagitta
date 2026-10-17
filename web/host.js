@@ -568,7 +568,6 @@ if (!("host" in window)) {
                 files.set(path, { text });
             },
 
-            config_dir: async () => "",
             read_settings: async () => load(STORAGE.settings),
             read_keys: async () => load(STORAGE.keys),
             write_settings: async (text) => store(STORAGE.settings, text),

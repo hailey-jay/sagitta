@@ -161,7 +161,7 @@ class Bindings {
                     continue;
                 }
                 if (!table.known(name)) {
-                    throw new Error(`nothing is called "${word}"`);
+                    throw new Error(`no command "${word}"`);
                 }
                 if (named.has(name)) {
                     throw new Error(`${name} is already bound on line ${named.get(name)}`);

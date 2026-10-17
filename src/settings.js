@@ -42,7 +42,7 @@ class Settings {
         try {
             saved = JSON.parse(text);
         } catch (_) {
-            this.problems.push("not valid JSON, so ignored, and left alone until it is fixed");
+            this.problems.push("not valid JSON, so ignored until fixed");
             this.writable = false;
             return;
         }

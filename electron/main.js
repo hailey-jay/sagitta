@@ -243,12 +243,8 @@ app.whenReady().then(() => {
         read: read_file,
         write: write_file,
         // The settings, as the text of `settings.json`, or `null` before it has been written.
-        // Where the settings and keys files live, for the page to name in a message: it differs
-        // between Linux and Windows. It ends in the platform's separator, so that the page can put
-        // a file name after it without choosing one.
-        config_dir: () => app.getPath("userData") + path.sep,
         read_settings: () => read_file(settings),
-        // The keys file, which only the user writes, or `null` if there is none.
+        // The keys file, which only the user writes into, or `null` if there is none.
         read_keys: () => read_file(path.join(app.getPath("userData"), "keys")),
         write_settings: (text) => {
             fs.mkdirSync(path.dirname(settings), { recursive: true });

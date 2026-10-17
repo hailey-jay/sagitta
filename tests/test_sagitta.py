@@ -895,13 +895,13 @@ def test_the_help_layer_shows_rebound_chords(sagitta, home):
 def test_the_keys_file_reports_its_problems_and_keeps_the_rest(sagitta, home):
     _keys(home, "sav C-s\nreverse ; w\nflip ; 5\n")
     opened = sagitta("open", _diagram(home / "paper"))
-    assert 'line 1: nothing is called "sav" (and 1 more)' in opened["mode_line"]
+    assert 'keys line 1: no command "sav" (+1 more, :keys-file)' in opened["mode_line"]
     # A line replaces every default key of what it names, chords included.
     assert ["w", "reverse", ""] in sagitta("which_key", _diagram(home / "other"))
 
 
 @pytest.mark.parametrize("text,problem", [
-    ("sav C-s", 'line 1: nothing is called "sav"'),
+    ("sav C-s", 'line 1: no command "sav"'),
     ("save 5", "keeps its own meaning in the command layer"),
     ("save ; 5", "keeps its own meaning in the command layer"),
     ("save ; :", "keeps its own meaning in the command layer"),
@@ -1536,7 +1536,7 @@ def test_the_grid_is_laid_out_at_the_label_size(sagitta, home):
 def test_bad_settings_are_reported_and_left_at_their_defaults(sagitta, home):
     _settings(home, '{"ui.zoom": 500, "diagram.arrow_preset": "fancy", "ui.dark_mode": "yes"}')
     opened = sagitta("open", _diagram(home / "paper"))
-    assert "settings.json: ui.zoom should be a number from 20 to 200 (and 2 more)" \
+    assert "settings: ui.zoom should be a number from 20 to 200 (+2 more, :settings-file)" \
         in opened["mode_line"]
     assert "100%" in opened["mode_line"]
 

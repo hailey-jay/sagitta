@@ -728,21 +728,20 @@ class UI {
     }
 
     /// Report what was wrong with the settings and the keys files in the mode line: the first
-    /// problem, and how many others there were. Each is logged as a warning, too.
-    async report_problems() {
+    /// problem, how many others there were, and the command that opens its file. Each is logged as
+    /// a warning, too.
+    report_problems() {
         const problems = [
-            ...this.settings.problems.map((problem) => `settings.json: ${problem}`),
-            ...this.keymap.problems.map((problem) => `keys, ${problem}`),
+            ...this.settings.problems.map((problem) => [`settings: ${problem}`, "settings-file"]),
+            ...this.keymap.problems.map((problem) => [`keys ${problem}`, "keys-file"]),
         ];
-        for (const problem of problems) {
+        for (const [problem] of problems) {
             console.warn(problem);
         }
         if (problems.length > 0) {
-            const more = problems.length > 1 ? ` (and ${problems.length - 1} more)` : "";
-            // The shell knows where it keeps these files, and the path differs between
-            // platforms, so do not spell it here. The directory ends in the separator already.
-            const directory = await host.config_dir();
-            this.mode_line.error(`${directory}${problems[0]}${more}`);
+            const [[problem, command]] = problems;
+            const more = problems.length > 1 ? `+${problems.length - 1} more, ` : "";
+            this.mode_line.error(`${problem} (${more}:${command})`);
         }
     }
 

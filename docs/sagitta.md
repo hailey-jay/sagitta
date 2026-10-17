@@ -118,7 +118,7 @@ Keys are written as the help shows them:
 
 A key that a line binds is taken from whatever had it by default.
 A name alone unbinds it, and `unbind` frees keys from whatever has them.
-A line with a problem is skipped whole, and the mode line reports the first problem and how many others there are.
+A line with a problem is skipped whole, and the mode line reports the first problem, how many others there are, and `:keys-file`, which opens the file to fix it.
 Choosing a slider, a component, or `align` with a chord enters the command layer, which then takes the number, or the key choosing a style or an alignment.
 
 The names and their defaults:

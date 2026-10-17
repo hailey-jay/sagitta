@@ -859,7 +859,7 @@ const pending = [];
         settings = await read("{not json");
         check("a malformed file leaves the defaults", settings.get("ui.zoom"), 100);
         check("says so once", settings.problems,
-            ["not valid JSON, so ignored, and left alone until it is fixed"]);
+            ["not valid JSON, so ignored until fixed"]);
         check("and is not overwritten", settings.writable, false);
         settings.set("ui.zoom", 150);
         await settings.write();
@@ -947,7 +947,7 @@ const pending = [];
 
     // The problems are the loader's own, in its own words, for names it has never heard of.
     check("a word the table does not know is reported",
-        resolve("wiggle C-q").problems, ['line 1: nothing is called "wiggle"']);
+        resolve("wiggle C-q").problems, ['line 1: no command "wiggle"']);
     check("a name the table knows but has no defaults for is bound",
         of(resolve("jump C-j").keys, "jump"), "C-j");
     check("a key alone is the command layer's, as with ;",
