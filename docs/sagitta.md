@@ -139,7 +139,7 @@ The names and their defaults:
 | `tail`, `body`, `head` | `; t`, `; d`, `; h` |
 | `arrow`, `adjunction`, `corner` | `; a`, `; j`, `; p` |
 | `align`, then `l`, `r`, `c`, or `o` for left, right, centre, or over | `; A` |
-| `insert`, then `r`, `R`, `c`, or `C` for a row above or below, or a column left or right | `; i` |
+| `insert`, then `↑`, `↓`, `←`, or `→` for a row above or below, or a column left or right | `; i` |
 | `align-left`, `align-centre`, `align-over` | none |
 | `plain`, `equals`, `inclusion`, `mono`, `epi` | `; !`, `; =`, `; (`, `; <`, `; >` |
 | `maps-to`, `dashed`, `dotted`, `squiggly` | `; \|`, `; -`, none, `; ~` |
@@ -204,8 +204,8 @@ quiver itself ignores a route, so the diagram opens there with straight arrows.
 
 A figure can grow after it is drawn.
 
-`; i` lists the gaps it can open at the focus point: `r` a row above, `R` a row below, `c` a column to the left, and `C` a column to the right.
-The focus point can still move while the list is open, and `; i` again closes it.
+`; i` lists the gaps it can open at the focus point, by the way they open: `↑` a row above, `↓` a row below, `←` a column to the left, and `→` a column to the right.
+Choosing one closes the list, and `; i` again closes it without choosing; while it is open, the arrows choose rather than move the focus point.
 `:insert-row-above`, `:insert-row-below`, `:insert-column-left`, and `:insert-column-right` do the same from the command line.
 Everything at or beyond the gap moves one cell on, and the arrows come with their ends, since an arrow is held by the cells it joins rather than by a position.
 `above` and `left` put the gap where the focus point is; `below` and `right` just after it.

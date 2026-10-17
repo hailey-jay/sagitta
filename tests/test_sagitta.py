@@ -394,10 +394,10 @@ def test_return_lets_go_of_a_slider_or_list_without_editing(sagitta, home, key):
 
 
 @pytest.mark.parametrize("keys,command", [
-    (["i", "r"], "insert-row-above"),
-    (["i", ["r", ["shift"]]], "insert-row-below"),
-    (["i", "c"], "insert-column-left"),
-    (["i", ["c", ["shift"]]], "insert-column-right"),
+    (["i", "Up"], "insert-row-above"),
+    (["i", "Down"], "insert-row-below"),
+    (["i", "Left"], "insert-column-left"),
+    (["i", "Right"], "insert-column-right"),
 ])
 def test_the_insert_list_opens_a_gap_as_its_command_does(sagitta, home, keys, command):
     by_key, by_command = _diagram(home / "key"), _diagram(home / "command")

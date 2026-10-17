@@ -809,7 +809,9 @@ class Keymap {
         // A choice's key makes it, while a component's list is open. The key that opened the list
         // still closes it, even if rebound to one of its choices' keys.
         if (this.component !== null && !this.opens(this.component, event)) {
-            const choice = this.choices(this.component).find(([choice_key]) => choice_key === key);
+            // A choice's key is written as the lists show it, so an arrow is its glyph.
+            const choice = this.choices(this.component)
+                .find(([choice_key]) => (Bindings.NAMED[choice_key] ?? choice_key) === key);
             if (choice !== undefined) {
                 if (this.applies(this.component)) {
                     choice[3]();
@@ -1265,7 +1267,7 @@ Keymap.WHICH_KEY = [
         ["align-over", "align over", "edge", "label_alignment:over"],
     ]],
     ["Grid", [
-        ["insert", "insert a row or column (r R c C)"],
+        ["insert", "insert a row or column (arrows)"],
     ]],
     ["Select", [
         ["toggle-selection", "select or deselect, by code"],
@@ -1342,12 +1344,12 @@ Keymap.CHOICE_KEYS = {
         "centre": "c",
         "over": "o",
     },
-    // At the focus point, or with Shift, just after it.
+    // The way the gap opens from the focus point.
     insert: {
-        "insert-row-above": "r",
-        "insert-row-below": "R",
-        "insert-column-left": "c",
-        "insert-column-right": "C",
+        "insert-row-above": "↑",
+        "insert-row-below": "↓",
+        "insert-column-left": "←",
+        "insert-column-right": "→",
     },
 };
 
