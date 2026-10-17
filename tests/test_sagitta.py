@@ -697,6 +697,14 @@ def test_the_hints_give_way_only_where_there_is_no_room(sagitta, home):
     assert narrow[0] == "layer" and len(narrow) < 5 and narrow == message[:len(narrow)]
 
 
+def test_deleting_a_vertex_at_the_edge_leaves_its_column_as_it_was(sagitta, home):
+    """The column a `\\bullet` leaves at the diagram's edge is as wide as it was, so the focus
+    point there neither shrinks to an empty column's width within the diagram nor grows back."""
+    keys = [["Space"], ["Space"], ["Right"], ["Space"], ["Backspace"]]
+    frames = sagitta("frames", home / "new.tikzcd", json.dumps(keys))
+    assert len({tuple(frame["focus"]) for frame in frames}) == 1, frames
+
+
 def test_slash_searches_in_the_command_layer_too(sagitta, home):
     result = sagitta("keys", _diagram(home / "paper"), json.dumps([[";"], ["/"]]))
     assert result["mode_line"].startswith("/ SEARCH")

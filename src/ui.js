@@ -137,7 +137,7 @@ class UI {
 
     /// Bring the grid's extent in line with the diagram's, its outermost cells and checkpoints,
     /// laying it out afresh if that changed, since empty columns and rows beyond it are sized
-    /// differently from those within (see `Grid`).
+    /// differently from those within (see `Grid`). Returns whether it changed.
     update_extent() {
         const xs = [];
         const ys = [];
@@ -161,7 +161,9 @@ class UI {
             this.grid.extent = extent;
             this.relayout(before);
             this.layout_settled = extent !== null;
+            return true;
         }
+        return false;
     }
 
     /// Size the grid as tikz-cd lays the diagram out, in a 10pt document, at the scale the labels
@@ -1186,7 +1188,13 @@ class UI {
             this.deselect(removed);
             removed.element.remove();
         }
-        this.update_col_row_size(...update_positions);
+        // A vertex at the diagram's edge changes its extent, and the grid is then laid out afresh
+        // from the sizes it had (see `update_extent`). Fitting the columns and rows the vertex left
+        // first would shrink them to the size of an empty one within the extent, only for the new
+        // layout to grow them back to the size of one beyond it.
+        if (!this.update_extent()) {
+            this.update_col_row_size(...update_positions);
+        }
         this.recode();
         this.colour_picker.update_diagram_colours(this);
     }

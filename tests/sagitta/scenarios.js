@@ -196,6 +196,34 @@ module.exports = {
         return { counts: await ctx.counts(), mode_line: await ctx.mode_line() };
     },
 
+    /// Press each key in `argument` (as for `keys`), without selecting anything first, the last
+    /// with no wait after it, and return the size of the focus point and of each vertex's content
+    /// on each of the next 20 frames, to show any jump or animation the keys set off.
+    frames: async (ctx) => {
+        const keys = JSON.parse(ctx.argument);
+        for (const [key, modifiers = []] of keys.slice(0, -1)) {
+            await ctx.press(key, modifiers);
+        }
+        const sizes = ctx.js(`(async () => {
+            const sizes = [];
+            const size = (element) => {
+                const { width, height } = element.getBoundingClientRect();
+                return [Math.round(width), Math.round(height)];
+            };
+            for (let frame = 0; frame < 20; ++frame) {
+                await new Promise((resolve) => requestAnimationFrame(resolve));
+                sizes.push({
+                    focus: size(document.querySelector(".focus-point")),
+                    vertices: Array.from(document.querySelectorAll(".vertex .content"), size),
+                });
+            }
+            return sizes;
+        })()`);
+        const [key, modifiers = []] = keys.at(-1);
+        await ctx.press(key, modifiers);
+        return sizes;
+    },
+
     /// Press each key in `argument` (as for `keys`), without selecting anything first, and return
     /// the codes of the vertices and the arrows, of the queued cells, and of the cell Tab goes to
     /// next, once the mode line has caught up.
