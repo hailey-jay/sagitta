@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- With nothing selected, DEL and `<delete>` delete the cell under the focus point, so a lone cell needs no selecting first. They did nothing.
 - The first label of a session is measured once KaTeX's font has loaded, so its column fits it: the first `\bullet` of a new diagram was measured in a fallback font, and its column was a few pixels narrower than the empty ones round it.
 - Dark mode follows the system's colour scheme, as it changes, until it is set by `:dark-mode`, the settings layer, or `:set`. A settings file already holding `ui.dark_mode`, as every file written so far does, keeps it: remove the line to follow the system.
 - The interface dims what is secondary by one amount, and what is unavailable by another. The mode line's hints are a shade dimmer, and the completions' keys a shade brighter.

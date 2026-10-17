@@ -215,13 +215,22 @@ class ModeLine {
             },
             () => ui.in_mode(...default_pan) && any_cells(),
         );
+        // Deleting takes the selection, or, with nothing selected, the cell under the focus point,
+        // so a lone cell needs no selecting first.
+        const doomed = () => {
+            if (ui.selection.size > 0) {
+                return ui.selection;
+            }
+            const focused = ui.cell_under_focus_point();
+            return new Set(focused === null ? [] : [focused]);
+        };
         this.add_action(ui, "delete", "Delete", () => {
             ui.history.add(ui, [{
                 kind: "delete",
-                cells: ui.quiver.transitive_dependencies(ui.selection),
+                cells: ui.quiver.transitive_dependencies(doomed()),
             }], true);
             ui.update_selection();
-        }, () => ui.in_mode(...default_pan) && ui.selection.size > 0);
+        }, () => ui.in_mode(...default_pan) && doomed().size > 0);
 
         // Transformations of the whole diagram. Each moves the vertices, and fixes up the edges
         // (including loops, whose angles are absolute).

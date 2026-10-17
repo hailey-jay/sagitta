@@ -775,6 +775,24 @@ def test_removing_a_cell_frees_its_code(sagitta, home):
     assert restored == (["A", "D", "F", "S"], ["AD", "AS", "DF", "SF"])
 
 
+def test_delete_takes_the_cell_under_the_focus_point_with_nothing_selected(sagitta, home):
+    """Searching for `S` moves the focus point to it, Escape lets go of the selection, and stepping
+    away and back shows the focus point there."""
+    search_s = [["/"], ["s"], ["Enter"], ["Escape"], ["Left"], ["Right"]]
+    for key in ["Delete", "Backspace"]:
+        removed = _codes(sagitta, _diagram(home / key), [*search_s, [key]])
+        assert removed == (["A", "D", "F"], ["AD", "DF"]), key
+
+
+def test_delete_takes_only_the_selection_when_there_is_one(sagitta, home):
+    """Searching for `S` (the top right vertex) selects it, and Down moves the focus point onto
+    `F`, below it, which stays."""
+    keys = [["/"], ["s"], ["Enter"], ["Down"]]
+    for key in ["Delete", "Backspace"]:
+        removed = _codes(sagitta, _diagram(home / f"selected-{key}"), [*keys, [key]])
+        assert removed == (["A", "D", "F"], ["AD", "DF"]), key
+
+
 def test_a_key_press_ends_a_pan_whose_key_was_released_unseen(sagitta, home):
     result = sagitta("stale_pan", _diagram(home / "paper"))
     assert result["stuck"] == "pan"
