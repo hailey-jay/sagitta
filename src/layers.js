@@ -710,6 +710,14 @@ Layer.Settings = class extends Layer {
         }
     }
 
+    /// Open the keys file in the desktop's editor.
+    async open_keys() {
+        const error = await host.open_keys();
+        if (error !== "") {
+            this.ui.mode_line.flash(`could not open the keys file: ${error}`, true);
+        }
+    }
+
     intercept(event) {
         const ui = this.ui;
         const key = event.key;

@@ -366,6 +366,14 @@ Commands.TABLE["save"] = {
     run: (commands, words) => commands.ui.file.save(words.length > 0 ? words.join(" ") : undefined),
 };
 
+// Open the settings file, or the keys file, in the desktop's editor (in a browser, both, in the page).
+Commands.TABLE["settings-file"] = {
+    run: (commands) => commands.ui.keymap.layers.settings.open_file(),
+};
+Commands.TABLE["keys-file"] = {
+    run: (commands) => commands.ui.keymap.layers.settings.open_keys(),
+};
+
 /// `:set SETTING VALUE` names a setting and the value to give it, which the settings layer (`C-,`)
 /// cannot: it steps a number by key. With no value, the line says what the setting holds. Settings
 /// are not part of the diagram, so a change here is not undoable, as it is not in the layer.

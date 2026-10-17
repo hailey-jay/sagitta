@@ -256,6 +256,16 @@ app.whenReady().then(() => {
         },
         // Open the settings in the desktop's editor for JSON. Returns the error, or "".
         open_settings: () => shell.openPath(settings),
+        // Open the keys file in the desktop's editor, making it, empty, if there is none, so that
+        // there is something to open. Returns the error, or "".
+        open_keys: () => {
+            const keys = path.join(app.getPath("userData"), "keys");
+            if (!fs.existsSync(keys)) {
+                fs.mkdirSync(path.dirname(keys), { recursive: true });
+                write_file(keys, "");
+            }
+            return shell.openPath(keys);
+        },
         // The nearest file called `name` in `directory` or its ancestors, or `null`. The search
         // ends at the enclosing git repository's root, and never reaches the home directory, so
         // that a stray `~/macros.tex` is not taken up by every diagram outside a project.

@@ -576,6 +576,11 @@ if (!("host" in window)) {
                 edit_settings();
                 return "";
             },
+            // The keys are edited beside the settings.
+            open_keys: async () => {
+                edit_settings();
+                return "";
+            },
 
             // The nearest file called `name` in `directory` or its ancestors, as the desktop shell
             // finds it, but only in the folder, which ends the search as the home directory does.

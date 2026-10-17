@@ -90,8 +90,9 @@ While the diagram is empty, a line of tips runs along the top.
 
 `~/.config/sagitta/keys`, if it exists, rebinds keys.
 On Windows the file is `%APPDATA%\sagitta\keys`.
-In a browser it lives in the browser's storage, and opening the settings file (`o` in the settings layer) edits it beside the settings.
-It is read at startup, and Sagitta never writes it.
+`:keys-file` opens it in the desktop's editor, making it, empty, if there is none.
+In a browser it lives in the browser's storage, and `:keys-file`, `:settings-file`, or `o` in the settings layer edits it beside the settings.
+It is read at startup, and Sagitta never writes anything into it.
 Each line names something, then its keys, which replace all of its defaults:
 
 ```
@@ -238,7 +239,7 @@ It can be edited by hand, and is read at startup.
 
 The settings layer (`C-,`, or the mode line's `⚙`) lists them, each on a key, and shows every change straight away.
 A setting that is on or off flips; a number is typed and set with RET, or stepped with the arrow keys or its `−` and `+` buttons; and `a` lists the presets for new arrows.
-`e` opens the export layer, and `o` opens the file itself, for the settings the layer does not list.
+`e` opens the export layer, and `o` (or `:settings-file`) opens the file itself, for the settings the layer does not list.
 
 `:set SETTING VALUE` names any setting and the value to give it, which the layer cannot: it steps numbers by key, and lists only some of them.
 Tab lists the settings.

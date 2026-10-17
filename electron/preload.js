@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("host", {
     read_keys: invoke("read_keys"),
     write_settings: invoke("write_settings"),
     open_settings: invoke("open_settings"),
+    open_keys: invoke("open_keys"),
     find_up: invoke("find_up"),
     open_dialog: invoke("open_dialog"),
     save_dialog: invoke("save_dialog"),
