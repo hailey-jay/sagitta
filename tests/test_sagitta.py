@@ -811,6 +811,30 @@ def test_an_arrow_between_wide_labels_shows_its_label(sagitta, home):
     })()""")
     assert labels == [True, True]
 
+LOOP_BELOW = """\\begin{tikzcd}
+\tX
+\t\\arrow["e"', from=1-1, to=1-1, loop, in=235, out=305, distance=10mm]
+\\end{tikzcd}
+"""
+
+
+def test_a_loops_label_on_its_inside_sits_in_the_loop(sagitta, home):
+    """TikZ sets the label's anchor on the loop, so `'` puts it inside the loop below `X`, under
+    the cell and above the loop's lowest point, rather than over the cell."""
+    place = sagitta("evaluate", _diagram(home / "loop", LOOP_BELOW), """(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const box = (element) => element.getBoundingClientRect();
+        const edge = ui.quiver.all_cells().find((cell) => cell.is_edge());
+        const vertex = ui.quiver.all_cells().find((cell) => cell.is_vertex());
+        const loop = box([...edge.arrow.svg.element.querySelectorAll("path")]
+            .reduce((a, b) => box(a).height >= box(b).height ? a : b));
+        const label = box(edge.arrow.label.element.element);
+        return [box(vertex.element.query_selector(".content").element).bottom, label.top,
+            label.bottom, loop.bottom];
+    })()""")
+    cell, top, bottom, lowest = place
+    assert cell <= top and bottom <= lowest + 2, place
+
 def test_a_key_press_ends_a_pan_whose_key_was_released_unseen(sagitta, home):
     result = sagitta("stale_pan", _diagram(home / "paper"))
     assert result["stuck"] == "pan"

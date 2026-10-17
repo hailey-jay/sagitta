@@ -1552,6 +1552,28 @@ class Arrow {
         });
     }
 
+    /// Where TikZ's `auto` puts the label's centre, from the point of the curve it labels, given
+    /// the curve's direction there (`tangent`, in the arrow's frame): it picks the compass anchor
+    /// of the label's node, on the left of the curve (or the right, for `'`), from the sign of each
+    /// part of the direction, and sets that anchor on the point. The offset is on the canvas.
+    auto_anchor(tangent) {
+        const direction = Point.lendir(1, tangent + this.angle());
+        // TikZ's y-axis points up.
+        const [x, y] = [direction.x, -direction.y];
+        const sign = (value) => value > 0.05 ? 1 : value < -0.05 ? -1 : 0;
+        // The anchor, as a unit step east and north of the node's centre. Left of a curve going
+        // right, the node lies above it, so its anchor is on its south side; going right and up,
+        // the node lies up and to the left, so its anchor is the south east.
+        let [east, north] = sign(x) === 0 ? [y > 0 ? 1 : -1, 0] : [sign(y), -sign(x)];
+        // On the right, the anchor is the opposite one.
+        if (this.label.alignment === CONSTANTS.LABEL_ALIGNMENT.RIGHT) {
+            [east, north] = [-east, -north];
+        }
+        const { width, height } = this.label.size;
+        // The centre is the point less the anchor, on the canvas, whose y-axis points down.
+        return new Point(-east * width / 2, north * height / 2);
+    }
+
     /// Find the correct position of the label. If the label is centred, this is easy. However, if
     /// it is offset to either side, we want to find the minimum offset from the centre of the edge
     /// such that the label no longer overlaps the edge.
@@ -1594,6 +1616,16 @@ class Arrow {
                     offset_angle = to.sub(from).angle();
                 }
             }
+        }
+
+        // A loop's label goes where TikZ puts it, as no offset that keeps clear of the curve
+        // does: inside the loop, the nearest such offset lies over the cell, where the loop's ends
+        // leave a gap.
+        if (this.style.loop !== null && this.source === this.target && this.style.shape
+            === CONSTANTS.ARROW_SHAPE.ARC && [CONSTANTS.LABEL_ALIGNMENT.LEFT,
+            CONSTANTS.LABEL_ALIGNMENT.RIGHT].includes(this.label.alignment)) {
+            const tangent = curve.tangent(start.t + (end.t - start.t) * this.style.label_position);
+            return centre.add(this.auto_anchor(tangent).rotate(-this.angle()));
         }
 
         // For Bézier curves, we simply adjust up or down.

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A loop's label sits where TikZ puts it: TikZ picks a corner or side of the label's node from the loop's direction and sets it on the loop, so a label inside a loop (`'`) sits in the loop rather than over the cell.
 - An arrow between wide labels shows its label when the diagram opens. Before the columns were sized, such labels overlapped, so the arrow could not be drawn and had no label to render into, and the label stayed blank until it was edited.
 - The help says what each key does in a word or two: `;` "list the commands", RET "edit the label", and C-arrows "move, bend, or turn the selection", say. The docs give the detail.
 - In a browser that gives a page no folders, such as Firefox, `:open-folder` says only "open-folder not available on this browser", in the mode line.
