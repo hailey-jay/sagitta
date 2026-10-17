@@ -27,8 +27,6 @@ const SETTINGS = {
         "ui.dark_mode": false,
         // The zoom the view starts at, and that `reset-zoom` returns to, in percent.
         "ui.zoom": 100,
-        // The width and height of an empty column or row, in pixels, which they grow from.
-        "ui.cell_size": 128,
         // The size of the labels, in pixels.
         "ui.label_size": 26,
         // How long the command layer waits for a key before listing its keys, in milliseconds,
@@ -44,7 +42,6 @@ const SETTINGS = {
     /// The numbers a numeric setting may be, as `[least, most]`.
     ranges: {
         "ui.zoom": [20, 200],
-        "ui.cell_size": [48, 512],
         "ui.label_size": [8, 72],
         "ui.which_key_delay": [0, 5000],
     },

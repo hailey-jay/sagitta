@@ -508,13 +508,22 @@ Layer.Export = class extends Layer {
             const { SEP_STEP, SEP_TICKS } = Layer.Export;
             const ticks = Math.round(ui.sep[axis] / SEP_STEP)
                 + (key === key.toLowerCase() ? 1 : -1);
-            ui.sep[axis] = Number(
-                (Math.min(Math.max(ticks, 1), SEP_TICKS) * SEP_STEP).toFixed(2)
-            );
+            // Assigned whole, so that the grid is laid out afresh (see `UI.sep`).
+            ui.sep = {
+                ...ui.sep,
+                [axis]: Number((Math.min(Math.max(ticks, 1), SEP_TICKS) * SEP_STEP).toFixed(2)),
+            };
         } else {
             switch (key) {
-                case "y":
                 case "Enter":
+                    if (this.saving) {
+                        this.leave();
+                        this.ui.file.save(null);
+                        break;
+                    }
+                    this.copy();
+                    break;
+                case "y":
                     this.copy();
                     break;
                 case "Escape":
@@ -751,7 +760,6 @@ Layer.Settings.GROUPS = [
     ["View", [
         ["d", "ui.dark_mode", "dark mode"],
         ["z", "ui.zoom", "zoom to start at"],
-        ["c", "ui.cell_size", "cell size"],
         ["l", "ui.label_size", "label size"],
     ]],
     ["Keys", [
@@ -770,7 +778,6 @@ Layer.Settings.GROUPS = [
 /// How far each step moves the numeric settings, which are typed or stepped (see `step`).
 Layer.Settings.STEPS = {
     "ui.zoom": 10,
-    "ui.cell_size": 16,
     "ui.label_size": 2,
     "ui.which_key_delay": 100,
 };
@@ -778,7 +785,6 @@ Layer.Settings.STEPS = {
 /// The units the numeric settings are listed in.
 Layer.Settings.UNITS = {
     "ui.zoom": "%",
-    "ui.cell_size": "px",
     "ui.label_size": "px",
     "ui.which_key_delay": " ms",
 };

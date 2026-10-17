@@ -320,14 +320,21 @@ class QuiverImportExport extends QuiverExport {
     }
 
     end_import(ui, imported_cells, centre_view = true) {
+        // The extent sizes the empty columns and rows, so it comes before the view is centred.
+        ui.update_extent?.();
         if (centre_view) {
             // Centre the view on the quiver.
             ui.centre_view();
-            // Also centre the focus point, so that it's centre of screen.
-            // We subtract 0.5 from the position so that when the view is centred perfectly between
-            // two cells, we prefer the top/leftmost cell.
+            // Also put the focus point in the middle of the diagram, by its cells, preferring the
+            // top and left of the middle two: columns differ in width, so the middle of the view
+            // can fall either side of a boundary between them.
             ui.focus_point.class_list.remove("smooth");
-            ui.reposition_focus_point(ui.grid.position_from_offset(ui.view.sub(Point.diag(0.5))));
+            const bounds = ui.quiver.bounding_rect();
+            ui.reposition_focus_point(bounds === null ? ui.grid.position_from_offset(ui.view)
+                : new Position(
+                    Math.floor((bounds[0][0] + bounds[1][0]) / 2),
+                    Math.floor((bounds[0][1] + bounds[1][1]) / 2),
+                ));
             ui.focus_point.class_list.add("focused");
             delay(() => ui.focus_point.class_list.add("smooth"));
         }

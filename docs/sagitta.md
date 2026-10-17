@@ -213,6 +213,17 @@ A gap with nothing at or beyond it is refused, rather than doing nothing quietly
 
 A connecting morphism is one arrow: curved (`; b`, and `; -` for dashed), or routed round the diagram (see Routes), as `examples/snake-lemma.tikzcd` draws $\delta$.
 
+## The canvas
+
+The canvas is drawn to look like the PDF: it lays the diagram out as tikz-cd does in a 10pt document, scaled so that labels are the size `ui.label_size` draws them.
+A column is as wide as its widest label, with the padding tikz-cd puts round it, and a gap: a third more than the column separation, as tikz-cd draws it.
+A row is the same, with the row separation as its gap.
+An empty column or row between the diagram's outermost cells and checkpoints is the gap alone, as in the PDF, so a route through one has the short legs it will have there.
+Beyond them, an empty column or row is as big as one holding a bullet, so the space around a diagram keeps still as it is drawn into, and only shrinks to the gap once the diagram reaches past it.
+The separations are the export layer's (`w` and `h` there), so changing them redraws the canvas.
+Curves, offsets, and a route's rounding are drawn at the size the export writes them.
+Loops are not yet.
+
 ## Settings
 
 Settings live in `~/.config/sagitta/settings.json`, or in `%APPDATA%\sagitta\settings.json` on Windows.
@@ -241,8 +252,7 @@ A value the setting cannot take is refused, with what it may be.
 | `ui.dark_mode` | `false` | the grey canvas |
 | `ui.spreadsheet_mode` | `false` | spreadsheet mode (see Keys): typing edits the label, and the command layer's keys need `;` |
 | `ui.zoom` | `100` | the zoom the view starts at, and `reset-zoom` returns to, in percent (20 to 200) |
-| `ui.cell_size` | `128` | the size of an empty column or row, in pixels (48 to 512) |
-| `ui.label_size` | `26` | the size of labels, in pixels (8 to 72) |
+| `ui.label_size` | `26` | the size of labels, in pixels (8 to 72), which the whole diagram is drawn to the scale of (see The canvas) |
 | `ui.which_key_delay` | `300` | how long `;` waits for a key before listing its keys in spreadsheet mode, in milliseconds (0 to 5000), or `null` for only on `?` |
 | `ui.which_key_compact` | `false` | list only the command layer's keys and their values, with what each does on hovering |
 | `ui.hint_characters` | `"ASDF...7890"` | the characters of the codes `/` selects cells by, in order |

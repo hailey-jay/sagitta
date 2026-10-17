@@ -58,6 +58,8 @@ class History {
         this.states.push(state);
         this.collapse = null;
 
+        // The diagram's extent may have changed, which the grid sizes empty cells by.
+        ui.update_extent?.();
         // Update the mode line (e.g. enabling Redo).
         ui.mode_line.update(ui);
         return true;
@@ -425,6 +427,7 @@ class History {
 
         // A change of rank, of the arrows' ends, or of where they lie may change the stacking.
         ui.restack();
+        ui.update_extent?.();
         ui.update_mark_region();
         if (update_selection) {
             ui.update_selection();

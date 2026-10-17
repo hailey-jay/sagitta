@@ -1432,7 +1432,9 @@ def test_the_view_starts_at_the_zoom_of_the_settings(sagitta, home):
     assert "50%" in sagitta("open", _diagram(home / "paper"))["mode_line"]
 
 
-def test_the_cell_and_label_sizes_come_from_the_settings(sagitta, home):
+def test_the_grid_is_laid_out_at_the_label_size(sagitta, home):
+    """As tikz-cd lays out the matrix, scaled to the labels: two letters at normal separation are
+    128px apart at 26px, and proportionally further at 40px."""
     def measure():
         layout = sagitta("layout", _diagram(home / "paper", PAIR), json.dumps({}))
         a, b = layout["vertices"]
@@ -1440,9 +1442,9 @@ def test_the_cell_and_label_sizes_come_from_the_settings(sagitta, home):
                        'getComputedStyle(document.querySelector(".vertex .label")).fontSize')
         return _centre(b)[0] - _centre(a)[0], size
 
-    assert measure() == (pytest.approx(128, abs=1), "26px")
-    _settings(home, '{"ui.cell_size": 200, "ui.label_size": 40}')
-    assert measure() == (pytest.approx(200, abs=1), "40px")
+    assert measure() == (pytest.approx(128, abs=2), "26px")
+    _settings(home, '{"ui.label_size": 40}')
+    assert measure() == (pytest.approx(128 * 40 / 26, abs=3), "40px")
 
 
 def test_bad_settings_are_reported_and_left_at_their_defaults(sagitta, home):
@@ -1519,19 +1521,19 @@ def _saved_settings(home):
 def test_the_settings_layer_changes_the_view_straight_away(sagitta, home):
     found = sagitta("script", _diagram(home / "paper", PAIR), json.dumps([
         ["press", ",", ["control"]],
-        *_presses("c", "2", "0", "0", "Enter", "l", "4", "0", "Enter"),
+        *_presses("l", "4", "0", "Enter"),
         ["wait", 300],
         ["eval", _PAIR_LAYOUT],
         *_presses("d", "z", "5", "0", "Enter"),
         ["eval", 'document.body.classList.contains("dark")'],
         ["eval", 'document.querySelector(".mode-line").textContent'],
     ]))
-    assert found[0] == [200, "40px"]
+    assert found[0][0] == pytest.approx(128 * 40 / 26, abs=3)
+    assert found[0][1] == "40px"
     assert found[1] is True
     assert "SETTINGS" in found[2] and "50%" in found[2]
     settings = _saved_settings(home)
-    assert (settings["ui.cell_size"], settings["ui.label_size"], settings["ui.zoom"]) \
-        == (200, 40, 50)
+    assert (settings["ui.label_size"], settings["ui.zoom"]) == (40, 50)
     assert settings["ui.dark_mode"] is True
 
 
@@ -1552,10 +1554,11 @@ def test_the_settings_layer_refuses_a_number_out_of_range(sagitta, home):
 
 def test_the_settings_buttons_step_their_settings(sagitta, home):
     result = sagitta("pointer", _diagram(home / "paper"), json.dumps(
-        [["press", ",", ["control"]], ["step", "cell size", "+"], ["step", "label size", "−"]]))
+        [["press", ",", ["control"]], ["step", "zoom to start at", "+"],
+         ["step", "label size", "−"]]))
     assert result["open"]
     settings = _saved_settings(home)
-    assert (settings["ui.cell_size"], settings["ui.label_size"]) == (144, 24)
+    assert (settings["ui.zoom"], settings["ui.label_size"]) == (110, 24)
 
 
 def test_the_command_list_waits_for_a_key_or_for_question_mark(sagitta, home):

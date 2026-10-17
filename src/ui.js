@@ -111,8 +111,62 @@ class UI {
         // The arrow options of the selection, and the edits the palette makes to them.
         this.arrow_options = new ArrowOptions();
 
-        // The diagram's column and row separation, in em.
-        this.sep = { column: 1.8, row: 1.8 };
+        // The diagram's column and row separation, in em, which the grid is laid out by (see
+        // `update_scale`).
+        this._sep = { column: 1.8, row: 1.8 };
+    }
+
+    /// The diagram's column and row separation, in em.
+    get sep() {
+        return this._sep;
+    }
+
+    /// Change the separations, which the grid is laid out by, as tikz-cd would lay the diagram out.
+    set sep(sep) {
+        this._sep = { ...sep };
+        if (this.container !== undefined) {
+            this.update_scale();
+            this.relayout();
+        }
+    }
+
+    /// Bring the grid's extent in line with the diagram's, its outermost cells and checkpoints,
+    /// laying it out afresh if that changed, since empty columns and rows beyond it are sized
+    /// differently from those within (see `Grid`).
+    update_extent() {
+        const xs = [];
+        const ys = [];
+        for (const cell of this.quiver.all_cells()) {
+            const points = cell.is_vertex() ? [cell.position.toArray()] : cell.options.route ?? [];
+            for (const [x, y] of points) {
+                xs.push(x);
+                ys.push(y);
+            }
+        }
+        const extent = xs.length === 0 ? null : {
+            x: [Math.min(...xs), Math.max(...xs)],
+            y: [Math.min(...ys), Math.max(...ys)],
+        };
+        if (JSON.stringify(extent) !== JSON.stringify(this.grid.extent)) {
+            this.grid.extent = extent;
+            this.relayout();
+        }
+    }
+
+    /// Size the grid as tikz-cd lays the diagram out, in a 10pt document, at the scale the labels
+    /// are drawn at: a pt is as many pixels as KaTeX draws a tenth of an em in. The gaps between
+    /// nodes follow the separations, and the arrows' curves, offsets, and rounding follow the
+    /// scale (see `Edge.arrow_style_for_options`). Call `relayout` after.
+    update_scale() {
+        const { EM, KATEX_SCALE, NODE_PADDING, GAP, BULLET } = CONSTANTS.TEX;
+        const px_per_pt = this.settings.get("ui.label_size") * KATEX_SCALE / EM;
+        Edge.PX_PER_PT = px_per_pt;
+        this.grid.gap = {
+            x: GAP.x * this.sep.column * EM * px_per_pt,
+            y: GAP.y * this.sep.row * EM * px_per_pt,
+        };
+        this.grid.padding = { x: NODE_PADDING.x * px_per_pt, y: NODE_PADDING.y * px_per_pt };
+        this.grid.bullet = { x: BULLET.x * px_per_pt, y: BULLET.y * px_per_pt };
     }
 
     /// Create the label input: the text field along the bottom that labels the selected cells, and
@@ -510,7 +564,7 @@ class UI {
 
         // Clear the quiver and update associated UI elements.
         this.clear_quiver();
-
+        this.update_extent();
     }
 
     /// Returns definitions of macros and colours that are recognised by LaTeX.
@@ -532,7 +586,7 @@ class UI {
         this.element.class_list.add("ui");
         document.body.classList.toggle("dark", this.settings.get("ui.dark_mode"));
         document.body.style.setProperty("--label-size", `${this.settings.get("ui.label_size")}px`);
-        this.grid.default_size = this.settings.get("ui.cell_size");
+        this.update_scale();
         this.scale = this.default_scale();
         this.switch_mode(UIMode.default);
 
@@ -594,7 +648,7 @@ class UI {
         this.pointer.initialise();
 
         // Centre the cell at (0, 0) in the view, which looks prettier.
-        this.pan_view(Offset.diag(this.grid.default_size / 2));
+        this.pan_view(new Offset(this.grid.gap.x / 2, this.grid.gap.y / 2));
 
         this.report_problems();
     }
@@ -1239,12 +1293,11 @@ class UI {
                 this.pan_view(Offset.zero());
                 break;
             case "ui.label_size":
+                // The labels set the scale the grid is laid out at.
                 document.body.style.setProperty("--label-size", `${value}px`);
-                this.render_maths(...this.quiver.all_cells());
-                break;
-            case "ui.cell_size":
-                this.grid.default_size = value;
+                this.update_scale();
                 this.relayout();
+                this.render_maths(...this.quiver.all_cells());
                 break;
             case "ui.hint_characters":
                 this.recode();
@@ -1296,7 +1349,7 @@ class UI {
     update_grid() {
         // Constants for parameters of the grid pattern.
         // The (average) length of the dashes making up the cell border lines.
-        const DASH_LENGTH = this.grid.default_size;
+        const DASH_LENGTH = this.grid.gap.x;
         // The border colour, which dark mode changes.
         const BORDER_COLOUR = getComputedStyle(document.body).getPropertyValue("--grid");
 
@@ -1334,7 +1387,7 @@ class UI {
             context.lineTo(x * scale + width / 2, height);
         }
         context.lineDashOffset
-            = offset.y * scale - dash_offset - height % (this.grid.default_size * scale) / 2;
+            = offset.y * scale - dash_offset - height % (this.grid.gap.y * scale) / 2;
         context.stroke();
 
         // Draw the horizontal lines.
@@ -1345,7 +1398,7 @@ class UI {
             context.lineTo(width, y * scale + height / 2);
         }
         context.lineDashOffset
-            = offset.x * scale - dash_offset - width % (this.grid.default_size * scale) / 2;
+            = offset.x * scale - dash_offset - width % (this.grid.gap.x * scale) / 2;
         context.stroke();
     }
 

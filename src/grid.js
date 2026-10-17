@@ -3,18 +3,57 @@
 /// and an `Offset` (pixels, measured from the corner of the cell at the origin). Where the grid
 /// sits in the window is the view's business (see `UI.pan_to` and `UI.offset_from_event`), as is
 /// drawing it (`UI.update_grid`).
+///
+/// It is laid out as tikz-cd lays out its matrix, so that the canvas looks like the PDF: a column
+/// is as wide as its widest node, its label with tikz-cd's padding, and a gap, so that neighbouring
+/// nodes are a gap apart, and an empty column is the gap alone. Rows are the same. `UI.update_scale`
+/// sets the gap and the padding from the separations and the label size.
+///
+/// That holds within the diagram's extent, between its outermost cells and checkpoints, where an
+/// empty column or row is the gap alone, as in the PDF. Beyond it, an empty one is as big as one
+/// holding a bullet, so that the space around a diagram does not change size as it is drawn into.
 class Grid {
     constructor() {
-        // The default (minimum) size of each column and row, if a width or height has not been
-        // specified.
-        this.default_size = 128;
+        // The space between neighbouring nodes, in pixels, across columns (`x`) and rows (`y`),
+        // which is all an empty column or row within the extent has.
+        this.gap = { x: 75, y: 57 };
+        // What a node adds to its label on each side, in pixels.
+        this.padding = { x: 14, y: 3 };
+        // The size of a bullet's node, in pixels, which an empty column or row beyond the extent
+        // takes.
+        this.bullet = { x: 44, y: 44 };
+        // The diagram's extent, as `{ x: [least, most], y: [least, most] }`, or `null` while it is
+        // empty (see `UI.update_extent`).
+        this.extent = null;
 
         this.clear();
     }
 
+    /// The size of an empty column (`axis` `"x"`) or row (`"y"`) at `index`: the gap, within the
+    /// extent, and a bullet's node and the gap beyond it.
+    empty_size(axis, index) {
+        const extent = this.extent?.[axis] ?? null;
+        const within = extent !== null && index >= extent[0] && index <= extent[1];
+        return this.gap[axis] + (within ? 0 : this.bullet[axis]);
+    }
+
+    /// The size of a node whose label measures `width` by `height`: nothing, for an empty label,
+    /// which tikz-cd draws no node for.
+    node_size(width, height) {
+        return new Dimensions(
+            width > 0 ? width + this.padding.x * 2 : 0,
+            height > 0 ? height + this.padding.y * 2 : 0,
+        );
+    }
+
+    /// The least size of a vertex's content, so that an empty one can still be clicked.
+    content_minimum() {
+        return Math.min(this.gap.x, this.gap.y) * 0.75;
+    }
+
     /// Forget every size, as when the diagram is cleared.
     clear() {
-        // The width of each column and the height of each row. Defaults to `default_size`.
+        // The width of each column and the height of each row. Defaults to the gap.
         this.widths = new Map();
         this.heights = new Map();
         // The constraints on the width and height of each cell: we use the maximum constraint for
@@ -26,9 +65,9 @@ class Grid {
 
     /// Get the width or height of a particular column or row. You should use this (or
     /// `column_width` and `row_height`) instead of directly accessing `widths` or `heights`, to
-    /// ensure it defaults to `default_size`.
+    /// ensure an empty one is the gap.
     size(sizes, index) {
-        return sizes.get(index) || this.default_size;
+        return sizes.get(index) ?? this.empty_size(sizes === this.widths ? "x" : "y", index);
     }
 
     /// The width of the column `x`.
@@ -167,19 +206,17 @@ class Grid {
     /// Resize the column and the row at `position` to fit the largest cell in each. Returns how
     /// much each grew, as `[delta_x, delta_y]`.
     fit(position) {
-        // We keep a margin around the content of each cell. This gives space for dragging them
-        // with the pointer.
-        const MARGIN = this.default_size * 0.5;
-
         // Compute how much a column or row size has changed and update the size.
-        const delta = (constraints, sizes, offset) => {
+        const delta = (constraints, sizes, offset, axis) => {
             // If we have just deleted a cell, there may be no constraint data for that offset,
             // in which case the maximum size is simply zero.
             const constraint_sizes = constraints.has(offset) ?
                 Array.from(constraints.get(offset)).map(([_, size]) => size) : [];
-            // The size of a column or row is determined by the largest cell.
+            // The size of a column or row is its largest node's, and the gap, which it shares
+            // half and half with each neighbour, as tikz-cd centres its nodes.
             const max_size = Math.max(0, ...constraint_sizes);
-            const new_size = Math.max(this.default_size, max_size + MARGIN);
+            const new_size = max_size > 0 ? max_size + this.padding[axis] * 2 + this.gap[axis]
+                : this.empty_size(axis, offset);
             const delta = new_size - this.size(sizes, offset);
 
             if (delta !== 0) {
@@ -190,8 +227,8 @@ class Grid {
         };
 
         return [
-            delta(this.width_constraints, this.widths, position.x),
-            delta(this.height_constraints, this.heights, position.y),
+            delta(this.width_constraints, this.widths, position.x, "x"),
+            delta(this.height_constraints, this.heights, position.y, "y"),
         ];
     }
 

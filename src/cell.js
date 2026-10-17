@@ -330,8 +330,8 @@ class Vertex extends Cell {
         // unimportant.
         this.shape = new Shape.RoundedRect(
             Point.zero(),
-            new Dimensions(ui.grid.default_size / 2, ui.grid.default_size / 2),
-            ui.grid.default_size / 8,
+            Dimensions.diag(ui.grid.content_minimum()),
+            ui.grid.content_minimum() / 4,
         );
         // This property is only relevant for edges. For vertices, it is always simply the shape.
         this.phantom_shape = this.shape;
@@ -402,8 +402,8 @@ class Vertex extends Cell {
         // Resize the content according to the grid cell. This is just the default size: it will be
         // updated by `render_maths`.
         this.content_element.set_style({
-            width: `${ui.grid.default_size / 2}px`,
-            height: `${ui.grid.default_size / 2}px`,
+            width: `${ui.grid.content_minimum()}px`,
+            height: `${ui.grid.content_minimum()}px`,
             left: `${cell_width / 2}px`,
             top: `${cell_height / 2}px`,
         });
@@ -433,13 +433,12 @@ class Vertex extends Cell {
         return this.label_size;
     }
 
-    /// Get the size of the cell content.
+    /// Get the size of the cell content: the node tikz-cd draws round the label, which arrows
+    /// stop at, or, for a small or empty label, enough to click.
     content_size(ui, sizes) {
-        const [width, height] = sizes;
-        return new Dimensions(
-            Math.max(ui.grid.default_size / 2, width + CONSTANTS.CONTENT_PADDING * 2),
-            Math.max(ui.grid.default_size / 2, height + CONSTANTS.CONTENT_PADDING * 2),
-        );
+        const node = ui.grid.node_size(...sizes);
+        const minimum = ui.grid.content_minimum();
+        return new Dimensions(Math.max(minimum, node.width), Math.max(minimum, node.height));
     }
 
     /// Resize the cell content to match the label width.
@@ -554,7 +553,7 @@ class Edge extends Cell {
 
         // All arrow styles support labels, shifting, and colour.
         style.label_position = options.label_position / 100;
-        style.shift = options.offset * CONSTANTS.EDGE_OFFSET_DISTANCE;
+        style.shift = options.offset * CONSTANTS.TEX.SHIFT * Edge.PX_PER_PT;
         style.colour = options.colour.css();
 
         switch (options.style.name) {
@@ -568,12 +567,22 @@ class Edge extends Cell {
                     case "bezier":
                         if (Edge.is_routed_for_options(options)) {
                             style.shape = CONSTANTS.ARROW_SHAPE.ROUTE;
-                            style.rounding = options.rounding * CONSTANTS.ROUNDING;
+                            // The radius the export writes, in the canvas's pixels.
+                            style.rounding = options.rounding * CONSTANTS.ROUNDING
+                                * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER
+                                * Edge.PX_PER_PT;
                             style.shift = 0;
                             break;
                         }
                         style.shape = CONSTANTS.ARROW_SHAPE.BEZIER;
-                        style.curve = options.curve * CONSTANTS.CURVE_HEIGHT * 2;
+                        // The export writes quiver's `curve={height=H}`, a cubic whose control
+                        // points are `H` from the line, and so whose middle is three quarters of
+                        // `H` from it; the canvas's quadratic, whose middle is half its control
+                        // point's height, is given the same middle, in the canvas's pixels.
+                        style.curve = 2 * 0.75 * options.curve * CONSTANTS.CURVE_HEIGHT
+                            * QuiverExport.tikz_multiplier(
+                                arrow.target.origin.sub(arrow.source.origin).angle())
+                            * Edge.PX_PER_PT;
                         break;
                     case "arc":
                         style.shape = CONSTANTS.ARROW_SHAPE.ARC;
@@ -1222,3 +1231,7 @@ class Edge extends Cell {
         this.flip(ui, true, true);
     }
 }
+
+/// How many of the canvas's pixels a pt of the TeX it exports to is, which the arrows' curves,
+/// offsets, and rounding are drawn by (see `UI.update_scale`).
+Edge.PX_PER_PT = 26 * CONSTANTS.TEX.KATEX_SCALE / CONSTANTS.TEX.EM;
