@@ -393,17 +393,20 @@ class ModeLine {
         }
         this.element.set_attributes({ "data-mode": kind });
 
-        // The diagram's file, marked `+` with unsaved changes.
+        // The diagram's file, marked `●` with unsaved changes, by more than its colour.
         ui.file.update();
         // Export options other than the defaults, which saving writes too, follow it.
         const differences = Layer.Export.differences(ui);
         this.element.query_selector(".file").clear()
-            .add(`${ui.file.name()}${ui.file.dirty ? " +" : ""}`)
+            .add(ui.file.name())
+            .add(ui.file.dirty ? new DOM.Element("span", {
+                class: "unsaved",
+                title: "Unsaved changes",
+            }).add(" ●") : "")
             .add(differences.length === 0 ? "" : new DOM.Element("span", {
                 class: "export-options",
                 title: "Export options, which saving writes too (C-e)",
-            }).add(` [${differences.join(", ")}]`))
-            .class_list.toggle("dirty", ui.file.dirty);
+            }).add(` [${differences.join(", ")}]`));
 
         // What typing would edit.
         this.element.query_selector(".target").clear().add(this.target(ui));
@@ -414,8 +417,10 @@ class ModeLine {
         // The queue of cells awaiting labels, and which of them Tab goes to next.
         ui.keys.mark_next_queued();
         const queued = ui.element.query_selector_all(".cell kbd.queue").length;
-        this.element.query_selector(".queue").clear()
-            .add(queued > 0 ? `TAB ${queued} queued` : "");
+        const queue = this.element.query_selector(".queue").clear();
+        if (queued > 0) {
+            queue.add(new DOM.Element("kbd").add("TAB")).add(` ${queued} queued`);
+        }
 
         // Hints and zoom buttons for disabled actions are greyed out.
         for (const element of this.element.query_selector_all("[data-action]")) {
@@ -431,7 +436,10 @@ class ModeLine {
     }
 
     /// The name of the input mode; any detail (e.g. the number being typed in the command layer),
-    /// or `null`; and the kind of mode, for styling (`type`, `layer`, `prompt`, or `other`).
+    /// or `null`; and the kind of mode, for styling: `rest`, with the command layer latched open
+    /// and nothing in it; `layer`, while keys are awaited, in the command layer or another;
+    /// `edit`, while a label is edited; `prompt`; `pending`, while a mark or a checkpoint waits;
+    /// or `pointer`, while the pointer moves, draws, or pans.
     mode(ui) {
         if (ui.in_mode(UIMode.Command)) {
             return [{
@@ -449,17 +457,20 @@ class ModeLine {
             [[UIMode.Pan], "PAN"],
         ]) {
             if (ui.in_mode(...modes)) {
-                return [name, null, "other"];
+                return [name, null, "pointer"];
             }
         }
         // A mark waiting for its other corner, or a checkpoint being carried, is state the user
         // cannot otherwise see, so it shows wherever the layer has nothing of its own to show.
         const pending = ui.mark !== null ? "MARK" : ui.carried !== null ? "CHECKPOINT" : null;
-        if (ui.keymap.active) {
-            const [name, detail] = ui.keymap.describe_layer();
+        if (!ui.keymap.active) {
+            return ["EDIT", pending, "edit"];
+        }
+        const [name, detail] = ui.keymap.describe_layer();
+        if (name !== ";" || ui.keymap.listed) {
             return [name, detail ?? pending, "layer"];
         }
-        return ["TYPE", pending, "type"];
+        return pending !== null ? [pending, null, "pending"] : ["NORMAL", null, "rest"];
     }
 
     /// The option value for an arrow component (e.g. `top-hook`), as in `Commands.STYLES`.

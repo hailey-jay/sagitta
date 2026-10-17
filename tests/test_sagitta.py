@@ -301,12 +301,12 @@ def test_a_label_is_typed_only_after_return(sagitta, home):
     diagram = _diagram(home / "paper")
     # `x` is the layer's crossing over, which wants an arrow, rather than a label.
     result = sagitta("typing", diagram, json.dumps(["x"]), expected_error="Select an arrow first")
-    assert result["mode_line"].startswith(";")
+    assert result["mode_line"].startswith("NORMAL")
     assert not result["editing"]
     assert "\tA & B" in diagram.read_text()
     # RET selects the whole label, so typing replaces it.
     result = sagitta("typing", diagram, json.dumps(["Enter", "x", "Enter"]))
-    assert result["mode_line"].startswith(";")
+    assert result["mode_line"].startswith("NORMAL")
     assert "\tx & B" in diagram.read_text()
 
 
@@ -317,7 +317,35 @@ def test_the_command_layer_stays_open(sagitta, home):
     assert '\\arrow["f", crossing over, from=1-1' in diagram.read_text()
     result = sagitta("keys", diagram, json.dumps([["Escape"]]))
     assert result["counts"]["selected"] == 0
-    assert result["mode_line"].startswith(";")
+    assert result["mode_line"].startswith("NORMAL")
+
+
+def test_the_badge_names_the_state_and_the_file_marks_unsaved_changes(sagitta, home):
+    script = """(() => {
+        const press = (key) => document.dispatchEvent(
+            new KeyboardEvent("keydown", { key, cancelable: true }));
+        const badge = () => {
+            ui.mode_line.update(ui);
+            const line = document.querySelector(".mode-line");
+            return [line.querySelector(".mode").textContent, line.dataset.mode,
+                line.querySelector(".file .unsaved") !== null];
+        };
+        const states = [badge()];
+        press(";");
+        states.push(badge());
+        press(";");
+        press("Enter");
+        states.push(badge());
+        const input = ui.label_input.element;
+        input.value = "x";
+        input.dispatchEvent(new Event("input"));
+        press("Enter");
+        states.push(badge());
+        return states;
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == [
+        ["NORMAL", "rest", False], [";", "layer", False], ["EDIT", "edit", False],
+        ["NORMAL", "rest", True]]
 
 
 @pytest.mark.parametrize("keys,main,submenu", [

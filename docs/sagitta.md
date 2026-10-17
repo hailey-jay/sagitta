@@ -45,6 +45,8 @@ Sagitta's keys work as quiver's do: the command layer stays open by itself, so i
 On an empty cell with nothing selected, RET makes a cell there to label.
 Backspace deletes, and ESC lets go of whatever the layer holds, then does what it does outside the layer.
 The layer's keys are listed only on `;`, never by waiting, though a list of choices, such as after `t`, shows at once.
+The mode line's badge says what the keys do now: `NORMAL` at rest; `;`, or what the layer is setting, such as `; CURVE`, while it awaits a key; `EDIT` while a label is edited; and `MARK` or `CHECKPOINT`, in yellow, while one waits.
+A `●` after the file's name marks unsaved changes.
 
 The rest live one key away:
 
