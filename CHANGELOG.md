@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The label input's `label` box is white, as the mode line's `EDIT` is, leaving pink to keys and the focus.
 - Dark mode's canvas is a darker grey, `#303030` (it was `#3c3c3c`), so that dark colours, such as the preset blue and grey, show a little better against it. White strokes stay well short of bleeding.
 - The label input's box reads `label` again after a code prompt. It kept the prompt's name after it, as `labelToggle`, cut short.
 - Keys work as in quiver, and only so: the command layer stays open by itself, so its keys work without `;`, and a label is typed only after RET. Spreadsheet mode, where typing edited the label, is gone, with `ui.quiver_mode`, `:quiver-mode`, and `ui.which_key_delay`, since `;` lists the command layer's keys at once. A settings file's old settings are ignored, and dropped the next time it is written.

@@ -289,14 +289,15 @@ line. It is only visible while focused. */
     width: calc(100% - 80px);
 }
 
-/* The prompt: "label" while editing, or the kind of prompt. */
+/* The prompt: "label" while editing, in white as the mode line's `EDIT` is, or the kind of prompt,
+   in blue. */
 .input-mode {
     display: inline-block;
     vertical-align: bottom;
     width: 80px; height: 32px;
     line-height: 32px;
 
-    background: var(--ui-accent);
+    background: var(--ui-white);
 
     font-family: monospace;
     font-size: 12pt;
