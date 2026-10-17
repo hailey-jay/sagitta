@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The interface dims what is secondary by one amount, and what is unavailable by another. The mode line's hints are a shade dimmer, and the completions' keys a shade brighter.
 - In a browser, the help says to use `:new` for a new diagram, since the browser keeps `C-n`.
 - The label input's `label` box is white, as the mode line's `EDIT` is, leaving pink to keys and the focus.
 - Dark mode's canvas is a darker grey, `#303030` (it was `#3c3c3c`), so that dark colours, such as the preset blue and grey, show a little better against it. White strokes stay well short of bleeding.

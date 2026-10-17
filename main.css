@@ -20,7 +20,11 @@
     --ui-hover: hsla(0, 0%, 100%, 0.1);
     --ui-active: hsla(0, 0%, 100%, 0.2);
     --ui-focus: var(--ui-accent);
-    --ui-text: hsla(0, 0%, 100%, 0.6);
+    /* What is secondary (hints, titles, and the chords beside keys) is dimmed by one amount, and
+       what is unavailable by another. */
+    --ui-dim: 0.6;
+    --ui-disabled: 0.3;
+    --ui-text: hsla(0, 0%, 100%, var(--ui-dim));
 
     /* The canvas: its background, the grid, and the ink that the default colour (black) is
        drawn in. Every other colour is drawn exactly. */
@@ -364,7 +368,7 @@ line. It is only visible while focused. */
 .prompt-completions kbd {
     margin-left: 12px;
 
-    opacity: 0.5;
+    opacity: var(--ui-dim);
 }
 
 /* Cells matching the `/` search. */
@@ -659,7 +663,7 @@ button.flash {
 }
 
 .mode-line button:disabled {
-    opacity: 0.35;
+    opacity: var(--ui-disabled);
 
     cursor: default;
 }
@@ -789,7 +793,7 @@ button.flash {
 }
 
 .mode-line .hint {
-    opacity: 0.7;
+    opacity: var(--ui-dim);
 }
 
 /* The hints other than the command layer's are in the help too, so they give their room to a
@@ -960,7 +964,7 @@ button.flash {
 .which-key .entry kbd.chord {
     min-width: 0;
 
-    opacity: 0.6;
+    opacity: var(--ui-dim);
 }
 
 .which-key .entry kbd.chord:empty {
@@ -1037,7 +1041,7 @@ button.flash {
 }
 
 .which-key.no-selection .needs-selection {
-    opacity: 0.3;
+    opacity: var(--ui-disabled);
 }
 
 /* The compact list: each line only its key and value (what it does shows on hovering), packed
