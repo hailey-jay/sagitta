@@ -1138,27 +1138,27 @@ Keymap.CONTEXT = new Enum(
         {
             combinations: [{ key: "Enter", context: Always }],
             press: (ui) => ui.keys.enter(),
-            help: [["Typing", "edit the label (selected whole), or label a new cell"]],
+            help: [["Typing", "edit the label"]],
         },
         // Without the modifier, which is the mark's (see `Bindings.DEFAULTS`).
         {
             combinations: [{ key: " ", shift: null, modifier: false }],
             press: (ui, event) => ui.keys.space(event),
             help: [
-                ["Typing", "create, connected to the selection, selecting the new arrows", "SPC"],
-                ["Typing", "select or deselect", "S-SPC"],
+                ["Typing", "new cell, connected", "SPC"],
+                ["Typing", "toggle in the selection", "S-SPC"],
             ],
         },
         // Shift cycles backwards.
         {
             combinations: [{ key: "Tab", shift: null, context: Always }],
             press: (ui, event) => ui.keys.tab(event),
-            help: [["Typing", "label the next, or previous, queued cell", "TAB S-TAB"]],
+            help: [["Typing", "next, or previous, queued cell", "TAB S-TAB"]],
         },
         {
             combinations: [{ key: "Escape", shift: null, context: Always }],
             press: (ui) => ui.keys.escape(),
-            help: [["Typing", "cancel, then deselect"]],
+            help: [["Typing", "cancel"]],
         },
         // Holding Option or Control pans (and releasing it stops).
         {
@@ -1181,10 +1181,9 @@ Keymap.CONTEXT = new Enum(
             })),
             press: (ui, event) => ui.keys.arrow(event),
             help: [
-                ["Moving", "move the focus point", "arrows"],
-                ["Moving", "select what it passes over", "S-arrows"],
-                ["Moving", "move the selection; bend or shift arrows; resize or turn loops",
-                    "C-arrows"],
+                ["Moving", "move", "arrows"],
+                ["Moving", "extend the selection", "S-arrows"],
+                ["Moving", "move, bend, or turn the selection", "C-arrows"],
             ],
         },
     ];
@@ -1196,32 +1195,32 @@ Keymap.CONTEXT = new Enum(
 Keymap.HELP_ELSEWHERE = {
     before: [
         // `UI.create_label_input` and `Delimiters.type`.
-        ["Typing", "pair, or wrap the selection, in a label", "( [ { | \\{ \\langle …"],
+        ["Typing", "pair brackets in a label", "( [ { | \\{ \\langle …"],
         // `Keymap.intercept_layer`.
-        ["Typing", "delete the selection", "DEL"],
-        ["Layers", "list the commands, whose keys work without ;", ";"],
-        ["Layers", "command line (TAB lists every command)", ":"],
-        ["Layers", "search labels, or type cell codes", (keymap) => ["/", keymap.describe_name(
+        ["Typing", "delete", "DEL"],
+        ["Layers", "list the commands", ";"],
+        ["Layers", "command line", ":"],
+        ["Layers", "search", (keymap) => ["/", keymap.describe_name(
             "search", ({ layer }) => !layer)].filter((keys) => keys !== "").join("  ")],
-        ["Layers", "colour arrows, or labels", (keymap) => ["colour", "label-colour"]
+        ["Layers", "colour", (keymap) => ["colour", "label-colour"]
             .map((name) => keymap.describe_name(name, ({ layer }) => layer))
             .filter((keys) => keys !== "").join("  ")],
     ],
     after: [
         // `Cell.initialise`, `Pointer`, and `Edge.initialise` (the ends' handles).
-        ["Mouse", "select; again to edit the label", "click"],
-        ["Mouse", "add to, or take from, the selection", "S-click"],
-        ["Mouse", "create a cell in an empty space", "click twice"],
-        ["Mouse", "draw an arrow from a cell (or empty space)", "drag"],
-        ["Mouse", "move a cell, held by the edge of its space", "drag edge"],
+        ["Mouse", "select, again to edit", "click"],
+        ["Mouse", "toggle in the selection", "S-click"],
+        ["Mouse", "new cell", "click twice"],
+        ["Mouse", "draw an arrow", "drag"],
+        ["Mouse", "move a cell", "drag edge"],
         ["Mouse", "reconnect an arrow", "drag its end"],
         // `Pointer.grab`.
-        ["Mouse", "move a selected arrow's checkpoint", "drag its ring"],
-        ["Mouse", "commands, as ; (click a line to run it)", "right-click"],
+        ["Mouse", "move a checkpoint", "drag its ring"],
+        ["Mouse", "list the commands", "right-click"],
         // `Pointer.scroll` and `Pointer.press`. The middle button drags from a cell as well as
         // from empty space, which the modifiers cannot.
         ["Mouse", "pan", "scroll"],
-        ["Mouse", "pan by dragging", "C-drag  A-drag  middle-drag"],
+        ["Mouse", "pan", "C-drag  A-drag  middle-drag"],
         ["Mouse", "zoom", "S-scroll  C-scroll"],
     ],
 };

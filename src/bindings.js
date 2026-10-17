@@ -396,11 +396,11 @@ Bindings.HANDLERS = {
     "paste": { press: (ui) => ui.keys.paste(), help: ["Chords", "paste"] },
     "mark": {
         press: (ui, event) => ui.keys.mark(event.shiftKey),
-        help: ["Typing", "mark a corner, then select to the focus point (with S-, add it)"],
+        help: ["Typing", "mark a region"],
     },
     "mark-add": {
         press: (ui) => ui.keys.mark(true),
-        help: ["Typing", "mark a corner, then add up to the focus point to the selection"],
+        help: ["Typing", "mark a region to add"],
     },
     "search": { press: (ui) => ui.keymap.search() },
     "select-at-focus": { press: (ui) => ui.keys.toggle_at_focus() },

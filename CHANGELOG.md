@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The help says what each key does in a word or two: `;` "list the commands", RET "edit the label", and C-arrows "move, bend, or turn the selection", say. The docs give the detail.
 - In a browser that gives a page no folders, such as Firefox, `:open-folder` says only "open-folder not available on this browser", in the mode line.
 - `:help` opens the help, for a browser where `C-/` and `<f1>` never reach the page.
 - A problem with the keys or settings file is reported in a few words, without the folder the file is in, and names the command that opens the file: `keys line 1: no command "sav" (+1 more, :keys-file)`.

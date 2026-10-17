@@ -311,9 +311,9 @@ Layer.Help = class extends Layer {
             ({ modifier, layer }) => !layer && Boolean(modifier) === (which === "chords"),
         ));
         const layers = {
-            "import": "import tikz-cd",
+            "import": "import",
             "macros": "macros",
-            "export": "export tikz-cd",
+            "export": "export",
             "settings": "settings",
             "shortcuts": null,
         };
