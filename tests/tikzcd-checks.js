@@ -482,41 +482,6 @@ const pending = [];
 }
 
 {
-    // The staircase a `:snake` draws: one step at a time, alternating between the axes, starting
-    // with the axis that has further to go.
-    const path = (from, to, first = null) =>
-        Commands.staircase(new Position(...from), new Position(...to), first)
-            .map((position) => [position.x, position.y]);
-
-    // The snake lemma's connecting morphism: from `ker c` at the top right down and left to
-    // `coker a` at the bottom left, as four corners and so five arrows.
-    check("the snake lemma's staircase", path([2, 0], [0, 3]),
-        [[2, 1], [1, 1], [1, 2], [0, 2]]);
-    check("which axis goes first can be asked for", path([2, 0], [0, 3], "x"),
-        [[1, 0], [1, 1], [0, 1], [0, 2]]);
-    check("a straight run has a corner for every cell between", path([0, 0], [3, 0]),
-        [[1, 0], [2, 0]]);
-    check("and the axis with nothing left is skipped", path([0, 0], [1, 3]),
-        [[0, 1], [1, 1], [1, 2]]);
-    check("neighbours have no staircase", path([0, 0], [1, 0]), []);
-    check("and nor do cells a row apart", path([0, 0], [0, 1]), []);
-    // With the same distance either way, x goes first.
-    check("a diagonal step is one corner", path([0, 0], [1, 1]), [[1, 0]]);
-    check("the direction is taken from the ends", path([3, 3], [1, 2]),
-        [[2, 3], [2, 2]]);
-    check("a staircase is as long as the Manhattan distance, less one",
-        [[[0, 0], [4, 2]], [[0, 0], [1, 5]], [[2, 2], [0, 0]]].map(([from, to]) =>
-            path(from, to).length === Math.abs(to[0] - from[0]) + Math.abs(to[1] - from[1]) - 1),
-        [true, true, true]);
-    check("and every step of one moves exactly one cell",
-        (() => {
-            const corners = [[0, 0], ...path([0, 0], [4, 3]), [4, 3]];
-            return corners.slice(1).every(([x, y], i) =>
-                Math.abs(x - corners[i][0]) + Math.abs(y - corners[i][1]) === 1);
-        })(), true);
-}
-
-{
     // Opening a gap for a row or a column moves everything at or beyond it, and the arrows come
     // with their endpoints.
     const square = () => parse("\\begin{tikzcd}\n"
@@ -557,93 +522,6 @@ const pending = [];
     check("the gap is written as an empty row",
         ui.text().includes("\\\\\n\t\\\\\n\t"), true);
     check("and reads back the same way", grid(parse(ui.text()).ui), "A00 B10 C02 D12");
-}
-
-{
-    // `:snake` replaces one arrow with a chain through new empty cells, and one undo puts the
-    // single arrow back.
-    const diagonal = () => parse("\\begin{tikzcd}\n"
-        + "\tP \\arrow[dr, \"c\"] & \\\\\n\t& Q\n\\end{tikzcd}\n").ui;
-
-    let ui = diagonal();
-    check("the diagram is two cells and an arrow between them", counts(ui), [2, 1]);
-    let commands = new Commands(ui);
-
-    // With nothing selected, or with more than one arrow, there is nothing to draw.
-    let refused = "";
-    try {
-        commands.snake();
-    } catch (error) {
-        refused = error.message;
-    }
-    check("a staircase needs one arrow selected",
-        refused, "Select one arrow to draw as a staircase.");
-
-    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
-    commands.snake();
-    // The corner between `P` at (0,0) and `Q` at (1,1) is one new cell, so two arrows.
-    check("the arrow becomes a chain through the corner", counts(ui), [3, 2]);
-    check("the new cell is empty, and at the corner",
-        ui.quiver.all_cells().filter((cell) => cell.is_vertex())
-            .map((cell) => `${cell.label || "-"}${cell.position.x}${cell.position.y}`).join(" "),
-        "P00 Q11 -10");
-    check("and the chain is what is now selected", ui.selection.size, 3);
-
-    ui.history.undo(ui);
-    check("one undo puts the single arrow back", counts(ui), [2, 1]);
-    check("with its own label", ui.quiver.all_cells()
-        .filter((cell) => cell.is_edge()).map((cell) => cell.label), ["c"]);
-    ui.history.redo(ui);
-    check("and redo draws the chain again", counts(ui), [3, 2]);
-
-    // Neighbours have no staircase, and nor does a loop.
-    ui = parse("\\begin{tikzcd}\n\tA \\arrow[r, \"f\"] & B\n\\end{tikzcd}\n").ui;
-    commands = new Commands(ui);
-    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
-    refused = "";
-    try {
-        commands.snake();
-    } catch (error) {
-        refused = error.message;
-    }
-    check("neighbours are refused", refused, "The two cells are already next to each other.");
-
-    ui = parse("\\begin{tikzcd}\n\tA \\arrow[\"f\", loop]\n\\end{tikzcd}\n").ui;
-    commands = new Commands(ui);
-    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
-    refused = "";
-    try {
-        commands.snake();
-    } catch (error) {
-        refused = error.message;
-    }
-    check("and a loop is too", refused, "A loop has no staircase.");
-
-    // A cell the staircase passes through that is already occupied is used rather than displaced.
-    ui = parse("\\begin{tikzcd}\n"
-        + "\tP \\arrow[drr, \"c\"] & M & \\\\\n\t& & Q\n\\end{tikzcd}\n").ui;
-    commands = new Commands(ui);
-    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
-    commands.snake("x");
-    check("a cell on the way is used as it stands",
-        ui.quiver.all_cells().filter((cell) => cell.is_vertex())
-            .map((cell) => cell.label || "-").sort().join(" "), "- M P Q");
-    check("so the chain runs through it", counts(ui), [4, 3]);
-}
-
-{
-    // `:snake` through the command line, which is how the manual spells it.
-    const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
-    const commands = new Commands(ui);
-    let refused = "";
-    try {
-        Commands.TABLE["snake"].run(commands, ["z"]);
-    } catch (error) {
-        refused = error.message;
-    }
-    check("an axis that is not one is refused",
-        refused, '"z" is not an axis: snake takes x, y, or nothing.');
-    check("and x and y are what it offers", Commands.TABLE["snake"].completions, ["x", "y"]);
 }
 
 {

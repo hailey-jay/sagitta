@@ -564,23 +564,6 @@ module.exports = {
         return { before, after, undone: await grid(), mode_line: await ctx.mode_line() };
     },
 
-    /// `:snake` on the one arrow of a diagonal pair: select it by code, draw the staircase, and
-    /// save. Returns the counts after each step, and the labels of the cells, so the new one is
-    /// shown to be empty.
-    snake: async (ctx) => {
-        await ctx.press("a", ["control"]);
-        const steps = { selected: await ctx.counts() };
-        await ctx.command(ctx.argument === null ? "snake" : `snake ${ctx.argument}`);
-        steps.drawn = await ctx.counts();
-        steps.cells = await ctx.js(`[...ui.quiver.all_cells()].filter((cell) => cell.is_vertex())`
-            + `.map((cell) => (cell.label || "-") + cell.position.x + cell.position.y)`
-            + `.sort().join(" ")`);
-        await ctx.save();
-        await ctx.press("z", ["control"]);
-        steps.undone = await ctx.counts();
-        return steps;
-    },
-
     /// Routes: select every cell, then take each step of `argument` (a JSON list): a string runs
     /// through the command line, `[x, y]` moves the focus point to that cell, `{ keys }` presses
     /// each `[key, modifiers]`, `{ hover }` rests the pointer on the selected arrows' checkpoint

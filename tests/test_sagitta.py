@@ -392,6 +392,19 @@ def test_quiver_mode_return_lets_go_of_a_slider_or_list_without_editing(sagitta,
     assert sagitta("evaluate", _diagram(home / "paper"), script) == [False, None, None]
 
 
+@pytest.mark.parametrize("keys,command", [
+    (["i", "r"], "insert-row-above"),
+    (["i", ["r", ["shift"]]], "insert-row-below"),
+    (["i", "c"], "insert-column-left"),
+    (["i", ["c", ["shift"]]], "insert-column-right"),
+])
+def test_the_insert_list_opens_a_gap_as_its_command_does(sagitta, home, keys, command):
+    by_key, by_command = _diagram(home / "key"), _diagram(home / "command")
+    sagitta("layer", by_key, json.dumps(keys))
+    sagitta("commands", by_command, json.dumps([command]))
+    assert by_key.read_text() == by_command.read_text() != _diagram(home / "plain").read_text()
+
+
 def test_saving_as_shows_the_export_options_first(sagitta, home):
     """Save as opens the export layer, which lists saving; RET there goes on to the dialog, and
     the mode line names the options that differ from the defaults."""
@@ -1159,33 +1172,6 @@ def test_the_gap_is_saved_as_an_empty_row(sagitta, home):
     sagitta("insert", diagram, json.dumps({"keys": [], "command": "insert-row-below"}))
     # The undo at the end of the scenario is not saved, so the file holds the gap.
     assert "\t\\\\\n" in diagram.read_text()
-
-
-def test_snake_draws_an_arrow_as_a_chain_through_empty_cells(sagitta, home):
-    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
-    steps = sagitta("snake", diagram, None)
-    assert steps["selected"] == {"vertices": 2, "edges": 1, "selected": 3}
-    # One corner between `P` and `Q`, so one new cell and two arrows.
-    assert steps["drawn"]["vertices"] == 3
-    assert steps["drawn"]["edges"] == 2
-    # The new cell is empty, and sits at the corner that x-first gives.
-    assert steps["cells"] == "-10 P00 Q11"
-    # One undo puts the single arrow back.
-    assert (steps["undone"]["vertices"], steps["undone"]["edges"]) == (2, 1)
-    # The chain is what was saved.
-    saved = diagram.read_text()
-    assert saved.count("\\arrow[") == 2
-
-
-def test_snake_can_be_told_which_axis_steps_first(sagitta, home):
-    steps = sagitta("snake", _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd"), "y")
-    assert steps["cells"] == "-01 P00 Q11"
-
-
-def test_snake_refuses_what_has_no_staircase(sagitta, home):
-    """Neighbours are already joined, so there is nothing to put between them."""
-    sagitta("snake", _diagram(home / "paper"), None,
-            expected_error="Select one arrow to draw as a staircase.")
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

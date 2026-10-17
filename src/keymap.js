@@ -881,7 +881,7 @@ class Keymap {
         if (this.component !== null && !this.opens(this.component, event)) {
             const choice = this.choices(this.component).find(([choice_key]) => choice_key === key);
             if (choice !== undefined) {
-                if (ui.selection_contains_edge()) {
+                if (this.applies(this.component)) {
                     choice[3]();
                     this.component = null;
                     this.render();
@@ -987,12 +987,24 @@ class Keymap {
         return edges.every((edge) => edge.is_routed()) ? "rounding" : property;
     }
 
-    /// What the list of `component` (`tail`, `body`, `head`, or `align`, the label alignment)
-    /// chooses between, as `[key, title, current, choose]` (see `Keymap.CHOICE_KEYS`).
+    /// Whether the list of `component` has anything to act on: the selected arrows, but for
+    /// `insert`, which opens a gap at the focus point.
+    applies(component) {
+        return component === "insert" || this.ui.selection_contains_edge();
+    }
+
+    /// What the list of `component` (`tail`, `body`, `head`, `align`, the label alignment, or
+    /// `insert`, a row or a column) chooses between, as `[key, title, current, choose]` (see
+    /// `Keymap.CHOICE_KEYS`).
     choices(component) {
         const ui = this.ui;
         const options = ui.arrow_options;
         const keys = Keymap.CHOICE_KEYS[component];
+        if (component === "insert") {
+            return Keymap.INSERTIONS.map(([command, title]) => [
+                keys[command], title, false, () => ui.commands.run(command),
+            ]);
+        }
         if (component === "align") {
             const current = options.label_alignment(ui);
             return Keymap.ALIGNMENTS.map(([value, title]) => [
@@ -1018,7 +1030,7 @@ class Keymap {
     /// List the choices of the selected arrows' `component` (see `choices`), entering the layer if
     /// need be, or stop listing them.
     choose_component(component) {
-        if (!this.ui.selection_contains_edge()) {
+        if (!this.applies(component)) {
             return;
         }
         if (!this.active) {
@@ -1334,6 +1346,9 @@ Keymap.WHICH_KEY = [
         ["align-centre", "align centre", "edge", "label_alignment:centre"],
         ["align-over", "align over", "edge", "label_alignment:over"],
     ]],
+    ["Grid", [
+        ["insert", "insert a row or column (r R c C)"],
+    ]],
     ["Select", [
         ["toggle-selection", "select or deselect, by code"],
         ["select-at-focus", "select at focus"],
@@ -1362,6 +1377,15 @@ Keymap.ALIGNMENTS = [
     ["right", "right"],
     ["centre", "centre, in a gap"],
     ["over", "over the arrow"],
+];
+
+/// What `; i` lists, as `[command, title]`: a gap for a row or a column at the focus point (see
+/// `Commands.insert`).
+Keymap.INSERTIONS = [
+    ["insert-row-above", "row above"],
+    ["insert-row-below", "row below"],
+    ["insert-column-left", "column left"],
+    ["insert-column-right", "column right"],
 ];
 
 /// The keys of the choices in each component's list, by value (see `choices`): `n` is none and `a`
@@ -1400,10 +1424,17 @@ Keymap.CHOICE_KEYS = {
         "centre": "c",
         "over": "o",
     },
+    // At the focus point, or with Shift, just after it.
+    insert: {
+        "insert-row-above": "r",
+        "insert-row-below": "R",
+        "insert-column-left": "c",
+        "insert-column-right": "C",
+    },
 };
 
 /// The titles of the choices' lists, where not the component's name.
-Keymap.CHOICE_TITLES = { align: "label alignment" };
+Keymap.CHOICE_TITLES = { align: "label alignment", insert: "insert at the focus point" };
 
 /// The command layer's keys that keep their meaning (see `intercept_layer`), by their names in
 /// `Keymap.WHICH_KEY`.

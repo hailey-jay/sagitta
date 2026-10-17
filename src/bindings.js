@@ -307,6 +307,9 @@ Bindings.DEFAULTS = {
     "align-centre": [],
     "align-over": [],
 
+    // A gap for a row or a column at the focus point, chosen from a list as the styles are.
+    "insert": ["; i"],
+
     // Presets (see `Commands.PRESETS`).
     "plain": ["; !"],
     "equals": ["; ="],
@@ -443,7 +446,7 @@ for (const [name, property] of [
 ]) {
     Bindings.HANDLERS[name] = { press: (ui) => ui.keymap.choose_property(property) };
 }
-for (const component of ["tail", "body", "head", "align"]) {
+for (const component of ["tail", "body", "head", "align", "insert"]) {
     Bindings.HANDLERS[component] = { press: (ui) => ui.keymap.choose_component(component) };
 }
 // Unlike their commands, these quietly do nothing without an arrow selected.
