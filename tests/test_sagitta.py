@@ -2089,10 +2089,14 @@ def test_the_keys_file_command_edits_the_keys_in_the_page(browser):
 
 def test_the_help_command_opens_the_help(browser):
     result = browser("""(async () => {
+        ui.prompt.open("Command");
+        ui.label_input.element.value = "hel";
+        const listed = ui.prompt.candidates().candidates;
+        ui.switch_mode(UIMode.default);
         ui.commands.run("help");
-        return ui.keymap.layer === ui.keymap.layers.help;
+        return [listed, ui.keymap.layer === ui.keymap.layers.help];
     })()""")
-    assert result is True
+    assert result == [["help"], True]
 
 # The origin's private file system stands in for a folder on disk: its handles need no picker, and
 # the browser grants them without asking. `PAPER` lays out a paper in it, with `macros.tex` at the

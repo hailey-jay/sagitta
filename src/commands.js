@@ -366,6 +366,12 @@ Commands.TABLE["save"] = {
     run: (commands, words) => commands.ui.file.save(words.length > 0 ? words.join(" ") : undefined),
 };
 
+// Open the help, for when a browser, or one of its extensions, keeps `C-/` and `<f1>`. It is a
+// command of its own rather than an alias of `shortcuts`, so that the completions list it.
+Commands.TABLE["help"] = {
+    run: (commands) => commands.ui.mode_line.run(commands.ui, "shortcuts"),
+};
+
 // Open the settings file, or the keys file, in the desktop's editor (in a browser, both, in the page).
 Commands.TABLE["settings-file"] = {
     run: (commands) => commands.ui.keymap.layers.settings.open_file(),
@@ -554,8 +560,6 @@ Commands.ALIASES = {
     "mapsto": "maps-to",
     "flip-label": "flip-labels",
     "all": "select-all",
-    // For when a browser, or one of its extensions, keeps `C-/` and `<f1>`.
-    "help": "shortcuts",
     "connected": "select-connected",
     "deselect": "deselect-all",
     "centre": "centre-view",
