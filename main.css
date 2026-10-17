@@ -44,8 +44,8 @@
 /* Dark mode (`:dark-mode`): a grey canvas, with the default colour drawn in white. It changes only how
    the diagram is shown, never the colours it holds or exports. */
 body.dark {
-    --canvas: #3c3c3c;
-    --grid: #484848;
+    --canvas: #303030;
+    --grid: #3e3e3e;
     --ink: white;
     --ink-faint: hsla(0, 0%, 100%, 0.1);
 
