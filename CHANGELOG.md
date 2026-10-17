@@ -20,6 +20,7 @@
 - A route's rounded corners are exported no larger than tikz-cd's shortest legs allow. TikZ rounds a corner by the full radius however short its legs, so a route next to an empty row or column overshot, and its arrowhead pointed back along the curve.
 - The canvas is drawn to look like the PDF. It lays the diagram out as tikz-cd does, scaled to the labels: a column is its widest label, with tikz-cd's padding, and a gap that follows the column separation, and an empty column or row between the diagram's outermost cells and checkpoints is the gap alone, as in the PDF. Beyond them, an empty one is as big as one holding a bullet, so the space around a diagram keeps still as it is drawn into; when a column or row changes between the two, it grows or shrinks over a moment, unless the system asks for reduced motion. Changing the separations in the export layer redraws it. Curves, offsets, and a route's rounding are drawn at the size the export writes, so a curve on the canvas bends as much as in the PDF. Saved files are unchanged.
 - `ui.cell_size` is gone, since the separations and `ui.label_size` now set the grid; an old `ui.cell_size` is ignored, and dropped the next time the settings file is written.
+- A message in the mode line keeps its room: the file, the target, and the arrow give way first, the key hints other than `; commands` give way while a message shows or the window is narrow, and an error sits on a line of its own above the mode line, wrapping rather than being cut short.
 
 ## 0.4.1
 

@@ -733,6 +733,16 @@ label input[type="checkbox"]:checked::before {
     margin-left: 8px;
 }
 
+/* What describes the diagram gives way first when the window is narrow, so that a message, which
+   is what is new, keeps its room. */
+.mode-line .file, .mode-line .target, .mode-line .arrow {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+}
+
 .mode-line .file {
     padding: 0 10px;
 
@@ -750,18 +760,13 @@ label input[type="checkbox"]:checked::before {
 
 .mode-line .target {
     max-width: 40vw;
-    overflow: hidden;
-
-    text-overflow: ellipsis;
 }
 
 .mode-line .arrow {
     max-width: 40vw;
     padding: 0 8px;
-    overflow: hidden;
 
     color: var(--ui-secondary);
-    text-overflow: ellipsis;
 }
 
 .mode-line .arrow:empty {
@@ -775,7 +780,8 @@ label input[type="checkbox"]:checked::before {
 }
 
 .mode-line .message {
-    min-width: 0;
+    flex-shrink: 0;
+    max-width: 60vw;
     padding: 0 8px;
     overflow: hidden;
 
@@ -783,12 +789,19 @@ label input[type="checkbox"]:checked::before {
     text-overflow: ellipsis;
 }
 
-/* Errors stay until dismissed (by Escape, or a click). */
+/* Errors stay until dismissed (by Escape, or a click), on a line of their own above the mode line,
+   which wraps rather than cutting them short. */
 .mode-line .message.error {
-    border-radius: 2px;
+    position: absolute;
+    left: 0; right: 0; bottom: 100%;
+    max-width: none;
+    padding: 4px 10px;
 
     background: var(--ui-error);
+
+    line-height: 16px;
     color: var(--ui-white);
+    white-space: normal;
 
     cursor: pointer;
 }
@@ -803,6 +816,18 @@ label input[type="checkbox"]:checked::before {
 
 .mode-line .hint {
     opacity: 0.7;
+}
+
+/* The hints other than the command layer's are in the help too, so they give their room to a
+   message, and to a narrow window. */
+.mode-line:has(.message:not(:empty):not(.error)) .hint:not(.layer) {
+    display: none;
+}
+
+@media (max-width: 1000px) {
+    .mode-line .hint:not(.layer) {
+        display: none;
+    }
 }
 
 .mode-line kbd {
