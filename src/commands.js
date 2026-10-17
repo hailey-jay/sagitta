@@ -554,6 +554,8 @@ Commands.ALIASES = {
     "mapsto": "maps-to",
     "flip-label": "flip-labels",
     "all": "select-all",
+    // For when a browser, or one of its extensions, keeps `C-/` and `<f1>`.
+    "help": "shortcuts",
     "connected": "select-connected",
     "deselect": "deselect-all",
     "centre": "centre-view",

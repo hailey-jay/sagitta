@@ -1990,6 +1990,14 @@ def test_the_keys_file_command_edits_the_keys_in_the_page(browser):
     })()""")
     assert result == 2
 
+
+def test_the_help_command_opens_the_help(browser):
+    result = browser("""(async () => {
+        ui.commands.run("help");
+        return ui.keymap.layer === ui.keymap.layers.help;
+    })()""")
+    assert result is True
+
 # The origin's private file system stands in for a folder on disk: its handles need no picker, and
 # the browser grants them without asking. `PAPER` lays out a paper in it, with `macros.tex` at the
 # top, a `.git` beside it, and a diagram a directory down, and hands it over as the picker would.
