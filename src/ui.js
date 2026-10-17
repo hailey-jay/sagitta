@@ -114,6 +114,11 @@ class UI {
         // The diagram's column and row separation, in em, which the grid is laid out by (see
         // `update_scale`).
         this._sep = { column: 1.8, row: 1.8 };
+
+        // Whether the diagram has been laid out since it was opened or emptied, after which a
+        // change of extent is animated, and the frame of that animation (see `animate_layout`).
+        this.layout_settled = false;
+        this.layout_frame = null;
     }
 
     /// The diagram's column and row separation, in em.
@@ -148,8 +153,14 @@ class UI {
             y: [Math.min(...ys), Math.max(...ys)],
         };
         if (JSON.stringify(extent) !== JSON.stringify(this.grid.extent)) {
+            // While drawing, a column or row a cell joins or leaves changes size as it is seen
+            // to, from the sizes it had before the extent changed, but a diagram opened, or
+            // emptied, is laid out at once.
+            const animate = extent !== null && !this.buffer_updates && this.layout_settled;
+            const before = animate ? this.layout_sizes(this.layout_range()) : null;
             this.grid.extent = extent;
-            this.relayout();
+            this.relayout(before);
+            this.layout_settled = extent !== null;
         }
     }
 
@@ -1316,21 +1327,93 @@ class UI {
     }
 
     /// Lay every cell out afresh, as when the size of an empty column or row changes: each column
-    /// and row fits its largest cell again, and everything is drawn where that puts it.
-    relayout() {
+    /// and row fits its largest cell again, and everything is drawn where that puts it. Given the
+    /// sizes `before` (see `layout_sizes`), the columns and rows in view grow or shrink from them
+    /// to their new sizes over a moment (see `animate_layout`), rather than at once.
+    relayout(before = null) {
+        this.fit_all();
+        const still = typeof matchMedia === "function"
+            && matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (before !== null && this.quiver.all_cells().length <= UI.ANIMATED_CELLS && !still) {
+            this.animate_layout(before, this.layout_sizes(before.range));
+            return;
+        }
+        this.draw_layout();
+    }
+
+    /// Fit every column and row to its cells afresh.
+    fit_all() {
+        cancelAnimationFrame(this.layout_frame);
         this.grid.widths.clear();
         this.grid.heights.clear();
-        const cells = this.quiver.all_cells();
-        for (const cell of cells) {
+        for (const cell of this.quiver.all_cells()) {
             if (cell.is_vertex()) {
                 this.grid.fit(cell.position);
             }
         }
-        for (const cell of this.quiver.transitive_dependencies(cells)) {
+    }
+
+    /// Draw every cell, the grid, and the focus point where the grid now puts them.
+    draw_layout() {
+        for (const cell of this.quiver.transitive_dependencies(this.quiver.all_cells())) {
             cell.render(this);
         }
         this.pan_view(Offset.zero());
         this.reposition_focus_point(this.focus_position);
+    }
+
+    /// The columns and rows whose sizes move what can be seen: those in view, and those between
+    /// them and the origin, which offsets are measured from, with a few to spare.
+    layout_range() {
+        const half = new Offset(document.body.offsetWidth, document.body.offsetHeight)
+            .div(2 * 2 ** this.scale);
+        const [low_x, low_y] = this.grid.col_row_from_offset(this.view.sub(half));
+        const [high_x, high_y] = this.grid.col_row_from_offset(this.view.add(half));
+        const SPARE = 2;
+        return {
+            x: [Math.min(0, low_x) - SPARE, Math.max(0, high_x) + SPARE],
+            y: [Math.min(0, low_y) - SPARE, Math.max(0, high_y) + SPARE],
+        };
+    }
+
+    /// The sizes of the columns and rows in `range`, as `{ range, x, y }`, where `x` and `y` map
+    /// each index to its size.
+    layout_sizes(range) {
+        const sizes = { range, x: new Map(), y: new Map() };
+        for (const [axis, size] of [["x", (i) => this.grid.column_width(i)],
+            ["y", (i) => this.grid.row_height(i)]]) {
+            for (let i = range[axis][0]; i <= range[axis][1]; ++i) {
+                sizes[axis].set(i, size(i));
+            }
+        }
+        return sizes;
+    }
+
+    /// Grow or shrink the columns and rows from the sizes `before` to the sizes `after`, easing
+    /// over `UI.LAYOUT_DURATION`, redrawing everything each frame, so that a column a cell
+    /// leaves or joins changes size as it is seen to, and the arrows keep up with their ends.
+    /// A later layout takes over from wherever this one has got to.
+    animate_layout(before, after) {
+        const start = performance.now();
+        const step = () => {
+            const t = Math.min((performance.now() - start) / UI.LAYOUT_DURATION, 1);
+            if (t < 1) {
+                // Smoothstep: slow out of the old sizes and into the new.
+                const eased = t * t * (3 - 2 * t);
+                for (const [axis, sizes] of [["x", this.grid.widths], ["y", this.grid.heights]]) {
+                    for (const [i, from] of before[axis]) {
+                        sizes.set(i, from + (after[axis].get(i) - from) * eased);
+                    }
+                }
+                this.draw_layout();
+                this.layout_frame = requestAnimationFrame(step);
+            } else {
+                // Fit afresh, rather than restoring `after`, in case a label was sized meanwhile.
+                this.fit_all();
+                this.draw_layout();
+            }
+        };
+        step();
     }
 
     /// Switch dark mode on or off, and remember it. Only how the diagram is shown changes.
@@ -1422,6 +1505,11 @@ class UI {
 
 /// The mode line of the UI, which shows errors (see `UI.display_error`), once initialised.
 UI.mode_line = null;
+
+/// The most cells a change of layout is animated for, since each frame redraws them all (see
+/// `UI.animate_layout`), and how long it takes, in milliseconds.
+UI.ANIMATED_CELLS = 300;
+UI.LAYOUT_DURATION = 150;
 
 /// The longest code an edge takes from its ends' codes (see `UI.recode`).
 UI.MAX_JOINED_CODE = 3;

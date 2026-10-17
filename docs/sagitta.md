@@ -220,6 +220,7 @@ A column is as wide as its widest label, with the padding tikz-cd puts round it,
 A row is the same, with the row separation as its gap.
 An empty column or row between the diagram's outermost cells and checkpoints is the gap alone, as in the PDF, so a route through one has the short legs it will have there.
 Beyond them, an empty column or row is as big as one holding a bullet, so the space around a diagram keeps still as it is drawn into, and only shrinks to the gap once the diagram reaches past it.
+That change, and its reverse, take a moment rather than happening at once, so that what moves is seen to move, unless the system asks for reduced motion, or the diagram has more than 300 cells.
 The separations are the export layer's (`w` and `h` there), so changing them redraws the canvas.
 Curves, offsets, and a route's rounding are drawn at the size the export writes them.
 Loops are not yet.
