@@ -122,83 +122,6 @@ class Commands {
         }], true);
     }
 
-    /// Replace the selected arrow with a chain of arrows through new empty cells along the
-    /// staircase between its ends, so that a connecting morphism drawn step by step (the snake
-    /// lemma marks four: lift, apply, pull back, project) is one command rather than a placement
-    /// apiece.
-    ///
-    /// The staircase steps one cell at a time, alternating between the axes and starting with
-    /// `first` (`"x"`, `"y"`, or `null` for whichever has further to go), so it is the Manhattan
-    /// path between the ends rather than a curve: sagitta has no waypoints on a single arrow, and
-    /// adding them would need a field the quiver round trip does not have.
-    ///
-    /// A cell the staircase passes through that already holds a vertex is used as it stands, rather
-    /// than displaced, so a staircase may be drawn through a diagram as well as around it.
-    snake(first = null) {
-        const ui = this.ui;
-        const edges = Array.from(ui.selection).filter((cell) => cell.is_edge());
-        if (edges.length !== 1) {
-            throw new Error("Select one arrow to draw as a staircase.");
-        }
-        const [edge] = edges;
-        const { source, target } = edge;
-        if (!source.is_vertex() || !target.is_vertex()) {
-            throw new Error("A staircase runs between two cells, not between arrows.");
-        }
-        if (source === target) {
-            throw new Error("A loop has no staircase.");
-        }
-        const corners = Commands.staircase(source.position, target.position, first);
-        if (corners.length === 0) {
-            throw new Error("The two cells are already next to each other.");
-        }
-        // The arrow being replaced is deleted, and the chain created, as one undoable step.
-        const created = new Set();
-        let previous = source;
-        for (const position of corners) {
-            const held = ui.positions.get(`${position}`);
-            const vertex = held ?? new Vertex(ui, "", position);
-            if (held === undefined) {
-                created.add(vertex);
-            }
-            created.add(Edge.create(ui, previous, vertex));
-            previous = vertex;
-        }
-        created.add(Edge.create(ui, previous, target));
-        ui.history.add(ui, [
-            { kind: "create", cells: created },
-            { kind: "delete", cells: ui.quiver.transitive_dependencies(new Set([edge])) },
-        ]);
-        ui.remove_cell(edge, ui.history.present);
-        ui.deselect();
-        ui.select(...created);
-    }
-
-    /// The cells a staircase from `from` to `to` passes through, excluding both ends: one step at a
-    /// time, alternating between the axes, starting with `first` (or the axis with further to go).
-    static staircase(from, to, first = null) {
-        const step = {
-            x: Math.sign(to.x - from.x),
-            y: Math.sign(to.y - from.y),
-        };
-        const left = { x: Math.abs(to.x - from.x), y: Math.abs(to.y - from.y) };
-        let axis = first ?? (left.y > left.x ? "y" : "x");
-        const corners = [];
-        let at = from;
-        while (left.x + left.y > 1) {
-            // An axis with nothing left to go is skipped, so the path ends in a straight run.
-            if (left[axis] === 0) {
-                axis = axis === "x" ? "y" : "x";
-            }
-            at = axis === "x"
-                ? new Position(at.x + step.x, at.y) : new Position(at.x, at.y + step.y);
-            --left[axis];
-            corners.push(at);
-            axis = axis === "x" ? "y" : "x";
-        }
-        return corners;
-    }
-
     /// The selected edges a route can be given: not loops, and only those with a vertex at each
     /// end, since a route is a path between cells. Throws if there are none.
     routable() {
@@ -443,6 +366,20 @@ Commands.TABLE["save"] = {
     run: (commands, words) => commands.ui.file.save(words.length > 0 ? words.join(" ") : undefined),
 };
 
+// Open the help, for when a browser, or one of its extensions, keeps `C-/` and `<f1>`. It is a
+// command of its own rather than an alias of `shortcuts`, so that the completions list it.
+Commands.TABLE["help"] = {
+    run: (commands) => commands.ui.mode_line.run(commands.ui, "shortcuts"),
+};
+
+// Open the settings file, or the keys file, in the desktop's editor (in a browser, both, in the page).
+Commands.TABLE["settings-file"] = {
+    run: (commands) => commands.ui.keymap.layers.settings.open_file(),
+};
+Commands.TABLE["keys-file"] = {
+    run: (commands) => commands.ui.keymap.layers.settings.open_keys(),
+};
+
 /// `:set SETTING VALUE` names a setting and the value to give it, which the settings layer (`C-,`)
 /// cannot: it steps a number by key. With no value, the line says what the setting holds. Settings
 /// are not part of the diagram, so a change here is not undoable, as it is not in the layer.
@@ -484,17 +421,6 @@ for (const [name, axis, after] of [
         run: (commands) => commands.insert(axis, commands.ui.focus_position[axis] + after),
     };
 }
-
-Commands.TABLE["snake"] = {
-    arguments: true,
-    completions: ["x", "y"],
-    run: (commands, [first]) => {
-        if (first !== undefined && !["x", "y"].includes(first.toLowerCase())) {
-            throw new Error(`"${first}" is not an axis: snake takes x, y, or nothing.`);
-        }
-        commands.snake(first === undefined ? null : first.toLowerCase());
-    },
-};
 
 /// `route x` and `route y` bend the selected arrows round one corner, going along a row or a column
 /// first, and `route none` straightens them. With nothing, it steps through those three.

@@ -106,9 +106,9 @@ class Keys {
             }
             ui.switch_mode(UIMode.default);
         } else if (!this.put_down(true)) {
-            // With no checkpoint to put down, toggle the focus of the label input. Focusing edits
-            // the label in place (typing a character instead replaces it: see `Keymap.after`). On
-            // an empty cell with nothing selected, there is no label to edit, so make the cell.
+            // With no checkpoint to put down, toggle the focus of the label input. Focusing selects
+            // the whole label, so typing replaces it and an arrow key edits it in place. On an
+            // empty cell with nothing selected, there is no label to edit, so make the cell.
             const input = ui.label_input.element;
             if (document.activeElement !== input) {
                 if (ui.keymap.edit_target(ui.selection.size === 0)) {
@@ -123,33 +123,30 @@ class Keys {
     }
 
     /// The queued cell Tab goes to next (going backwards when `sign` is -1): the first in the queue
-    /// after any selected cell (queued or not), or `null` if no other cell is queued.
+    /// after any selected cell (queued or not), or `null` if no other cell is queued. Of the cell
+    /// and arrows Space leaves selected, the cell is the one Tab goes on from, as RET labels it
+    /// (see `Keymap.drawn_to`).
     next_queued(sign = 1) {
         const ui = this.ui;
-        const unselected = Array.from(
-            ui.element.query_selector_all(".cell:not(.selected) kbd.queue")
-        );
-        if (unselected.length === 0) {
+        const drawn = Keymap.drawn_to(ui.selection);
+        const current = drawn !== null ? new Set([drawn]) : ui.selection;
+        const queued = (cell) => cell.element.query_selector("kbd.queue") !== null;
+        const cells = Array.from(ui.codes.values());
+        const waiting = cells.filter((cell) => !current.has(cell) && queued(cell));
+        if (waiting.length === 0) {
             return null;
         }
-        // Check there is a selected cell. If not, we will use the first or last queued cell.
-        if (ui.element.query_selector(".cell.selected kbd") === null) {
-            return ui.codes.get((
-                sign > 0 ? unselected[0] : unselected[unselected.length - 1]
-            ).get_attribute("data-code"));
+        // With nothing selected, the first or last queued cell.
+        const index = cells.findIndex((cell) => current.has(cell));
+        if (index === -1) {
+            return sign > 0 ? waiting[0] : waiting[waiting.length - 1];
         }
-        // Find the first queued cell after the first selected cell, cycling back to the start
-        // (or the end, going backwards) after the end.
-        const cells = Array.from(ui.codes.values());
-        const selected_index = cells.findIndex((cell) => {
-            return cell.element.class_list.contains("selected");
-        });
+        // The first queued cell after the first selected cell, cycling back to the start (or the
+        // end, going backwards) after the end.
         const count = cells.length;
         for (let step = 1; step < count; ++step) {
-            const cell = cells[((selected_index + sign * step) % count + count) % count];
-            if (!cell.element.class_list.contains("selected")
-                && cell.element.query_selector("kbd.queue") !== null
-            ) {
+            const cell = cells[((index + sign * step) % count + count) % count];
+            if (!current.has(cell) && queued(cell)) {
                 return cell;
             }
         }
@@ -173,6 +170,8 @@ class Keys {
         const ui = this.ui;
         if (ui.in_mode(UIMode.Default)) {
             ui.keymap.unchoose();
+            // Tab moves on to another cell, so arrows set aside while labelling stay out.
+            ui.keymap.set_aside = null;
             ui.cancel_creation();
             ui.focus_point.class_list.remove("focused", "smooth");
 
@@ -298,11 +297,10 @@ class Keys {
             return;
         }
 
-        // Unqueue queued cells.
-        if (ui.element.class_list.contains("show-queue")) {
-            for (const element of ui.element.query_selector_all("kbd.queue")) {
-                element.class_list.remove("queue");
-            }
+        // Unqueue queued cells. Finishing a label stops showing the queue (see
+        // `UI.create_label_input`), so this goes by the queue rather than by its being shown.
+        for (const element of ui.element.query_selector_all("kbd.queue")) {
+            element.class_list.remove("queue");
         }
     }
 
@@ -516,13 +514,19 @@ class Keys {
                         ui,
                         actions,
                     );
+                    // The arrows just drawn are selected with their target, so that a preset or a
+                    // style applies to them at once; RET still labels the target (see
+                    // `Keymap.edit_target`).
+                    ui.select(...edges);
                 } else {
                     const target = ui.positions.get(`${ui.focus_position}`);
+                    const edges = [];
                     selected.forEach(([, source]) => {
                         // The `target` vertex already exists, so it may already be selected.
                         // In this case, we do not want to try to connect it to itself.
                         if (source !== target) {
                             const edge = Edge.create(ui, source, target);
+                            edges.push(edge);
                             ui.history.add(
                                 ui,
                                 [{
@@ -535,7 +539,8 @@ class Keys {
                     if (!event.shiftKey && !event.metaKey && !event.ctrlKey) {
                         ui.deselect();
                     }
-                    ui.select(target);
+                    // As for a new target, the arrows just drawn are selected with it.
+                    ui.select(target, ...edges);
                 }
             } else {
                 // Move the focus point back to where it was the last time it was moved using

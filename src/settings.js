@@ -20,6 +20,16 @@ class Settings {
         // Whether `set` may rewrite the file, which it may not while the file is malformed, so
         // that a hand edit gone wrong is not lost.
         this.writable = true;
+
+        // The settings the file holds, which `follow` leaves alone.
+        this.saved = new Set();
+
+        // The settings that follow the system (see `follow`), which the file leaves out.
+        this.following = new Set();
+
+        // What the file holds that is not a setting here (a typo, or a newer version's setting),
+        // kept as it was, so that writing the file does not lose it.
+        this.unknown = {};
     }
 
     /// Read the saved settings over the defaults. A malformed file is ignored, and left alone, and
@@ -33,17 +43,24 @@ class Settings {
         try {
             saved = JSON.parse(text);
         } catch (_) {
-            this.problems.push("not valid JSON, so ignored, and left alone until it is fixed");
+            this.problems.push("not valid JSON, so ignored until fixed");
             this.writable = false;
             return;
         }
-        // Settings the app no longer has are ignored, and the next `set` drops them.
+        // Settings the app no longer has are ignored, and the next `set` drops them. Any other
+        // name is reported, and kept.
         for (const [setting, value] of Object.entries(saved)) {
+            if (Settings.RETIRED.has(setting)) {
+                continue;
+            }
             if (!Object.hasOwn(this.data, setting)) {
+                this.unknown[setting] = value;
+                this.problems.push(`unknown setting ${setting}`);
                 continue;
             }
             if (this.allows(setting, value)) {
                 this.data[setting] = value;
+                this.saved.add(setting);
             } else {
                 this.problems.push(`${setting} should be ${this.expected(setting)}`);
             }
@@ -68,7 +85,21 @@ class Settings {
     /// Saves a user setting. The file is rewritten as a whole, and the write is not waited on.
     set(setting, value) {
         this.data[setting] = value;
+        this.following.delete(setting);
+        this.saved.add(setting);
         this.write();
+    }
+
+    /// Take `value`, the system's (dark mode from its colour scheme, say), for a setting the file
+    /// does not hold, and keep taking it until the setting is set, leaving it out of the file till
+    /// then. Returns whether the setting follows the system.
+    follow(setting, value) {
+        if (this.saved.has(setting)) {
+            return false;
+        }
+        this.data[setting] = value;
+        this.following.add(setting);
+        return true;
     }
 
     /// The numbers a numeric setting may be, as `[least, most]`, or `undefined` if it is not one.
@@ -114,10 +145,20 @@ class Settings {
         return typeof expected === "function" ? expected() : expected;
     }
 
-    /// Write every setting to the file, unless it is malformed. Returns the write, to wait on.
+    /// Write every setting but those following the system to the file, with whatever it held that
+    /// is not a setting, unless it is malformed. Returns the write, to wait on.
     async write() {
         if (this.writable) {
-            await host.write_settings(`${JSON.stringify(this.data, null, 4)}\n`);
+            const data = Object.fromEntries(Object.entries(this.data)
+                .filter(([setting]) => !this.following.has(setting)));
+            Object.assign(data, this.unknown);
+            await host.write_settings(`${JSON.stringify(data, null, 4)}\n`);
         }
     }
 }
+
+/// The settings earlier versions had, which a file may still hold. They are ignored, and dropped the
+/// next time the file is written.
+Settings.RETIRED = new Set([
+    "ui.cell_size", "ui.quiver_mode", "ui.spreadsheet_mode", "ui.which_key_delay",
+]);

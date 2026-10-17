@@ -248,6 +248,8 @@ UIMode.Command = class extends UIMode {
             element.clear();
         }
         ui.label_input.element.blur();
+        // The prompt's name, which would otherwise follow "label" when the input next edits one.
+        ui.element.query_selector(".input-mode").clear();
         ui.update_selection();
         ui.mode_line.update(ui);
         ui.hide_if_unselected();

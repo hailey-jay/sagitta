@@ -154,12 +154,21 @@ class ArrowStyle {
         this.crossing_over = false;
         // The radius (in pixels) of the corners of a route.
         this.rounding = 0;
+        // A loop as TikZ draws it, as `{ out, in, distance }`: the angles (in radians, on the
+        // canvas) it leaves and comes back to its cell at, and how far (in pixels) its control
+        // points lie beyond the cell's border; or `null`, for the arc quiver draws.
+        this.loop = null;
     }
 }
 
 class Label {
     constructor() {
+        // The size of the label's node, as tikz-cd draws it: the box TeX sets the label in, and
+        // padding (see `UI.tex_box`).
         this.size = Dimensions.zero();
+        // How far the middle of that box is from the middle of the label's element, which the
+        // element is moved back by, so that the box is in the middle of the node.
+        this.shift = Point.zero();
         this.alignment = CONSTANTS.LABEL_ALIGNMENT.CENTRE;
         this.element = null;
     }
@@ -178,6 +187,9 @@ Shape.RoundedRect = class extends Shape {
         this.origin = origin;
         this.size = size;
         this.radius = radius;
+        // Where the middle of the rectangle is from its origin, which a tikz-cd cell puts on the
+        // maths axis (see `Vertex.resize_content`).
+        this.offset = Point.zero();
     }
 }
 
@@ -256,9 +268,15 @@ class Arrow {
         const length = this.length();
         switch (this.style.shape) {
             case CONSTANTS.ARROW_SHAPE.BEZIER:
-                return new Bezier(origin, length, this.style.curve, angle);
+                if (this.style.curve === 0) {
+                    return new Bezier(origin, length, 0, angle);
+                }
+                return this.tikz_curve(origin, angle);
             case CONSTANTS.ARROW_SHAPE.ARC:
                 if (this.source === this.target) {
+                    if (this.style.loop !== null) {
+                        return this.tikz_loop(origin, angle);
+                    }
                     return new Arc(origin, length, true, this.style.curve, angle);
                 }
                 return this.arc_for_chord(origin, length, this.style.curve, angle);
@@ -272,6 +290,63 @@ class Arrow {
                 return new Route(origin, points, this.style.rounding, angle);
             }
         }
+    }
+
+    /// Where a line from the centre of `shape` leaving at `direction` (on the canvas) meets its
+    /// border, from the centre, as TikZ finds a rectangular node's border: the centre itself for
+    /// a point. The centre is the shape's origin, which a tikz-cd cell puts on the maths axis
+    /// rather than in the middle of its box (see `Vertex.resize_content`).
+    static border(shape, direction) {
+        if (shape instanceof Shape.Endpoint || shape.size.is_zero()) {
+            return Point.zero();
+        }
+        const [cos, sin] = [Math.cos(direction), Math.sin(direction)];
+        const { x, y } = shape.offset;
+        // How far the line goes to reach the side it leaves by, along each axis.
+        const reach = (component, middle, half) => Math.abs(component) > EPSILON
+            ? (middle + Math.sign(component) * half) / component : Infinity;
+        const distance = Math.min(
+            reach(cos, x, shape.size.width / 2),
+            reach(sin, y, shape.size.height / 2),
+        );
+        return Point.lendir(distance, direction);
+    }
+
+    /// The curve quiver's `curve={height=H}` draws, in the frame of the line from source to target:
+    /// a cubic whose control points are 0.35 and 0.65 of the way along that line and `H` to one
+    /// side of it (`this.style.curve` pixels), from the source's border towards the first to the
+    /// target's border towards the second, with lines in to the centres either side.
+    tikz_curve(origin, angle) {
+        const frame = this.angle();
+        const length = this.length();
+        const end = new Point(length, 0);
+        const controls = [0.35, 0.65].map((pos) => new Point(length * pos, this.style.curve));
+        const leave = Arrow.border(this.source, controls[0].angle() + frame).rotate(-frame);
+        const enter = end.add(Arrow.border(this.target, controls[1].sub(end).angle() + frame)
+            .rotate(-frame));
+        return new Spline(origin, [
+            [Point.zero(), leave], [leave, ...controls, enter], [enter, end],
+        ], angle);
+    }
+
+    /// The loop TikZ draws for `loop, out=..., in=..., distance=...`, in the frame of the arrow:
+    /// from the cell's border at `out` to its border at `in`, with control points `distance`
+    /// beyond each in those directions, with lines in to the centre either side.
+    tikz_loop(origin, angle) {
+        const frame = this.angle();
+        const { out, distance } = this.style.loop;
+        const local = (direction) => direction - frame;
+        const leave = Arrow.border(this.source, out).rotate(-frame);
+        const enter = Arrow.border(this.source, this.style.loop.in).rotate(-frame);
+        const end = this.vector().rotate(-frame);
+        return new Spline(origin, [
+            [Point.zero(), leave],
+            [
+                leave, leave.add(Point.lendir(distance, local(out))),
+                enter.add(Point.lendir(distance, local(this.style.loop.in))), enter,
+            ],
+            [enter, end],
+        ], angle);
     }
 
     /// Returns the points along the Bézier curve associated to the arrow that intersect with the
@@ -303,7 +378,7 @@ class Arrow {
             // The following function call may throw an error, which should be caught by the caller.
             const intersections = curve.intersections_with_rounded_rectangle(
                 new RoundedRectangle(
-                    endpoint_origin,
+                    endpoint_origin.add(endpoint_shape.offset),
                     endpoint_shape.size,
                     endpoint_shape.radius,
                 ),
@@ -327,7 +402,8 @@ class Arrow {
             if (this.style.shape === CONSTANTS.ARROW_SHAPE.BEZIER) {
                 if (intersections.length > 1 && Curve.point_inside_polygon(
                         origin[prefer_min ? "target" : "source"],
-                        new RoundedRectangle(endpoint_origin, endpoint_shape.size, 0)
+                        new RoundedRectangle(endpoint_origin.add(endpoint_shape.offset),
+                            endpoint_shape.size, 0)
                             .points(),
                 )) {
                     // It's difficult to draw this case gracefully, so we bail out here too.
@@ -898,6 +974,12 @@ class Arrow {
                 xmlns: "http://www.w3.org/1999/xhtml",
                 class: "label",
             })).add_to(label);
+            // The box TeX sets the label in goes in the middle of the node, rather than the
+            // element, which is as tall as a line.
+            this.label.element.set_style({
+                transform: `translate(calc(-50% - ${this.label.shift.x}px), calc(-50% - ${
+                    this.label.shift.y}px))`,
+            });
             this.svg.add(label);
         }
     }
@@ -1479,6 +1561,28 @@ class Arrow {
         });
     }
 
+    /// Where TikZ's `auto` puts the label's centre, from the point of the curve it labels, given
+    /// the curve's direction there (`tangent`, in the arrow's frame): it picks the compass anchor
+    /// of the label's node, on the left of the curve (or the right, for `'`), from the sign of each
+    /// part of the direction, and sets that anchor on the point. The offset is on the canvas.
+    auto_anchor(tangent) {
+        const direction = Point.lendir(1, tangent + this.angle());
+        // TikZ's y-axis points up.
+        const [x, y] = [direction.x, -direction.y];
+        const sign = (value) => value > 0.05 ? 1 : value < -0.05 ? -1 : 0;
+        // The anchor, as a unit step east and north of the node's centre. Left of a curve going
+        // right, the node lies above it, so its anchor is on its south side; going right and up,
+        // the node lies up and to the left, so its anchor is the south east.
+        let [east, north] = sign(x) === 0 ? [y > 0 ? 1 : -1, 0] : [sign(y), -sign(x)];
+        // On the right, the anchor is the opposite one.
+        if (this.label.alignment === CONSTANTS.LABEL_ALIGNMENT.RIGHT) {
+            [east, north] = [-east, -north];
+        }
+        const { width, height } = this.label.size;
+        // The centre is the point less the anchor, on the canvas, whose y-axis points down.
+        return new Point(-east * width / 2, north * height / 2);
+    }
+
     /// Find the correct position of the label. If the label is centred, this is easy. However, if
     /// it is offset to either side, we want to find the minimum offset from the centre of the edge
     /// such that the label no longer overlaps the edge.
@@ -1496,6 +1600,11 @@ class Arrow {
         // want to adjust the label in the direct of the normal to the centre point of the label.
         if (this.style.shape === CONSTANTS.ARROW_SHAPE.ARC) {
             offset_angle = curve.tangent(this.style.label_position);
+        }
+        // A curve drawn as TikZ draws it turns, so the label is pushed off it where it is, as for
+        // an arc.
+        if (this.style.shape === CONSTANTS.ARROW_SHAPE.BEZIER && curve instanceof Spline) {
+            offset_angle = curve.tangent(start.t + (end.t - start.t) * this.style.label_position);
         }
         // A route turns, so the label is pushed off the leg it is on. TikZ puts it `pos` of the
         // way along one leg, which is where the canvas puts it too, so that the two agree; the
@@ -1516,6 +1625,16 @@ class Arrow {
                     offset_angle = to.sub(from).angle();
                 }
             }
+        }
+
+        // A loop's label goes where TikZ puts it, as no offset that keeps clear of the curve
+        // does: inside the loop, the nearest such offset lies over the cell, where the loop's ends
+        // leave a gap.
+        if (this.style.loop !== null && this.source === this.target && this.style.shape
+            === CONSTANTS.ARROW_SHAPE.ARC && [CONSTANTS.LABEL_ALIGNMENT.LEFT,
+            CONSTANTS.LABEL_ALIGNMENT.RIGHT].includes(this.label.alignment)) {
+            const tangent = curve.tangent(start.t + (end.t - start.t) * this.style.label_position);
+            return centre.add(this.auto_anchor(tangent).rotate(-this.angle()));
         }
 
         // For Bézier curves, we simply adjust up or down.
@@ -1564,8 +1683,12 @@ class Arrow {
             const intersections = curve
                 .intersections_with_rounded_rectangle(new RoundedRectangle(
                     rect_centre,
-                    this.label.size.add(Point.diag(edge_width)),
-                    edge_width / 2,
+                    // tikz-cd sets the node against the middle of the line, so only what the
+                    // edge has beyond a single line keeps the label further off. A rectangle of
+                    // no size has no sides to meet the line with.
+                    this.label.size.add(Point.diag(Math.max(edge_width - CONSTANTS.STROKE_WIDTH,
+                        1))),
+                    0,
                 ), true);
 
             if (intersections.length === 0) {

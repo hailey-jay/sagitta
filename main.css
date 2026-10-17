@@ -5,11 +5,14 @@
 }
 
 :root {
-    /* UI colours. */
+    /* UI colours. Each accent means one thing, so that a colour says what it marks. */
     --ui-black: hsl(0, 0%, 6%); /* Almost black. */
     --ui-white: hsl(0, 0%, 96%); /* Almost white. */
-    --ui-accent: #f8a7b7; /* Accent pink. */
-    --ui-secondary: #a7c8f8; /* Secondary accent blue: prompts, hints, and values. */
+    --ui-raised: hsl(0, 0%, 22%); /* The mode line's badge at rest. */
+    --ui-accent: #f8a7b7; /* Pink: keys, and what has the focus. */
+    --ui-secondary: #a7c8f8; /* Blue: prompts, cell codes, and values. */
+    --ui-warning: hsl(50, 100%, 70%); /* Yellow: what waits, unsaved changes or a mark. */
+    --ui-error: hsl(0, 50%, 50%);
 
     --ui-background: transparent;
     --ui-border: hsla(0, 0%, 100%, 0.2);
@@ -17,24 +20,26 @@
     --ui-hover: hsla(0, 0%, 100%, 0.1);
     --ui-active: hsla(0, 0%, 100%, 0.2);
     --ui-focus: var(--ui-accent);
-    --ui-text: hsla(0, 0%, 100%, 0.6);
-    --ui-error: hsl(0, 50%, 50%);
-    --ui-warning: hsl(50, 100%, 70%);
+    /* What is secondary (hints, titles, and the chords beside keys) is dimmed by one amount, and
+       what is unavailable by another. */
+    --ui-dim: 0.6;
+    --ui-disabled: 0.3;
+    --ui-text: hsla(0, 0%, 100%, var(--ui-dim));
 
     /* The canvas: its background, the grid, and the ink that the default colour (black) is
        drawn in. Every other colour is drawn exactly. */
     --canvas: white;
     --grid: #eee;
     --ink: black;
-    /* A faint wash, and faint text, of the ink. */
+    /* A faint wash of the ink. */
     --ink-faint: hsla(0, 0%, 0%, 0.1);
-    --ink-text: hsla(0, 0%, 0%, 0.4);
 
-    /* Cell states. */
+    /* Cell states. An arrow being drawn runs from the source, in blue, to the target, in the
+       focus's pink, so that its ends are told apart from the selection. */
     --cell-hover: hsla(0, 0%, 0%, 0.1);
     --cell-selected: hsla(0, 0%, 0%, 0.2);
-    --cell-source: hsla(0, 0%, 0%, 0.2);
-    --cell-target: hsla(0, 0%, 0%, 0.2);
+    --cell-source: color-mix(in srgb, var(--ui-secondary) 60%, transparent);
+    --cell-target: color-mix(in srgb, var(--ui-accent) 60%, transparent);
 
     /* The height of the mode line along the bottom of the window (0 when it is hidden). */
     --mode-line-height: 24px;
@@ -43,16 +48,15 @@
 /* Dark mode (`:dark-mode`): a grey canvas, with the default colour drawn in white. It changes only how
    the diagram is shown, never the colours it holds or exports. */
 body.dark {
-    --canvas: #3c3c3c;
-    --grid: #484848;
+    --canvas: #303030;
+    --grid: #3e3e3e;
     --ink: white;
     --ink-faint: hsla(0, 0%, 100%, 0.1);
-    --ink-text: hsla(0, 0%, 100%, 0.4);
 
     --cell-hover: hsla(0, 0%, 100%, 0.1);
     --cell-selected: hsla(0, 0%, 100%, 0.2);
-    --cell-source: hsla(0, 0%, 100%, 0.2);
-    --cell-target: hsla(0, 0%, 100%, 0.2);
+    --cell-source: color-mix(in srgb, var(--ui-secondary) 45%, transparent);
+    --cell-target: color-mix(in srgb, var(--ui-accent) 45%, transparent);
 }
 
 /* Arrows draw in their colour's exact `hsla`, as SVG attributes, which these override for black
@@ -132,10 +136,6 @@ kbd {
     width: 126px; height: 126px;
 
     background: hsla(0, 0%, 0%, 0);
-
-    text-align: center;
-    font: 16px Arial, sans-serif;
-    color: var(--ink-text);
 }
 
 .focus-point.revealed {
@@ -148,21 +148,7 @@ kbd {
 }
 
 .focus-point.smooth {
-    transition: left 0.1s, top 0.1s, width 0.1s, height 0.1s, padding-top 0.1s;
-}
-
-.focus-point::before {
-    visibility: hidden;
-    position: relative;
-    top: -8px;
-}
-
-.focus-point.active::before {
-    content: "Add edge";
-}
-
-.focus-point.revealed::before {
-    visibility: visible;
+    transition: left 0.1s, top 0.1s, width 0.1s, height 0.1s;
 }
 
 /* The rectangle from the mark to the focus point, and the cells it would take. */
@@ -204,7 +190,8 @@ kbd {
     text-align: center;
 }
 
-.grid:not(.hidden) + .container .vertex.empty:not(.selected) .content:not(:hover) {
+.grid:not(.hidden) + .container .vertex.empty:not(.selected) .content:not(:hover),
+.ui.keyboard .grid:not(.hidden) + .container .vertex.empty:not(.selected) .content {
     border: var(--cell-hover) 2px solid;
 }
 
@@ -212,22 +199,24 @@ kbd {
     cursor: default;
 }
 
-/* This is so explicit because of the CSS specificity rules. */
-.ui.default .vertex:not(.selected):not(.source):not(.target) .content:hover,
-.ui.command .vertex:not(.selected):not(.source):not(.target) .content:hover {
+/* This is so explicit because of the CSS specificity rules. While the keys are in use
+   (`.keyboard`, see `Pointer.initialise`), nothing is highlighted for the pointer resting on it. */
+.ui.default:not(.keyboard) .vertex:not(.selected):not(.source):not(.target) .content:hover,
+.ui.command:not(.keyboard) .vertex:not(.selected):not(.source):not(.target) .content:hover {
     background: var(--cell-hover);
 }
 
+.vertex.selected .content {
+    background: var(--cell-selected);
+}
+
+/* After the selection, which the cell an arrow is drawn from usually has. */
 .vertex.source .content {
     background: var(--cell-source);
 }
 
 .vertex.target .content {
     background: var(--cell-target);
-}
-
-.vertex.selected .content {
-    background: var(--cell-selected);
 }
 
 /* Labels in the default colour have no colour of their own (see `Cell.initialise`). */
@@ -260,7 +249,8 @@ line. It is only visible while focused. */
     left: 0; right: 0;
     bottom: var(--mode-line-height);
     height: 32px;
-    z-index: 150;
+    /* Above the mode line's error, so the completions cover it rather than it them. */
+    z-index: 151;
 
     background: var(--ui-black);
 
@@ -291,30 +281,31 @@ line. It is only visible while focused. */
     outline: none;
 
     font-family: monospace;
-    font-size: 14pt;
+    font-size: 18px;
     color: inherit;
     text-align: left;
 }
 
 .label-input:hover:not(:disabled):not(:focus) {
-    background: hsla(0, 0%, 15%, 0.9);
+    background: var(--ui-hover);
 }
 
 .label-input:focus {
     width: calc(100% - 80px);
 }
 
-/* The prompt: "label" while editing, or the kind of prompt. */
+/* The prompt: "label" while editing, in white as the mode line's `EDIT` is, or the kind of prompt,
+   in blue. */
 .input-mode {
     display: inline-block;
     vertical-align: bottom;
     width: 80px; height: 32px;
     line-height: 32px;
 
-    background: var(--ui-accent);
+    background: var(--ui-white);
 
     font-family: monospace;
-    font-size: 12pt;
+    font-size: 16px;
     color: var(--ui-black);
     text-align: center;
 }
@@ -348,7 +339,7 @@ line. It is only visible while focused. */
     border-bottom: var(--ui-border) solid 1px;
 
     font-family: monospace;
-    font-size: 11pt;
+    font-size: 14px;
 }
 
 .prompt-completions.hidden {
@@ -378,7 +369,7 @@ line. It is only visible while focused. */
 .prompt-completions kbd {
     margin-left: 12px;
 
-    opacity: 0.5;
+    opacity: var(--ui-dim);
 }
 
 /* Cells matching the `/` search. */
@@ -389,7 +380,9 @@ line. It is only visible while focused. */
 }
 
 .label-input::selection {
-    background-color: white;
+    background: var(--ui-white);
+
+    color: var(--ui-black);
 }
 
 .label-input-container .colour-indicator {
@@ -418,16 +411,6 @@ input[type="text"].flash {
         box-shadow: 0 0 0 var(--ui-accent);
     }
 }
-
-.slider:not(.disabled):not(.focused) .thumb.hover,
-.slider.symmetric:not(.disabled):not(.focused):hover .thumb,
-.linked-sliders.linked:hover .thumb
-{
-    background: hsl(0, 0%, 20%);
-}
-
-.slider:not(.disabled):not(.focused) .thumb.active,
-.slider.symmetric:not(.disabled):not(.focused).active .thumb,
 
 kbd.hint {
     position: absolute;
@@ -516,36 +499,6 @@ button.flash {
     }
 }
 
-label input[type="checkbox"] {
-    margin-top: -1px;
-    margin-right: 6pt;
-    width: 12pt;
-    height: 12pt;
-    vertical-align: middle;
-
-    -webkit-appearance: none;
-    appearance: none;
-    background: var(--ui-white);
-    border-radius: 2px;
-    outline: none;
-}
-
-label input[type="checkbox"]:hover {
-    background: hsl(0, 0%, 80%);
-}
-
-label input[type="checkbox"]:checked {
-    background: var(--ui-focus);
-
-    text-align: center;
-}
-
-label input[type="checkbox"]:checked::before {
-    content: "✓";
-
-    color: var(--ui-black);
-}
-
 /* Arrows */
 
 .arrow > svg {
@@ -614,20 +567,36 @@ label input[type="checkbox"]:checked::before {
 }
 
 .arrow:not(.target):not(.selected):not(.in-mark) > svg:first-child:not(:hover) > .arrow-background,
+.ui.keyboard .arrow:not(.target):not(.selected):not(.in-mark) > svg:first-child > .arrow-background,
 .ui.connect .cell:not(.target):not(.selected) > svg:first-child:hover > .arrow-background,
 .ui.pointer-move .cell:not(.selected) > svg:first-child:hover > .arrow-background {
     opacity: 0;
 }
 
-.arrow:not(.target):not(.selected) > svg:first-child:hover {
+.ui:not(.keyboard) .arrow:not(.target):not(.selected) > svg:first-child:hover {
     opacity: 0.1 !important;
+}
+
+/* An arrow an arrow is being drawn to is a target as a cell is, in pink. Its highlight is drawn in
+   black, faintly (see `Arrow.redraw`), so it is coloured, and made stronger, here. */
+.ui.connect .arrow.target > svg:first-child {
+    opacity: 0.6 !important;
+}
+
+.ui.connect .arrow.target > svg:first-child path.arrow-background {
+    stroke: var(--ui-accent);
+}
+
+.ui.connect .arrow.target > svg:first-child circle.arrow-background {
+    fill: var(--ui-accent);
 }
 
 .arrow-endpoint {
     display: none;
 }
 
-.ui.default .arrow:hover .arrow-endpoint, .ui.default .arrow.selected .arrow-endpoint {
+.ui.default:not(.keyboard) .arrow:hover .arrow-endpoint,
+.ui.default .arrow.selected .arrow-endpoint {
     display: block;
 }
 
@@ -644,8 +613,10 @@ label input[type="checkbox"]:checked::before {
 
 /* Arrow labels */
 
+/* tikz-cd sets labels in `\scriptstyle`, 0.7 of the cells' size, and KaTeX draws at 1.21 times its
+   font size, as it does for the cells. */
 .arrow .katex, .arrow .katex-error {
-    font-size: 1em;
+    font-size: calc(0.7 * 1.21em);
 }
 
 /* The mode line */
@@ -693,16 +664,19 @@ label input[type="checkbox"]:checked::before {
 }
 
 .mode-line button:disabled {
-    opacity: 0.35;
+    opacity: var(--ui-disabled);
 
     cursor: default;
 }
 
+/* The badge, by the kind of state it names (see `ModeLine.mode`): grey at rest, pink while keys
+   are awaited, white while a label is edited, blue in a prompt, yellow while something waits, and
+   light while the pointer moves, draws, or pans. */
 .mode-line .mode {
     min-width: 64px;
     padding: 0 10px;
 
-    background: hsl(0, 0%, 22%);
+    background: var(--ui-raised);
 
     text-align: center;
 }
@@ -713,44 +687,64 @@ label input[type="checkbox"]:checked::before {
     color: var(--ui-black);
 }
 
-.mode-line[data-mode="prompt"] .mode {
-    background: var(--ui-secondary);
-}
-
-.mode-line[data-mode="other"] .mode {
-    background: var(--ui-accent);
+.mode-line[data-mode="edit"] .mode {
+    background: var(--ui-white);
 
     color: var(--ui-black);
+}
+
+.mode-line[data-mode="prompt"] .mode {
+    background: var(--ui-secondary);
+
+    color: var(--ui-black);
+}
+
+.mode-line[data-mode="pending"] .mode {
+    background: var(--ui-warning);
+
+    color: var(--ui-black);
+}
+
+.mode-line[data-mode="pointer"] .mode {
+    background: var(--ui-active);
 }
 
 .mode-line .mode .detail {
     margin-left: 8px;
 }
 
-.mode-line .file {
-    padding: 0 10px;
+/* What describes the diagram gives way first when the window is narrow, so that a message, which
+   is what is new, keeps its room. */
+.mode-line .file, .mode-line .target, .mode-line .arrow {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
 
-    color: var(--ui-secondary);
+    text-overflow: ellipsis;
 }
 
-.mode-line .file.dirty {
-    color: var(--ui-accent);
+.mode-line .file {
+    padding: 0 10px;
+}
+
+.mode-line .file .unsaved {
+    color: var(--ui-warning);
+}
+
+/* The export options other than the defaults, which saving writes too. */
+.mode-line .file .export-options {
+    color: var(--ui-secondary);
 }
 
 .mode-line .target {
     max-width: 40vw;
-    overflow: hidden;
-
-    text-overflow: ellipsis;
 }
 
 .mode-line .arrow {
     max-width: 40vw;
     padding: 0 8px;
-    overflow: hidden;
 
     color: var(--ui-secondary);
-    text-overflow: ellipsis;
 }
 
 .mode-line .arrow:empty {
@@ -759,27 +753,42 @@ label input[type="checkbox"]:checked::before {
 
 .mode-line .queue {
     padding: 0 8px;
+}
 
-    color: var(--ui-accent);
+.mode-line .queue:empty {
+    display: none;
 }
 
 .mode-line .message {
-    min-width: 0;
+    flex-shrink: 0;
+    max-width: 60vw;
     padding: 0 8px;
     overflow: hidden;
 
-    color: var(--ui-secondary);
     text-overflow: ellipsis;
 }
 
-/* Errors stay until dismissed (by Escape, or a click). */
+/* Errors stay until dismissed (by Escape, or a click), on a line of their own above the mode line,
+   which wraps rather than cutting them short. */
 .mode-line .message.error {
-    border-radius: 2px;
+    position: absolute;
+    left: 0; right: 0; bottom: 100%;
+    max-width: none;
+    padding: 4px 10px;
 
     background: var(--ui-error);
+
+    line-height: 16px;
     color: var(--ui-white);
+    white-space: normal;
 
     cursor: pointer;
+}
+
+/* The minibuffer (the label input, and the prompts) takes the line above the mode line while it is
+   open, so an error moves up above it, under the list of completions. */
+body:has(.label-input-container:focus-within:not(.hidden)) .mode-line .message.error {
+    bottom: calc(100% + 32px);
 }
 
 .mode-line .message:empty {
@@ -791,7 +800,19 @@ label input[type="checkbox"]:checked::before {
 }
 
 .mode-line .hint {
-    opacity: 0.7;
+    opacity: var(--ui-dim);
+}
+
+/* The hints other than the command layer's are in the help too, so they give way before anything
+   else: where the mode line is short of room, those that do not fit wrap onto a line of their own,
+   which is out of sight, so that they drop off whole, from the right, and come back as room does. */
+.mode-line .hints {
+    display: flex;
+    flex-wrap: wrap;
+    flex-shrink: 100;
+    min-width: 0;
+    height: var(--mode-line-height);
+    overflow: hidden;
 }
 
 .mode-line kbd {
@@ -950,7 +971,7 @@ label input[type="checkbox"]:checked::before {
 .which-key .entry kbd.chord {
     min-width: 0;
 
-    opacity: 0.6;
+    opacity: var(--ui-dim);
 }
 
 .which-key .entry kbd.chord:empty {
@@ -1027,7 +1048,7 @@ label input[type="checkbox"]:checked::before {
 }
 
 .which-key.no-selection .needs-selection {
-    opacity: 0.3;
+    opacity: var(--ui-disabled);
 }
 
 /* The compact list: each line only its key and value (what it does shows on hovering), packed

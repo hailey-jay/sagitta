@@ -111,8 +111,84 @@ class UI {
         // The arrow options of the selection, and the edits the palette makes to them.
         this.arrow_options = new ArrowOptions();
 
-        // The diagram's column and row separation, in em.
-        this.sep = { column: 1.8, row: 1.8 };
+        // The diagram's column and row separation, in em, which the grid is laid out by (see
+        // `update_scale`).
+        this._sep = { column: 1.8, row: 1.8 };
+
+        // Whether the diagram has been laid out since it was opened or emptied, after which a
+        // change of extent is animated, and the frame of that animation (see `animate_layout`).
+        this.layout_settled = false;
+        this.layout_frame = null;
+    }
+
+    /// The diagram's column and row separation, in em.
+    get sep() {
+        return this._sep;
+    }
+
+    /// Change the separations, which the grid is laid out by, as tikz-cd would lay the diagram out.
+    set sep(sep) {
+        this._sep = { ...sep };
+        if (this.container !== undefined) {
+            this.update_scale();
+            this.relayout();
+        }
+    }
+
+    /// Bring the grid's extent in line with the diagram's, its outermost cells and checkpoints,
+    /// laying it out afresh if that changed, since empty columns and rows beyond it are sized
+    /// differently from those within (see `Grid`). Returns whether it changed. `previous` holds
+    /// the sizes, by axis and index, that columns and rows just fitted had before, which the layout
+    /// grows or shrinks them from, rather than from the sizes they were fitted to.
+    update_extent(previous = null) {
+        const xs = [];
+        const ys = [];
+        for (const cell of this.quiver.all_cells()) {
+            const points = cell.is_vertex() ? [cell.position.toArray()] : cell.options.route ?? [];
+            for (const [x, y] of points) {
+                xs.push(x);
+                ys.push(y);
+            }
+        }
+        const extent = xs.length === 0 ? null : {
+            x: [Math.min(...xs), Math.max(...xs)],
+            y: [Math.min(...ys), Math.max(...ys)],
+        };
+        if (JSON.stringify(extent) !== JSON.stringify(this.grid.extent)) {
+            // While drawing, a column or row a cell joins or leaves changes size as it is seen
+            // to, from the sizes it had before the extent changed, but a diagram opened, or
+            // emptied, is laid out at once.
+            const animate = extent !== null && !this.buffer_updates && this.layout_settled;
+            const before = animate ? this.layout_sizes(this.layout_range()) : null;
+            for (const axis of before !== null && previous !== null ? ["x", "y"] : []) {
+                for (const [index, size] of previous[axis]) {
+                    if (before[axis].has(index)) {
+                        before[axis].set(index, size);
+                    }
+                }
+            }
+            this.grid.extent = extent;
+            this.relayout(before);
+            this.layout_settled = extent !== null;
+            return true;
+        }
+        return false;
+    }
+
+    /// Size the grid as tikz-cd lays the diagram out, in a 10pt document, at the scale the labels
+    /// are drawn at: a pt is as many pixels as KaTeX draws a tenth of an em in. The gaps between
+    /// nodes follow the separations, and the arrows' curves, offsets, and rounding follow the
+    /// scale (see `Edge.arrow_style_for_options`). Call `relayout` after.
+    update_scale() {
+        const { EM, KATEX_SCALE, NODE_PADDING, GAP, BULLET } = CONSTANTS.TEX;
+        const px_per_pt = this.settings.get("ui.label_size") * KATEX_SCALE / EM;
+        Edge.PX_PER_PT = px_per_pt;
+        this.grid.gap = {
+            x: GAP.x * this.sep.column * EM * px_per_pt,
+            y: GAP.y * this.sep.row * EM * px_per_pt,
+        };
+        this.grid.padding = { x: NODE_PADDING.x * px_per_pt, y: NODE_PADDING.y * px_per_pt };
+        this.grid.bullet = { x: BULLET.x * px_per_pt, y: BULLET.y * px_per_pt };
     }
 
     /// Create the label input: the text field along the bottom that labels the selected cells, and
@@ -279,6 +355,10 @@ class UI {
                 // a discrete event, so if we modify again, we'll need to undo both
                 // modifications to completely undo the label change.
                 ui.history.permanentise();
+                // Finishing a label stops cycling the queue, so its Tab marker goes until the
+                // next Tab. The cells stay queued.
+                ui.element.class_list.remove("show-queue");
+                ui.keymap.restore_selection();
             } else {
                 ui.switch_mode(UIMode.default);
             }
@@ -328,12 +408,82 @@ class UI {
         // label rendered meanwhile (a macros file reloading, or keys typed faster than the diagram
         // lays out) is sized together, before it is drawn.
         this.sizing_labels = true;
-        document.fonts.ready.then(() => requestAnimationFrame(() => {
+        // `document.fonts.ready` may have settled before a font the labels need began to load, as
+        // it does when the first label of a session is a `\bullet`, so we wait again while one is
+        // still loading.
+        const size = () => document.fonts.ready.then(() => requestAnimationFrame(() => {
+            if (document.fonts.status === "loading") {
+                size();
+                return;
+            }
             this.sizing_labels = false;
             const cells = this.unsized_labels;
             this.unsized_labels = new Set();
             this.size_labels(cells);
         }));
+        size();
+    }
+
+    /// The box TeX sets the label of `edge` in, as `{ width, height, shift }`, in the canvas's
+    /// pixels: its width, its height and depth together, which KaTeX gives each part of the label
+    /// as a strut, and how far its middle is from the middle of the label's element, which is as
+    /// tall as a line. A label that is not maths (an error) is its element.
+    static tex_box(edge) {
+        const label = edge.element.query_selector(".label");
+        const katex = edge.element.query_selector(".label .katex, .label .katex-error");
+        if (label === null || katex === null) {
+            return { width: 0, height: 0, shift: Point.zero() };
+        }
+        const width = katex.element.offsetWidth;
+        const outer = label.element.getBoundingClientRect();
+        const struts = Array.from(katex.element.querySelectorAll(".katex-html .strut"))
+            .map((strut) => strut.getBoundingClientRect());
+        if (struts.length === 0 || outer.height === 0) {
+            return { width, height: katex.element.offsetHeight, shift: Point.zero() };
+        }
+        // The canvas may be zoomed, which the screen's measures include.
+        const zoom = outer.height / label.element.offsetHeight;
+        const top = Math.min(...struts.map(({ top }) => top));
+        const bottom = Math.max(...struts.map(({ bottom }) => bottom));
+        return {
+            width,
+            height: (bottom - top) / zoom,
+            shift: new Point(0, ((top + bottom) / 2 - (outer.top + outer.bottom) / 2) / zoom),
+        };
+    }
+
+    /// The box TeX sets the label of `vertex` in, as `{ width, height, depth, shift, em }`, in the
+    /// canvas's pixels: its width, how far it reaches above and below the baseline, how far its
+    /// middle is below the middle of the label's element, and the size of KaTeX's em. KaTeX gives
+    /// each line of the label a strut as tall as the line's box, set as far below the baseline as
+    /// the box goes. A label that is not maths, or is empty, has none, and no box (`null`).
+    static cell_box(vertex) {
+        const label = vertex.element.query_selector(".label");
+        const katex = vertex.element.query_selector(".label .katex-html");
+        const struts = katex === null ? []
+            : Array.from(katex.element.querySelectorAll(".strut"));
+        const outer = label.element.getBoundingClientRect();
+        if (struts.length === 0 || outer.height === 0) {
+            return null;
+        }
+        const em = parseFloat(getComputedStyle(struts[0]).fontSize);
+        const length = (value) => (parseFloat(value) || 0) * em;
+        const depth = Math.max(...struts.map((strut) => -length(strut.style.verticalAlign)));
+        const height = Math.max(...struts.map((strut) => {
+            return length(strut.style.height) + length(strut.style.verticalAlign);
+        }));
+        // The canvas may be zoomed, which the screen's measures include.
+        const zoom = outer.height / label.element.offsetHeight;
+        const rects = struts.map((strut) => strut.getBoundingClientRect());
+        const top = Math.min(...rects.map(({ top }) => top));
+        const bottom = Math.max(...rects.map(({ bottom }) => bottom));
+        return {
+            width: katex.element.offsetWidth,
+            height,
+            depth,
+            shift: ((top + bottom) / 2 - (outer.top + outer.bottom) / 2) / zoom,
+            em,
+        };
     }
 
     /// Size the newly rendered labels of `cells`: vertices to fit their labels, resizing the grid
@@ -349,18 +499,17 @@ class UI {
         for (const vertex of vertices) {
             vertex.measure_label();
         }
-        const edge_sizes = edges.map((edge) => {
-            const katex_element = edge.element.query_selector(".label .katex, .label .katex-error");
-            return katex_element === null ? [0, 0]
-                : [katex_element.element.offsetWidth, katex_element.element.offsetHeight];
-        });
+        const edge_sizes = edges.map((edge) => UI.tex_box(edge));
 
+        // tikz-cd's padding round a label, which with the label's box makes its node.
+        const padding = CONSTANTS.TEX.LABEL_PADDING * Edge.PX_PER_PT;
         for (const [i, edge] of edges.entries()) {
-            const [width, height] = edge_sizes[i];
+            const { width, height, shift } = edge_sizes[i];
             edge.arrow.label.size = new Dimensions(
-                width + (width > 0 ? CONSTANTS.EDGE_LABEL_PADDING * 2 : 0),
-                height + (height > 0 ? CONSTANTS.EDGE_LABEL_PADDING * 2 : 0),
+                width + (width > 0 ? padding * 2 : 0),
+                height + (height > 0 ? padding * 2 : 0),
             );
+            edge.arrow.label.shift = shift;
             // An edge's label sits in a `foreignObject`, which the edge replaces as it redraws. A
             // browser may not lay out one inserted in the frame the label is measured in, as
             // Firefox does not, so that a label typed onto an arrow measures nothing, and is never
@@ -506,7 +655,7 @@ class UI {
 
         // Clear the quiver and update associated UI elements.
         this.clear_quiver();
-
+        this.update_extent();
     }
 
     /// Returns definitions of macros and colours that are recognised by LaTeX.
@@ -526,9 +675,20 @@ class UI {
 
     initialise() {
         this.element.class_list.add("ui");
+        // Dark mode follows the system's colour scheme until it is set (see `Settings.follow`).
+        if (typeof matchMedia === "function") {
+            const scheme = matchMedia("(prefers-color-scheme: dark)");
+            this.settings.follow("ui.dark_mode", scheme.matches);
+            scheme.addEventListener("change", () => {
+                if (this.settings.follow("ui.dark_mode", scheme.matches)) {
+                    document.body.classList.toggle("dark", scheme.matches);
+                    this.update_grid();
+                }
+            });
+        }
         document.body.classList.toggle("dark", this.settings.get("ui.dark_mode"));
         document.body.style.setProperty("--label-size", `${this.settings.get("ui.label_size")}px`);
-        this.grid.default_size = this.settings.get("ui.cell_size");
+        this.update_scale();
         this.scale = this.default_scale();
         this.switch_mode(UIMode.default);
 
@@ -590,7 +750,7 @@ class UI {
         this.pointer.initialise();
 
         // Centre the cell at (0, 0) in the view, which looks prettier.
-        this.pan_view(Offset.diag(this.grid.default_size / 2));
+        this.pan_view(new Offset(this.grid.gap.x / 2, this.grid.gap.y / 2));
 
         this.report_problems();
     }
@@ -602,21 +762,20 @@ class UI {
     }
 
     /// Report what was wrong with the settings and the keys files in the mode line: the first
-    /// problem, and how many others there were. Each is logged as a warning, too.
-    async report_problems() {
+    /// problem, how many others there were, and the command that opens its file. Each is logged as
+    /// a warning, too.
+    report_problems() {
         const problems = [
-            ...this.settings.problems.map((problem) => `settings.json: ${problem}`),
-            ...this.keymap.problems.map((problem) => `keys, ${problem}`),
+            ...this.settings.problems.map((problem) => [`settings: ${problem}`, "settings-file"]),
+            ...this.keymap.problems.map((problem) => [`keys ${problem}`, "keys-file"]),
         ];
-        for (const problem of problems) {
+        for (const [problem] of problems) {
             console.warn(problem);
         }
         if (problems.length > 0) {
-            const more = problems.length > 1 ? ` (and ${problems.length - 1} more)` : "";
-            // The shell knows where it keeps these files, and the path differs between
-            // platforms, so do not spell it here. The directory ends in the separator already.
-            const directory = await host.config_dir();
-            this.mode_line.error(`${directory}${problems[0]}${more}`);
+            const [[problem, command]] = problems;
+            const more = problems.length > 1 ? `+${problems.length - 1} more, ` : "";
+            this.mode_line.error(`${problem} (${more}:${command})`);
         }
     }
 
@@ -789,9 +948,22 @@ class UI {
         // We keep the view centred as best we can, so we have to adjust the view if anything is
         // resized.
         let view_offset = Offset.zero();
+        // The sizes before of the resized columns and rows that no vertex is left in, for
+        // `update_extent`. Those with vertices keep the size they were fitted to, which the
+        // vertices' own rendering fits them to again.
+        const previous = { x: new Map(), y: new Map() };
+        const vacated = (constraints, index) => (constraints.get(index)?.size ?? 0) === 0;
 
         for (const position of positions) {
             const [delta_x, delta_y] = this.grid.fit(position);
+            if (delta_x !== 0 && !previous.x.has(position.x)
+                && vacated(this.grid.width_constraints, position.x)) {
+                previous.x.set(position.x, this.grid.column_width(position.x) - delta_x);
+            }
+            if (delta_y !== 0 && !previous.y.has(position.y)
+                && vacated(this.grid.height_constraints, position.y)) {
+                previous.y.set(position.y, this.grid.row_height(position.y) - delta_y);
+            }
 
             if (delta_x !== 0 || delta_y !== 0) {
                 // Compute how much to adjust the view in order to keep it centred appropriately.
@@ -813,6 +985,13 @@ class UI {
             // Nothing moved. This is the usual case, as every vertex rendered checks its own
             // column and row, so it must not cost a pass over the quiver.
             return new Set();
+        }
+        // A vertex joining or leaving the diagram's edge changes its extent too, and the grid is
+        // then laid out afresh (see `update_extent`), from the sizes the columns and rows had
+        // before this fit. Otherwise a column a vertex left would shrink to the size of an empty one
+        // within the extent, only for the new layout to grow it back to that of one beyond it.
+        if (this.update_extent(previous)) {
+            return new Set(this.quiver.all_cells());
         }
         const beyond = (index, resized) => resized.some((resized) => {
             return resized >= 0 ? index >= resized : index <= resized;
@@ -906,7 +1085,6 @@ class UI {
             width: `${
                 this.grid.column_width(position.x) - CONSTANTS.GRID_BORDER_WIDTH}px`,
             height: `${height}px`,
-            "padding-top": `${height / 2}px`,
         });
         this.update_mark_region();
         if (update_focus_position) {
@@ -1235,19 +1413,14 @@ class UI {
                 this.pan_view(Offset.zero());
                 break;
             case "ui.label_size":
+                // The labels set the scale the grid is laid out at.
                 document.body.style.setProperty("--label-size", `${value}px`);
-                this.render_maths(...this.quiver.all_cells());
-                break;
-            case "ui.cell_size":
-                this.grid.default_size = value;
+                this.update_scale();
                 this.relayout();
+                this.render_maths(...this.quiver.all_cells());
                 break;
             case "ui.hint_characters":
                 this.recode();
-                break;
-            case "ui.quiver_mode":
-                // Whether the command layer is open by itself changes, and with it the mode line.
-                this.keymap.leave();
                 break;
         }
         // An export setting changes what saving would write, so whether there are unsaved changes
@@ -1259,21 +1432,98 @@ class UI {
     }
 
     /// Lay every cell out afresh, as when the size of an empty column or row changes: each column
-    /// and row fits its largest cell again, and everything is drawn where that puts it.
-    relayout() {
+    /// and row fits its largest cell again, and everything is drawn where that puts it. Given the
+    /// sizes `before` (see `layout_sizes`), the columns and rows in view grow or shrink from them
+    /// to their new sizes over a moment (see `animate_layout`), rather than at once.
+    relayout(before = null) {
+        this.fit_all();
+        const still = typeof matchMedia === "function"
+            && matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (before !== null && this.quiver.all_cells().length <= UI.ANIMATED_CELLS && !still) {
+            this.animate_layout(before, this.layout_sizes(before.range));
+            return;
+        }
+        this.draw_layout();
+    }
+
+    /// Fit every column and row to its cells afresh.
+    fit_all() {
+        cancelAnimationFrame(this.layout_frame);
         this.grid.widths.clear();
         this.grid.heights.clear();
-        const cells = this.quiver.all_cells();
-        for (const cell of cells) {
+        for (const cell of this.quiver.all_cells()) {
             if (cell.is_vertex()) {
                 this.grid.fit(cell.position);
             }
         }
-        for (const cell of this.quiver.transitive_dependencies(cells)) {
+    }
+
+    /// Draw every cell, the grid, and the focus point where the grid now puts them.
+    draw_layout() {
+        // The layout has sized the columns and rows, so drawing the vertices into it does not fit
+        // them again, which, between an animation's sizes, would snap them and pan the view.
+        const buffered = this.buffer_updates;
+        this.buffer_updates = true;
+        for (const cell of this.quiver.transitive_dependencies(this.quiver.all_cells())) {
             cell.render(this);
         }
+        this.buffer_updates = buffered;
         this.pan_view(Offset.zero());
         this.reposition_focus_point(this.focus_position);
+    }
+
+    /// The columns and rows whose sizes move what can be seen: those in view, and those between
+    /// them and the origin, which offsets are measured from, with a few to spare.
+    layout_range() {
+        const half = new Offset(document.body.offsetWidth, document.body.offsetHeight)
+            .div(2 * 2 ** this.scale);
+        const [low_x, low_y] = this.grid.col_row_from_offset(this.view.sub(half));
+        const [high_x, high_y] = this.grid.col_row_from_offset(this.view.add(half));
+        const SPARE = 2;
+        return {
+            x: [Math.min(0, low_x) - SPARE, Math.max(0, high_x) + SPARE],
+            y: [Math.min(0, low_y) - SPARE, Math.max(0, high_y) + SPARE],
+        };
+    }
+
+    /// The sizes of the columns and rows in `range`, as `{ range, x, y }`, where `x` and `y` map
+    /// each index to its size.
+    layout_sizes(range) {
+        const sizes = { range, x: new Map(), y: new Map() };
+        for (const [axis, size] of [["x", (i) => this.grid.column_width(i)],
+            ["y", (i) => this.grid.row_height(i)]]) {
+            for (let i = range[axis][0]; i <= range[axis][1]; ++i) {
+                sizes[axis].set(i, size(i));
+            }
+        }
+        return sizes;
+    }
+
+    /// Grow or shrink the columns and rows from the sizes `before` to the sizes `after`, easing
+    /// over `UI.LAYOUT_DURATION`, redrawing everything each frame, so that a column a cell
+    /// leaves or joins changes size as it is seen to, and the arrows keep up with their ends.
+    /// A later layout takes over from wherever this one has got to.
+    animate_layout(before, after) {
+        const start = performance.now();
+        const step = () => {
+            const t = Math.min((performance.now() - start) / UI.LAYOUT_DURATION, 1);
+            if (t < 1) {
+                // Smoothstep: slow out of the old sizes and into the new.
+                const eased = t * t * (3 - 2 * t);
+                for (const [axis, sizes] of [["x", this.grid.widths], ["y", this.grid.heights]]) {
+                    for (const [i, from] of before[axis]) {
+                        sizes.set(i, from + (after[axis].get(i) - from) * eased);
+                    }
+                }
+                this.draw_layout();
+                this.layout_frame = requestAnimationFrame(step);
+            } else {
+                // Fit afresh, rather than restoring `after`, in case a label was sized meanwhile.
+                this.fit_all();
+                this.draw_layout();
+            }
+        };
+        step();
     }
 
     /// Switch dark mode on or off, and remember it. Only how the diagram is shown changes.
@@ -1281,18 +1531,11 @@ class UI {
         this.change_setting("ui.dark_mode", !this.settings.get("ui.dark_mode"));
     }
 
-    /// Switch quiver mode on or off (see `Keymap.latched`), and remember it.
-    toggle_quiver_mode() {
-        const value = !this.settings.get("ui.quiver_mode");
-        this.change_setting("ui.quiver_mode", value);
-        this.mode_line.flash(value ? "quiver mode: RET to type" : "spreadsheet mode: type to edit");
-    }
-
     /// Update the grid with respect to the view and size of the window.
     update_grid() {
         // Constants for parameters of the grid pattern.
         // The (average) length of the dashes making up the cell border lines.
-        const DASH_LENGTH = this.grid.default_size;
+        const DASH_LENGTH = this.grid.gap.x;
         // The border colour, which dark mode changes.
         const BORDER_COLOUR = getComputedStyle(document.body).getPropertyValue("--grid");
 
@@ -1330,7 +1573,7 @@ class UI {
             context.lineTo(x * scale + width / 2, height);
         }
         context.lineDashOffset
-            = offset.y * scale - dash_offset - height % (this.grid.default_size * scale) / 2;
+            = offset.y * scale - dash_offset - height % (this.grid.gap.y * scale) / 2;
         context.stroke();
 
         // Draw the horizontal lines.
@@ -1341,7 +1584,7 @@ class UI {
             context.lineTo(width, y * scale + height / 2);
         }
         context.lineDashOffset
-            = offset.x * scale - dash_offset - width % (this.grid.default_size * scale) / 2;
+            = offset.x * scale - dash_offset - width % (this.grid.gap.x * scale) / 2;
         context.stroke();
     }
 
@@ -1365,6 +1608,11 @@ class UI {
 
 /// The mode line of the UI, which shows errors (see `UI.display_error`), once initialised.
 UI.mode_line = null;
+
+/// The most cells a change of layout is animated for, since each frame redraws them all (see
+/// `UI.animate_layout`), and how long it takes, in milliseconds.
+UI.ANIMATED_CELLS = 300;
+UI.LAYOUT_DURATION = 150;
 
 /// The longest code an edge takes from its ends' codes (see `UI.recode`).
 UI.MAX_JOINED_CODE = 3;

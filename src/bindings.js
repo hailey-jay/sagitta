@@ -8,8 +8,8 @@
 ///
 /// A name is a named action (see `ModeLine.define_actions`), one of `Bindings.HANDLERS`, or any
 /// other command (see `Commands.TABLE`), which a key runs with no arguments. Keys are written as
-/// the help shows them: `C-s` and `C-S-z` are chords, `; b` is `b` in the command layer, and
-/// `<delete>` or `<f5>` are keys of their own. The keys file is read once, at startup:
+/// the help shows them: `C-s` and `C-S-z` are chords, `; b` (or `b` alone) is `b` in the command
+/// layer, and `<delete>` or `<f5>` are keys of their own. The keys file is read once, at startup:
 ///
 ///     # A line names something, then its keys, replacing the defaults.
 ///     save        C-s
@@ -26,7 +26,7 @@ class Bindings {
     /// without its context. Throws an error explaining what is wrong with `text`.
     static parse(text) {
         let rest = text;
-        const layer = rest.startsWith(";");
+        let layer = rest.startsWith(";");
         if (layer) {
             rest = rest.slice(1).trimStart();
         }
@@ -60,6 +60,10 @@ class Bindings {
             shift = null;
         }
 
+        // The command layer stays open by itself (see `Keymap.latched`), so a character alone is its
+        // key, as with `;`.
+        layer ||= !modifier && key.length === 1;
+
         // Space keeps its meaning alone, but its chords are free (the mark has `C-SPC`).
         if (Bindings.RESERVED.has(key) && !(key === " " && modifier)) {
             throw new Error(`"${text}": ${Keymap.key_name(key)} keeps its own meaning`);
@@ -71,9 +75,6 @@ class Bindings {
             if (/^[0-9]$/.test(key) || Bindings.LAYER_RESERVED.has(key)) {
                 throw new Error(`"${text}": ${key} keeps its own meaning in the command layer`);
             }
-        } else if (!modifier && key.length === 1) {
-            throw new Error(`"${text}" would type: use "; ${rest}" for the command layer, `
-                + `or a chord`);
         }
         return { key, shift, modifier, layer };
     }
@@ -160,7 +161,7 @@ class Bindings {
                     continue;
                 }
                 if (!table.known(name)) {
-                    throw new Error(`nothing is called "${word}"`);
+                    throw new Error(`no command "${word}"`);
                 }
                 if (named.has(name)) {
                     throw new Error(`${name} is already bound on line ${named.get(name)}`);
@@ -270,7 +271,6 @@ Bindings.DEFAULTS = {
     "reset-zoom": ["C-0"],
     "hide-grid": ["; #"],
     "dark-mode": [],
-    "quiver-mode": [],
     "hide-mode-line": ["C-\\"],
     "shortcuts": ["C-/", "<f1>"],
     "settings": ["C-,"],
@@ -304,6 +304,9 @@ Bindings.DEFAULTS = {
     "align-left": [],
     "align-centre": [],
     "align-over": [],
+
+    // A gap for a row or a column at the focus point, chosen from a list as the styles are.
+    "insert": ["; i"],
 
     // Presets (see `Commands.PRESETS`).
     "plain": ["; !"],
@@ -393,11 +396,11 @@ Bindings.HANDLERS = {
     "paste": { press: (ui) => ui.keys.paste(), help: ["Chords", "paste"] },
     "mark": {
         press: (ui, event) => ui.keys.mark(event.shiftKey),
-        help: ["Typing", "mark a corner, then select to the focus point (with S-, add it)"],
+        help: ["Typing", "mark a region"],
     },
     "mark-add": {
         press: (ui) => ui.keys.mark(true),
-        help: ["Typing", "mark a corner, then add up to the focus point to the selection"],
+        help: ["Typing", "mark a region to add"],
     },
     "search": { press: (ui) => ui.keymap.search() },
     "select-at-focus": { press: (ui) => ui.keys.toggle_at_focus() },
@@ -441,7 +444,7 @@ for (const [name, property] of [
 ]) {
     Bindings.HANDLERS[name] = { press: (ui) => ui.keymap.choose_property(property) };
 }
-for (const component of ["tail", "body", "head", "align"]) {
+for (const component of ["tail", "body", "head", "align", "insert"]) {
     Bindings.HANDLERS[component] = { press: (ui) => ui.keymap.choose_component(component) };
 }
 // Unlike their commands, these quietly do nothing without an arrow selected.

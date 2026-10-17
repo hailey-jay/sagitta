@@ -63,9 +63,12 @@ class ModeLine {
                 ui.keymap.enter(true);
             }
         }).add(new DOM.Element("kbd").add(";")).add(" commands"));
+        // The other hints, which drop off whole, from the right, where the mode line is short of
+        // room (see `main.css`).
+        const hints = new DOM.Element("span", { class: "hints" }).add_to(this.element);
         for (const name of ["undo", "save", "export", "shortcuts"]) {
             const { label, combinations } = this.actions.get(name);
-            this.element.add(button({ class: "hint", "data-action": name }, "", () => {
+            hints.add(button({ class: "hint", "data-action": name }, "", () => {
                 this.run(ui, name);
             }).add(new DOM.Element("kbd").add(Keymap.describe(combinations.slice(0, 1)))).add(` ${
                 label.toLowerCase()
@@ -76,7 +79,7 @@ class ModeLine {
         const shortcuts = Keymap.describe(this.actions.get("shortcuts").combinations.slice(0, 1));
         this.tip = new DOM.Div({ class: "tip hidden" }).add_to(ui.element);
         for (const [keys, description] of [
-            ["type", "label"],
+            ["RET", "label"],
             ["click twice", "new cell"],
             ["drag", "arrow"],
             ["; or right-click", "commands"],
@@ -147,8 +150,9 @@ class ModeLine {
         );
 
         // The diagram's file (see `DiagramFile`).
-        this.add_action(ui, "save", "Save", () => ui.file.save());
-        this.add_action(ui, "save-as", "Save as", () => ui.file.save_as());
+        // Saving a new file shows the export options first (see `DiagramFile.save`).
+        this.add_action(ui, "save", "Save", () => ui.file.save(ui.file.path, true));
+        this.add_action(ui, "save-as", "Save as", () => ui.file.save_as(true));
         this.add_action(ui, "open", "Open", () => ui.file.open());
         this.add_action(ui, "new", "New", () => ui.file.new_diagram());
         // Only a host that sees no directory it is not handed (a browser) needs a folder, and only
@@ -211,13 +215,22 @@ class ModeLine {
             },
             () => ui.in_mode(...default_pan) && any_cells(),
         );
+        // Deleting takes the selection, or, with nothing selected, the cell under the focus point,
+        // so a lone cell needs no selecting first.
+        const doomed = () => {
+            if (ui.selection.size > 0) {
+                return ui.selection;
+            }
+            const focused = ui.cell_under_focus_point();
+            return new Set(focused === null ? [] : [focused]);
+        };
         this.add_action(ui, "delete", "Delete", () => {
             ui.history.add(ui, [{
                 kind: "delete",
-                cells: ui.quiver.transitive_dependencies(ui.selection),
+                cells: ui.quiver.transitive_dependencies(doomed()),
             }], true);
             ui.update_selection();
-        }, () => ui.in_mode(...default_pan) && ui.selection.size > 0);
+        }, () => ui.in_mode(...default_pan) && doomed().size > 0);
 
         // Transformations of the whole diagram. Each moves the vertices, and fixes up the edges
         // (including loops, whose angles are absolute).
@@ -318,7 +331,6 @@ class ModeLine {
             ui.grid_canvas.class_list.toggle("hidden");
         });
         this.add_action(ui, "dark-mode", "Dark mode", () => ui.toggle_dark_mode());
-        this.add_action(ui, "quiver-mode", "Quiver mode", () => ui.toggle_quiver_mode());
         this.add_action(ui, "hide-mode-line", "Toggle mode line",
             () => ui.element.class_list.toggle("hide-mode-line"),
         );
@@ -393,11 +405,20 @@ class ModeLine {
         }
         this.element.set_attributes({ "data-mode": kind });
 
-        // The diagram's file, marked `+` with unsaved changes.
+        // The diagram's file, marked `●` with unsaved changes, by more than its colour.
         ui.file.update();
+        // Export options other than the defaults, which saving writes too, follow it.
+        const differences = Layer.Export.differences(ui);
         this.element.query_selector(".file").clear()
-            .add(`${ui.file.name()}${ui.file.dirty ? " +" : ""}`)
-            .class_list.toggle("dirty", ui.file.dirty);
+            .add(ui.file.name())
+            .add(ui.file.dirty ? new DOM.Element("span", {
+                class: "unsaved",
+                title: "Unsaved changes",
+            }).add(" ●") : "")
+            .add(differences.length === 0 ? "" : new DOM.Element("span", {
+                class: "export-options",
+                title: "Export options, which saving writes too (C-e)",
+            }).add(` [${differences.join(", ")}]`));
 
         // What typing would edit.
         this.element.query_selector(".target").clear().add(this.target(ui));
@@ -408,8 +429,10 @@ class ModeLine {
         // The queue of cells awaiting labels, and which of them Tab goes to next.
         ui.keys.mark_next_queued();
         const queued = ui.element.query_selector_all(".cell kbd.queue").length;
-        this.element.query_selector(".queue").clear()
-            .add(queued > 0 ? `TAB ${queued} queued` : "");
+        const queue = this.element.query_selector(".queue").clear();
+        if (queued > 0) {
+            queue.add(new DOM.Element("kbd").add("TAB")).add(` ${queued} queued`);
+        }
 
         // Hints and zoom buttons for disabled actions are greyed out.
         for (const element of this.element.query_selector_all("[data-action]")) {
@@ -425,7 +448,10 @@ class ModeLine {
     }
 
     /// The name of the input mode; any detail (e.g. the number being typed in the command layer),
-    /// or `null`; and the kind of mode, for styling (`type`, `layer`, `prompt`, or `other`).
+    /// or `null`; and the kind of mode, for styling: `rest`, with the command layer latched open
+    /// and nothing in it; `layer`, while keys are awaited, in the command layer or another;
+    /// `edit`, while a label is edited; `prompt`; `pending`, while a mark or a checkpoint waits;
+    /// or `pointer`, while the pointer moves, draws, or pans.
     mode(ui) {
         if (ui.in_mode(UIMode.Command)) {
             return [{
@@ -443,16 +469,20 @@ class ModeLine {
             [[UIMode.Pan], "PAN"],
         ]) {
             if (ui.in_mode(...modes)) {
-                return [name, null, "other"];
+                return [name, null, "pointer"];
             }
         }
-        if (ui.keymap.active) {
-            return [...ui.keymap.describe_layer(), "layer"];
-        }
         // A mark waiting for its other corner, or a checkpoint being carried, is state the user
-        // cannot otherwise see.
-        return ["TYPE", ui.mark !== null ? "MARK" : ui.carried !== null ? "CHECKPOINT" : null,
-            "type"];
+        // cannot otherwise see, so it shows wherever the layer has nothing of its own to show.
+        const pending = ui.mark !== null ? "MARK" : ui.carried !== null ? "CHECKPOINT" : null;
+        if (!ui.keymap.active) {
+            return ["EDIT", pending, "edit"];
+        }
+        const [name, detail] = ui.keymap.describe_layer();
+        if (name !== ";" || ui.keymap.listed) {
+            return [name, detail ?? pending, "layer"];
+        }
+        return pending !== null ? [pending, null, "pending"] : ["NORMAL", null, "rest"];
     }
 
     /// The option value for an arrow component (e.g. `top-hook`), as in `Commands.STYLES`.

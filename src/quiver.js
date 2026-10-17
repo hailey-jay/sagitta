@@ -320,14 +320,21 @@ class QuiverImportExport extends QuiverExport {
     }
 
     end_import(ui, imported_cells, centre_view = true) {
+        // The extent sizes the empty columns and rows, so it comes before the view is centred.
+        ui.update_extent?.();
         if (centre_view) {
             // Centre the view on the quiver.
             ui.centre_view();
-            // Also centre the focus point, so that it's centre of screen.
-            // We subtract 0.5 from the position so that when the view is centred perfectly between
-            // two cells, we prefer the top/leftmost cell.
+            // Also put the focus point in the middle of the diagram, by its cells, preferring the
+            // top and left of the middle two: columns differ in width, so the middle of the view
+            // can fall either side of a boundary between them.
             ui.focus_point.class_list.remove("smooth");
-            ui.reposition_focus_point(ui.grid.position_from_offset(ui.view.sub(Point.diag(0.5))));
+            const bounds = ui.quiver.bounding_rect();
+            ui.reposition_focus_point(bounds === null ? ui.grid.position_from_offset(ui.view)
+                : new Position(
+                    Math.floor((bounds[0][0] + bounds[1][0]) / 2),
+                    Math.floor((bounds[0][1] + bounds[1][1]) / 2),
+                ));
             ui.focus_point.class_list.add("focused");
             delay(() => ui.focus_point.class_list.add("smooth"));
         }
@@ -363,6 +370,11 @@ QuiverExport.CONSTANTS = {
     // I do not currently possess the skills to create.
     TIKZ_HORIZONTAL_MULTIPLIER: 1/4,
     TIKZ_VERTICAL_MULTIPLIER: 1/6,
+    // An em of tikz-cd's separations, in pt, in a 10pt document, which is the least a paper's
+    // em is likely to be.
+    EM: 10,
+    // What an end of a route keeps straight for its arrowhead or tail, in pt (see `route_radius`).
+    TIP_ROOM: 5,
 };
 
 /// The multiplier for a length along an edge at `angle`: the radius, at that angle, of the ellipse
@@ -398,6 +410,38 @@ QuiverExport.route_lengths = (points) => {
         const leg = point.sub(points[i]);
         return Math.hypot(leg.x * horizontal, leg.y * vertical);
     });
+};
+
+/// The loop TikZ draws for a loop with `options`, as `{ in, out, distance }`: the angles, in
+/// degrees, it comes back in at and leaves at, and how far its control points lie beyond the
+/// node, in mm. The canvas draws it from these too (see `Arrow.tikz_loop`).
+QuiverExport.loop = (options) => {
+    const clockwise = options.radius >= 0 ? 1 : -1;
+    const loop_angle = (180 - 90 * clockwise - options.angle);
+    const angle_spread = 30 + 5 * (Math.abs(options.radius) - 1) / 2;
+    return {
+        in: mod(loop_angle - angle_spread * clockwise, 360),
+        out: mod(loop_angle + angle_spread * clockwise, 360),
+        distance: 5 + 5 * (Math.abs(options.radius) - 1) / 2,
+    };
+};
+
+/// The radius, in pt, to round the corners of a route through `points` by, for `wanted` at most, in
+/// a diagram whose separations are `sep` (in em, as `options.sep`). TikZ's `rounded corners` takes
+/// the radius along each leg whatever its length, so a corner on a leg too short for it overshoots,
+/// and an arrowhead on what is left of the last leg points back along the curve. The canvas rounds
+/// such a corner less (see `Route`), but its legs are a whole cell long, where tikz-cd's may be
+/// little more than a separation, as next to a row or a column of empty cells. So the radius is
+/// kept to what the shortest leg tikz-cd could draw allows: half of a leg between two corners, and
+/// an end leg less the room an arrowhead or tail takes.
+QuiverExport.route_radius = (points, sep, wanted) => {
+    const legs = points.slice(1).map((point, i) => Math.hypot(
+        Math.abs(point.x - points[i].x) * sep.column * QuiverExport.CONSTANTS.EM,
+        Math.abs(point.y - points[i].y) * sep.row * QuiverExport.CONSTANTS.EM,
+    ));
+    const room = legs.map((leg, i) => i === 0 || i === legs.length - 1
+        ? leg - QuiverExport.CONSTANTS.TIP_ROOM : leg / 2);
+    return Math.max(0, Math.min(wanted, ...room));
 };
 
 /// The leg of a route through `points` that is `fraction` of the way along, and how far along that
@@ -782,8 +826,11 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                     const legs = edge.options.route.map((cell) => `-- ${checkpoint(cell)}`)
                         .concat(["-- (\\tikztotarget)"]);
                     legs[route_label.leg] += " \\tikztonodes";
-                    const radius = edge.options.rounding * CONSTANTS.ROUNDING
-                        * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER;
+                    const radius = Number(QuiverExport.route_radius(
+                        QuiverExport.route_points(edge), options.sep,
+                        edge.options.rounding * CONSTANTS.ROUNDING
+                            * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER,
+                    ).toFixed(1));
                     // The corners are rounded only while the route is built: rounded corners
                     // still in force when a squiggly arrow is drawn round every zigzag too.
                     parameters["to path"] = `{${radius > 0 ? `[rounded corners=${radius}pt] ` : ""
@@ -1064,12 +1111,10 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                 // Loops.
                 if (edge.target === edge.source) {
                     parameters.loop = "";
-                    const clockwise = edge.options.radius >= 0 ? 1 : -1;
-                    const loop_angle = (180 - 90 * clockwise - edge.options.angle);
-                    const angle_spread = 30 + 5 * (Math.abs(edge.options.radius) - 1) / 2;
-                    parameters.in = mod(loop_angle - angle_spread * clockwise, 360);
-                    parameters.out = mod(loop_angle + angle_spread * clockwise, 360);
-                    parameters.distance = `${5 + 5 * (Math.abs(edge.options.radius) - 1) / 2}mm`;
+                    const loop = QuiverExport.loop(edge.options);
+                    parameters.in = loop.in;
+                    parameters.out = loop.out;
+                    parameters.distance = `${loop.distance}mm`;
                 }
 
                 const object_to_list = (object) => {

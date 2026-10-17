@@ -196,6 +196,46 @@ module.exports = {
         return { counts: await ctx.counts(), mode_line: await ctx.mode_line() };
     },
 
+    /// Press each key in `argument` (as for `keys`), without selecting anything first, the last
+    /// with no wait after it, and return the size of the focus point, of each vertex's content and
+    /// where it lies across the window, the view's centre, and the widths of the columns -2 to 3,
+    /// just before the last key and on each of the next 20 frames, to show any jump or animation
+    /// it sets off.
+    frames: async (ctx) => {
+        const keys = JSON.parse(ctx.argument);
+        for (const [key, modifiers = []] of keys.slice(0, -1)) {
+            await ctx.press(key, modifiers);
+        }
+        // The page samples itself once before the last key, which may act before the next frame,
+        // and then on each frame after it.
+        const before = await ctx.js(`(() => {
+            const size = (element) => {
+                const { width, height } = element.getBoundingClientRect();
+                return [Math.round(width), Math.round(height)];
+            };
+            window.sample_layout = () => ({
+                focus: size(document.querySelector(".focus-point")),
+                vertices: Array.from(document.querySelectorAll(".vertex .content"), size),
+                view: Math.round(ui.view.x),
+                columns: [-2, -1, 0, 1, 2, 3].map((x) => Math.round(ui.grid.column_width(x))),
+                left: Array.from(document.querySelectorAll(".vertex .content"),
+                    (content) => Math.round(content.getBoundingClientRect().left)),
+            });
+            return window.sample_layout();
+        })()`);
+        const after = ctx.js(`(async () => {
+            const sizes = [];
+            for (let frame = 0; frame < 20; ++frame) {
+                await new Promise((resolve) => requestAnimationFrame(resolve));
+                sizes.push(window.sample_layout());
+            }
+            return sizes;
+        })()`);
+        const [key, modifiers = []] = keys.at(-1);
+        await ctx.press(key, modifiers);
+        return [before, ...await after];
+    },
+
     /// Press each key in `argument` (as for `keys`), without selecting anything first, and return
     /// the codes of the vertices and the arrows, of the queued cells, and of the cell Tab goes to
     /// next, once the mode line has caught up.
@@ -468,19 +508,15 @@ module.exports = {
         return { lines, settings: await ctx.js("ui.settings.data") };
     },
 
-    /// A preset key with nothing selected sets the preset new arrows take: `; =` for equals, then
+    /// A preset key with nothing selected sets the preset new arrows take: `=` for equals, then
     /// Space twice to draw an arrow with it, and save. Returns the mode line, the setting, and
     /// whether the command layer marks equals as the one in force.
     preset_default: async (ctx) => {
-        await ctx.press(";");
         await ctx.press("=");
         const mode_line = await ctx.mode_line();
         const preset = await ctx.js(`ui.settings.get("diagram.arrow_preset")`);
-        // The list marks the preset only while it is shown, so Escape closes whatever the preset
-        // key left open, `;` enters the layer again, and `?` lists the keys at once.
-        await ctx.press("Escape");
+        // The list marks the preset only while it is shown, which `;` does.
         await ctx.press(";");
-        await ctx.press("?");
         const shown = `document.querySelector(".which-key") !== null`
             + ` && !document.querySelector(".which-key").classList.contains("hidden")`;
         for (let tries = 0; !await ctx.js(shown); ++tries) {
@@ -562,23 +598,6 @@ module.exports = {
         await ctx.save();
         await ctx.press("z", ["control"]);
         return { before, after, undone: await grid(), mode_line: await ctx.mode_line() };
-    },
-
-    /// `:snake` on the one arrow of a diagonal pair: select it by code, draw the staircase, and
-    /// save. Returns the counts after each step, and the labels of the cells, so the new one is
-    /// shown to be empty.
-    snake: async (ctx) => {
-        await ctx.press("a", ["control"]);
-        const steps = { selected: await ctx.counts() };
-        await ctx.command(ctx.argument === null ? "snake" : `snake ${ctx.argument}`);
-        steps.drawn = await ctx.counts();
-        steps.cells = await ctx.js(`[...ui.quiver.all_cells()].filter((cell) => cell.is_vertex())`
-            + `.map((cell) => (cell.label || "-") + cell.position.x + cell.position.y)`
-            + `.sort().join(" ")`);
-        await ctx.save();
-        await ctx.press("z", ["control"]);
-        steps.undone = await ctx.counts();
-        return steps;
     },
 
     /// Routes: select every cell, then take each step of `argument` (a JSON list): a string runs

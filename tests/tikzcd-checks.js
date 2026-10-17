@@ -347,12 +347,7 @@ const pending = [];
     ], [true, false]);
     check("and said in words", settings.expected("ui.zoom"), "a number from 20 to 200");
 
-    check("null is a value where it is allowed", [
-        settings.parse("ui.which_key_delay", "null"), settings.allows("ui.which_key_delay", null),
-        settings.allows("ui.zoom", null),
-    ], [null, true, false]);
-    check("which the words say too", settings.expected("ui.which_key_delay"),
-        "a number from 0 to 5000, or null");
+    check("null is no number", settings.allows("ui.zoom", null), false);
 
     check("a preset is checked against the list", [
         settings.allows("diagram.arrow_preset", "equals"),
@@ -470,8 +465,6 @@ const pending = [];
     check("and nonsense for them is refused",
         set("ui.dark_mode", "sometimes"),
         '"sometimes" is not a value for ui.dark_mode, which should be true or false.');
-    check("null is a value where the setting takes one",
-        [set("ui.which_key_delay", "null"), ui.settings.get("ui.which_key_delay")], [null, null]);
     check("a preset is set by name",
         [set("diagram.arrow_preset", "mono"), ui.settings.get("diagram.arrow_preset")],
         [null, "mono"]);
@@ -479,41 +472,6 @@ const pending = [];
         set("diagram.arrow_preset", "wiggly").startsWith('"wiggly" is not a value'), true);
     check("every setting is offered for completion",
         Commands.TABLE["set"].completions(commands).length, Object.keys(ui.settings.data).length);
-}
-
-{
-    // The staircase a `:snake` draws: one step at a time, alternating between the axes, starting
-    // with the axis that has further to go.
-    const path = (from, to, first = null) =>
-        Commands.staircase(new Position(...from), new Position(...to), first)
-            .map((position) => [position.x, position.y]);
-
-    // The snake lemma's connecting morphism: from `ker c` at the top right down and left to
-    // `coker a` at the bottom left, as four corners and so five arrows.
-    check("the snake lemma's staircase", path([2, 0], [0, 3]),
-        [[2, 1], [1, 1], [1, 2], [0, 2]]);
-    check("which axis goes first can be asked for", path([2, 0], [0, 3], "x"),
-        [[1, 0], [1, 1], [0, 1], [0, 2]]);
-    check("a straight run has a corner for every cell between", path([0, 0], [3, 0]),
-        [[1, 0], [2, 0]]);
-    check("and the axis with nothing left is skipped", path([0, 0], [1, 3]),
-        [[0, 1], [1, 1], [1, 2]]);
-    check("neighbours have no staircase", path([0, 0], [1, 0]), []);
-    check("and nor do cells a row apart", path([0, 0], [0, 1]), []);
-    // With the same distance either way, x goes first.
-    check("a diagonal step is one corner", path([0, 0], [1, 1]), [[1, 0]]);
-    check("the direction is taken from the ends", path([3, 3], [1, 2]),
-        [[2, 3], [2, 2]]);
-    check("a staircase is as long as the Manhattan distance, less one",
-        [[[0, 0], [4, 2]], [[0, 0], [1, 5]], [[2, 2], [0, 0]]].map(([from, to]) =>
-            path(from, to).length === Math.abs(to[0] - from[0]) + Math.abs(to[1] - from[1]) - 1),
-        [true, true, true]);
-    check("and every step of one moves exactly one cell",
-        (() => {
-            const corners = [[0, 0], ...path([0, 0], [4, 3]), [4, 3]];
-            return corners.slice(1).every(([x, y], i) =>
-                Math.abs(x - corners[i][0]) + Math.abs(y - corners[i][1]) === 1);
-        })(), true);
 }
 
 {
@@ -557,93 +515,6 @@ const pending = [];
     check("the gap is written as an empty row",
         ui.text().includes("\\\\\n\t\\\\\n\t"), true);
     check("and reads back the same way", grid(parse(ui.text()).ui), "A00 B10 C02 D12");
-}
-
-{
-    // `:snake` replaces one arrow with a chain through new empty cells, and one undo puts the
-    // single arrow back.
-    const diagonal = () => parse("\\begin{tikzcd}\n"
-        + "\tP \\arrow[dr, \"c\"] & \\\\\n\t& Q\n\\end{tikzcd}\n").ui;
-
-    let ui = diagonal();
-    check("the diagram is two cells and an arrow between them", counts(ui), [2, 1]);
-    let commands = new Commands(ui);
-
-    // With nothing selected, or with more than one arrow, there is nothing to draw.
-    let refused = "";
-    try {
-        commands.snake();
-    } catch (error) {
-        refused = error.message;
-    }
-    check("a staircase needs one arrow selected",
-        refused, "Select one arrow to draw as a staircase.");
-
-    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
-    commands.snake();
-    // The corner between `P` at (0,0) and `Q` at (1,1) is one new cell, so two arrows.
-    check("the arrow becomes a chain through the corner", counts(ui), [3, 2]);
-    check("the new cell is empty, and at the corner",
-        ui.quiver.all_cells().filter((cell) => cell.is_vertex())
-            .map((cell) => `${cell.label || "-"}${cell.position.x}${cell.position.y}`).join(" "),
-        "P00 Q11 -10");
-    check("and the chain is what is now selected", ui.selection.size, 3);
-
-    ui.history.undo(ui);
-    check("one undo puts the single arrow back", counts(ui), [2, 1]);
-    check("with its own label", ui.quiver.all_cells()
-        .filter((cell) => cell.is_edge()).map((cell) => cell.label), ["c"]);
-    ui.history.redo(ui);
-    check("and redo draws the chain again", counts(ui), [3, 2]);
-
-    // Neighbours have no staircase, and nor does a loop.
-    ui = parse("\\begin{tikzcd}\n\tA \\arrow[r, \"f\"] & B\n\\end{tikzcd}\n").ui;
-    commands = new Commands(ui);
-    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
-    refused = "";
-    try {
-        commands.snake();
-    } catch (error) {
-        refused = error.message;
-    }
-    check("neighbours are refused", refused, "The two cells are already next to each other.");
-
-    ui = parse("\\begin{tikzcd}\n\tA \\arrow[\"f\", loop]\n\\end{tikzcd}\n").ui;
-    commands = new Commands(ui);
-    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
-    refused = "";
-    try {
-        commands.snake();
-    } catch (error) {
-        refused = error.message;
-    }
-    check("and a loop is too", refused, "A loop has no staircase.");
-
-    // A cell the staircase passes through that is already occupied is used rather than displaced.
-    ui = parse("\\begin{tikzcd}\n"
-        + "\tP \\arrow[drr, \"c\"] & M & \\\\\n\t& & Q\n\\end{tikzcd}\n").ui;
-    commands = new Commands(ui);
-    ui.select(...ui.quiver.all_cells().filter((cell) => cell.is_edge()));
-    commands.snake("x");
-    check("a cell on the way is used as it stands",
-        ui.quiver.all_cells().filter((cell) => cell.is_vertex())
-            .map((cell) => cell.label || "-").sort().join(" "), "- M P Q");
-    check("so the chain runs through it", counts(ui), [4, 3]);
-}
-
-{
-    // `:snake` through the command line, which is how the manual spells it.
-    const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
-    const commands = new Commands(ui);
-    let refused = "";
-    try {
-        Commands.TABLE["snake"].run(commands, ["z"]);
-    } catch (error) {
-        refused = error.message;
-    }
-    check("an axis that is not one is refused",
-        refused, '"z" is not an axis: snake takes x, y, or nothing.');
-    check("and x and y are what it offers", Commands.TABLE["snake"].completions, ["x", "y"]);
 }
 
 {
@@ -988,19 +859,41 @@ const pending = [];
         settings = await read("{not json");
         check("a malformed file leaves the defaults", settings.get("ui.zoom"), 100);
         check("says so once", settings.problems,
-            ["not valid JSON, so ignored, and left alone until it is fixed"]);
+            ["not valid JSON, so ignored until fixed"]);
         check("and is not overwritten", settings.writable, false);
         settings.set("ui.zoom", 150);
         await settings.write();
         check("so a change writes nothing", host.written.length, 0);
 
-        settings = await read('{"ui.gone": 1, "ui.zoom": 120}');
+        settings = await read('{"ui.cell_size": 1, "ui.zoom": 120}');
         check("a setting the app no longer has is ignored",
-            [settings.has("ui.gone"), settings.get("ui.zoom")], [false, 120]);
+            [settings.has("ui.cell_size"), settings.get("ui.zoom")], [false, 120]);
         check("without being reported", settings.problems, []);
         await settings.write();
         check("and the next write drops it",
-            Object.hasOwn(JSON.parse(host.written.at(-1)), "ui.gone"), false);
+            Object.hasOwn(JSON.parse(host.written.at(-1)), "ui.cell_size"), false);
+
+        settings = await read('{"ui.zoon": 120}');
+        check("a name that is not a setting is ignored",
+            [settings.has("ui.zoon"), settings.get("ui.zoom")], [false, 100]);
+        check("and reported", settings.problems, ["unknown setting ui.zoon"]);
+        await settings.write();
+        check("but the next write keeps it", JSON.parse(host.written.at(-1))["ui.zoon"], 120);
+
+        settings = await read('{"ui.zoom": 120}');
+        check("a setting the file does not hold follows the system",
+            [settings.follow("ui.dark_mode", true), settings.get("ui.dark_mode")], [true, true]);
+        await settings.write();
+        check("and is left out of the file",
+            Object.hasOwn(JSON.parse(host.written.at(-1)), "ui.dark_mode"), false);
+        settings.set("ui.dark_mode", false);
+        await settings.write();
+        check("until it is set", [settings.follow("ui.dark_mode", true),
+            JSON.parse(host.written.at(-1))["ui.dark_mode"]], [false, false]);
+
+        settings = await read('{"ui.dark_mode": false}');
+        check("one the file holds keeps the file's",
+            [settings.follow("ui.dark_mode", true), settings.get("ui.dark_mode")], [false, false]);
     })());
 }
 
@@ -1054,12 +947,14 @@ const pending = [];
 
     // The problems are the loader's own, in its own words, for names it has never heard of.
     check("a word the table does not know is reported",
-        resolve("wiggle C-q").problems, ['line 1: nothing is called "wiggle"']);
+        resolve("wiggle C-q").problems, ['line 1: no command "wiggle"']);
     check("a name the table knows but has no defaults for is bound",
         of(resolve("jump C-j").keys, "jump"), "C-j");
-    check("a key that would type is refused",
-        resolve("walk q").problems,
-        ['line 1: "q" would type: use "; q" for the command layer, or a chord']);
+    check("a key alone is the command layer's, as with ;",
+        [of(resolve("walk q").keys, "walk"), of(resolve("walk ; q").keys, "walk")], [";q", ";q"]);
+    check("as is a shifted one", of(resolve("walk Q").keys, "walk"), ";S-q");
+    check("and the layer's reserved keys stay reserved alone", resolve("walk 5").problems,
+        ['line 1: "5": 5 keeps its own meaning in the command layer']);
     check("a reserved key is refused", resolve("walk RET").problems,
         ['line 1: "RET": RET keeps its own meaning']);
     check("and the same name twice is refused",
@@ -1097,4 +992,17 @@ const pending = [];
     check("a shifted digit is left unidentified", pressed("Unidentified", "Digit2", true)[0],
         "Unidentified");
     check("and an identified key is left alone", pressed("x", "KeyQ"), ["x", true, true]);
+}
+
+// A route's corners are rounded no more than tikz-cd's shortest legs allow, at normal separations
+// (18pt): a corner overshooting a short leg turns the arrowhead back along the curve.
+{
+    const sep = { column: 1.8, row: 1.8 };
+    const points = (...cells) => cells.map(([x, y]) => new Position(x, y));
+    check("a route round one cell keeps its radius to a leg less its arrowhead",
+        QuiverExport.route_radius(points([0, 0], [0, 1], [1, 1], [1, 0]), sep, 16), 9);
+    check("a smaller radius is kept as it is",
+        QuiverExport.route_radius(points([0, 0], [0, 1], [1, 1], [1, 0]), sep, 6), 6);
+    check("long legs leave a radius as it is",
+        QuiverExport.route_radius(points([0, 0], [0, 3], [3, 3], [3, 0]), sep, 16), 16);
 }

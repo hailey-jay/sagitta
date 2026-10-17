@@ -39,6 +39,7 @@ if (!("host" in window)) {
         const TYPES = {
             diagram: [{ description: "tikz-cd diagrams", accept: { "text/plain": [".tikzcd"] } }],
             macros: [{ description: "LaTeX", accept: { "text/plain": [".tex", ".sty"] } }],
+            svg: [{ description: "SVG images", accept: { "image/svg+xml": [".svg"] } }],
         };
         /// The extensions of `kind`, as `<input type="file">` takes them.
         const accept = (kind) => Object.values(TYPES[kind][0].accept).flat().join(",");
@@ -567,11 +568,15 @@ if (!("host" in window)) {
                 files.set(path, { text });
             },
 
-            config_dir: async () => "",
             read_settings: async () => load(STORAGE.settings),
             read_keys: async () => load(STORAGE.keys),
             write_settings: async (text) => store(STORAGE.settings, text),
             open_settings: async () => {
+                edit_settings();
+                return "";
+            },
+            // The keys are edited beside the settings.
+            open_keys: async () => {
                 edit_settings();
                 return "";
             },
@@ -610,12 +615,12 @@ if (!("host" in window)) {
                 return file === null ? null : register(file.name, { file });
             },
 
-            save_dialog: async (default_path) => {
+            save_dialog: async (default_path, kind = "diagram") => {
                 const name = default_path === null ? "diagram.tikzcd" : basename(default_path);
                 if (has_api) {
                     const handle = await pick(() => window.showSaveFilePicker({
                         suggestedName: name,
-                        types: TYPES.diagram,
+                        types: TYPES[kind],
                         startIn: folder?.handle,
                     }));
                     return handle === null ? null : path_for(handle);
@@ -665,12 +670,14 @@ if (!("host" in window)) {
 
             /// Ask for a folder to find files in by name, as the desktop finds them on disk.
             /// Returns its path, or `null` if none was chosen. Where the browser gives a page no
-            /// folders, says why, which the page reports.
+            /// folders, says so, in a `brief` error the page reports as it is.
             open_folder: async () => {
                 if (!has_api) {
-                    throw new Error(window.isSecureContext
-                        ? "this browser gives a page no folders, which Chrome and Edge do"
-                        : UNSAFE);
+                    if (!window.isSecureContext) {
+                        throw new Error(UNSAFE);
+                    }
+                    throw Object.assign(new Error("open-folder not available on this browser"),
+                        { brief: true });
                 }
                 const handle = await pick(() => window.showDirectoryPicker({
                     mode: "readwrite",

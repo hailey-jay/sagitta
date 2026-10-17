@@ -112,10 +112,18 @@ if (args.switches.length > 0) {
 // `%APPDATA%\sagitta` on Windows.
 app.setName("sagitta");
 
+// What `:keys-file` starts a new keys file with (see `Bindings.words` for comments).
+const KEYS_HEADER = `\
+# Sagitta's keys. Each line names a command, then its keys, which replace its defaults:
+# \`flip q\` puts flip on q in the command layer, and \`copy C-S-y\` copies with Control-Shift-y.
+# See "The keys file" in docs/sagitta.md. Changes take effect when Sagitta restarts.
+`;
+
 // Dialogs offer these, diagrams first.
 const FILTERS = {
     diagram: [{ name: "tikz-cd diagrams", extensions: ["tikzcd"] }, { name: "All files", extensions: ["*"] }],
     macros: [{ name: "LaTeX", extensions: ["tex", "sty"] }, { name: "All files", extensions: ["*"] }],
+    svg: [{ name: "SVG images", extensions: ["svg"] }, { name: "All files", extensions: ["*"] }],
 };
 
 /// The file's contents, or `null` if it does not exist.
@@ -242,12 +250,8 @@ app.whenReady().then(() => {
         read: read_file,
         write: write_file,
         // The settings, as the text of `settings.json`, or `null` before it has been written.
-        // Where the settings and keys files live, for the page to name in a message: it differs
-        // between Linux and Windows. It ends in the platform's separator, so that the page can put
-        // a file name after it without choosing one.
-        config_dir: () => app.getPath("userData") + path.sep,
         read_settings: () => read_file(settings),
-        // The keys file, which only the user writes, or `null` if there is none.
+        // The keys file, which only the user writes into, or `null` if there is none.
         read_keys: () => read_file(path.join(app.getPath("userData"), "keys")),
         write_settings: (text) => {
             fs.mkdirSync(path.dirname(settings), { recursive: true });
@@ -255,6 +259,18 @@ app.whenReady().then(() => {
         },
         // Open the settings in the desktop's editor for JSON. Returns the error, or "".
         open_settings: () => shell.openPath(settings),
+        // Open the keys file in the desktop's editor, starting it with a comment if there is none,
+        // or it is empty: a desktop takes an empty file for no kind of file at all, and may have
+        // nothing to open it with, where a file of text opens in its text editor. Returns the
+        // error, or "".
+        open_keys: () => {
+            const keys = path.join(app.getPath("userData"), "keys");
+            if (!fs.existsSync(keys) || fs.statSync(keys).size === 0) {
+                fs.mkdirSync(path.dirname(keys), { recursive: true });
+                write_file(keys, KEYS_HEADER);
+            }
+            return shell.openPath(keys);
+        },
         // The nearest file called `name` in `directory` or its ancestors, or `null`. The search
         // ends at the enclosing git repository's root, and never reaches the home directory, so
         // that a stray `~/macros.tex` is not taken up by every diagram outside a project.
@@ -286,9 +302,9 @@ app.whenReady().then(() => {
             });
             return paths === undefined ? null : paths[0];
         },
-        save_dialog: (default_path) => dialog.showSaveDialogSync(window, {
+        save_dialog: (default_path, kind = "diagram") => dialog.showSaveDialogSync(window, {
             defaultPath: default_path ?? undefined,
-            filters: FILTERS.diagram,
+            filters: FILTERS[kind],
         }) ?? null,
         confirm: (message) => dialog.showMessageBoxSync(window, {
             type: "question",

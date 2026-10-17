@@ -21,8 +21,6 @@ Object.assign(CONSTANTS, {
     ROUNDING: 8,
     /// How many pixels each unit of loop radius corresponds to.
     LOOP_HEIGHT: 16,
-    /// How many pixels of padding to place around labels on edges.
-    EDGE_LABEL_PADDING: 8,
     /// How much padding to try to keep around the focus point when moving it via the keyboard
     /// (in pixels).
     VIEW_PADDING: 128,
@@ -31,4 +29,38 @@ Object.assign(CONSTANTS, {
     /// Minimum and maximum zoom levels.
     MIN_ZOOM: -2.5,
     MAX_ZOOM: 1,
+
+    /// The canvas is laid out as tikz-cd lays the diagram out, in a 10pt document, scaled so that
+    /// labels are the size KaTeX draws them (see `UI.update_scale`). These were measured from
+    /// tikz-cd's own output.
+    TEX: {
+        /// A TeX em, in pt, which tikz-cd's separations are given in.
+        EM: 10,
+        /// How much larger KaTeX draws maths than the font size it is given (its `.katex` rule).
+        KATEX_SCALE: 1.21,
+        /// What tikz-cd puts around a label to make its node, on each side, in pt.
+        NODE_PADDING: { x: 4.5, y: 0.9 },
+        /// How far apart tikz-cd puts neighbouring nodes, per pt of separation: a column's gap is
+        /// a third more than its `column sep`, and a row's is its `row sep`.
+        GAP: { x: 4 / 3, y: 1 },
+        /// The size of a bullet's node, in pt, which an empty column or row beyond the diagram
+        /// takes (see `Grid`).
+        BULLET: { x: 14, y: 14 },
+        /// What tikz-cd puts round a label to make its node, on each side, in pt.
+        LABEL_PADDING: 2.35,
+        /// What tikz-cd puts round a cell's box to make the node arrows meet, on each side, in ex
+        /// (its `inner xsep` and `inner ysep`).
+        CELL_SEP: { x: 1, y: 0.85 },
+        /// TikZ's `outer sep`, half its line width, which a node's border, where arrows meet it,
+        /// lies beyond its padding by, in pt.
+        OUTER_SEP: 0.2,
+        /// Computer Modern's ex, and the height of the maths axis above the baseline, in em. A
+        /// cell's node is centred on the axis.
+        EX: 0.430555,
+        AXIS: 0.25,
+        /// A millimetre, in pt, which a loop's distance is given in.
+        PT_PER_MM: 72.27 / 25.4,
+        /// The unit of tikz-cd's `shift left` and `shift right`, 0.56ex, in pt.
+        SHIFT: 2.41,
+    },
 });

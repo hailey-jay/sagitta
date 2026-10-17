@@ -207,7 +207,14 @@ class DiagramFile {
 
     /// Save the diagram to `path`, or to its own path, asking for one if it has none. Returns
     /// whether the diagram was saved.
-    async save(path = this.path) {
+    async save(path = this.path, review = false) {
+        // A new file is the export, so the options it is written with are shown first (see
+        // `Layer.Export.review`), unless they are being shown already.
+        const exporting = this.ui.keymap.layers.export;
+        if (review && path === null && !exporting.active) {
+            exporting.review();
+            return false;
+        }
         try {
             path = path === null
                 ? await host.save_dialog(this.path
@@ -252,13 +259,37 @@ class DiagramFile {
             this.ui.mode_line.flash(`opened the folder${this.path === null
                 ? this.describe_macros() : ""}`);
         } catch (error) {
-            UI.display_error(`Could not open the folder: ${error.message}`);
+            if (error.brief) {
+                this.ui.mode_line.flash(error.message, true);
+            } else {
+                UI.display_error(`Could not open the folder: ${error.message}`);
+            }
         }
     }
 
     /// Ask where to save the diagram, then save it there.
-    save_as() {
-        return this.save(null);
+    /// Write the diagram as an SVG image (see `DiagramSVG`), asking where, beside the diagram by
+    /// default. The diagram's own file is unchanged.
+    async export_svg() {
+        let path = null;
+        try {
+            const name = `${this.path === null ? "diagram"
+                : DiagramFile.basename(this.path).replace(/\.[^.]*$/, "")}.svg`;
+            const directory = this.directory();
+            path = await host.save_dialog(directory === null ? name : `${directory}/${name}`, "svg");
+            if (path === null) {
+                return;
+            }
+            await host.write(path, await DiagramSVG.build(this.ui));
+            this.ui.mode_line.flash(`wrote ${host.describe(path)}`);
+        } catch (error) {
+            UI.display_error(`Could not write ${path === null ? "the SVG" : host.describe(path)}: ${
+                error.message}`);
+        }
+    }
+
+    save_as(review = false) {
+        return this.save(null, review);
     }
 
     /// Take macros from `path` (resolved against the diagram's directory; asking for one if

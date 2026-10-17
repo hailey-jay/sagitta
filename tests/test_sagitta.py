@@ -297,69 +297,73 @@ def test_the_var_corner_can_be_chosen_on_its_own(sagitta, home):
     assert "\\ulcorner" in diagram.read_text()
 
 
-def _quiver_mode(home):
-    settings = home / ".config" / "sagitta"
-    settings.mkdir(parents=True, exist_ok=True)
-    (settings / "settings.json").write_text('{"ui.quiver_mode": true}\n')
-
-
-def test_spreadsheet_mode_types_straight_into_the_label(sagitta, home):
-    diagram = _diagram(home / "paper")
-    sagitta("typing", diagram, json.dumps(["x", "Enter"]))
-    assert "\tx & B" in diagram.read_text()
-
-
-def test_quiver_mode_types_only_after_return(sagitta, home):
-    _quiver_mode(home)
+def test_a_label_is_typed_only_after_return(sagitta, home):
     diagram = _diagram(home / "paper")
     # `x` is the layer's crossing over, which wants an arrow, rather than a label.
     result = sagitta("typing", diagram, json.dumps(["x"]), expected_error="Select an arrow first")
-    assert result["mode_line"].startswith(";")
+    assert result["mode_line"].startswith("NORMAL")
     assert not result["editing"]
     assert "\tA & B" in diagram.read_text()
+    # RET selects the whole label, so typing replaces it.
     result = sagitta("typing", diagram, json.dumps(["Enter", "x", "Enter"]))
-    assert result["mode_line"].startswith(";")
-    assert "\tAx & B" in diagram.read_text()
+    assert result["mode_line"].startswith("NORMAL")
+    assert "\tx & B" in diagram.read_text()
 
 
-def test_quiver_mode_keeps_the_command_layer_open(sagitta, home):
+def test_the_command_layer_stays_open(sagitta, home):
     """The layer's keys work without `;`, and Escape still deselects."""
-    _quiver_mode(home)
     diagram = _diagram(home / "paper")
     sagitta("keys", diagram, json.dumps([["x"]]))
     assert '\\arrow["f", crossing over, from=1-1' in diagram.read_text()
     result = sagitta("keys", diagram, json.dumps([["Escape"]]))
     assert result["counts"]["selected"] == 0
-    assert result["mode_line"].startswith(";")
+    assert result["mode_line"].startswith("NORMAL")
 
 
-@pytest.mark.parametrize("quiver,keys,main,submenu", [
-    # Spreadsheet mode lists the keys after a pause, as it always has.
-    (False, [";"], True, False),
-    (False, [";", "t"], False, True),
-    # Quiver mode lists them only on `;`, though a component's choices show at once.
-    (True, [], False, False),
-    (True, ["b"], False, False),
-    (True, ["t"], False, True),
-    (True, [";"], True, False),
-    (True, [";", ";"], False, False),
+def test_the_badge_names_the_state_and_the_file_marks_unsaved_changes(sagitta, home):
+    script = """(() => {
+        const press = (key) => document.dispatchEvent(
+            new KeyboardEvent("keydown", { key, cancelable: true }));
+        const badge = () => {
+            ui.mode_line.update(ui);
+            const line = document.querySelector(".mode-line");
+            return [line.querySelector(".mode").textContent, line.dataset.mode,
+                line.querySelector(".file .unsaved") !== null];
+        };
+        const states = [badge()];
+        press(";");
+        states.push(badge());
+        press(";");
+        press("Enter");
+        states.push(badge());
+        const input = ui.label_input.element;
+        input.value = "x";
+        input.dispatchEvent(new Event("input"));
+        press("Enter");
+        states.push(badge());
+        return states;
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == [
+        ["NORMAL", "rest", False], [";", "layer", False], ["EDIT", "edit", False],
+        ["NORMAL", "rest", True]]
+
+
+@pytest.mark.parametrize("keys,main,submenu", [
+    # The keys are listed only on `;`, though a component's choices show at once.
+    ([], False, False),
+    (["b"], False, False),
+    (["t"], False, True),
+    ([";"], True, False),
+    ([";", ";"], False, False),
 ])
-def test_the_command_list_shows(sagitta, home, quiver, keys, main, submenu):
-    if quiver:
-        _quiver_mode(home)
+def test_the_command_list_shows(sagitta, home, keys, main, submenu):
     result = sagitta("lists", _diagram(home / "paper"), json.dumps(keys))
     assert result == {"main": main, "submenu": submenu}
 
 
-@pytest.mark.parametrize("quiver", [False, True])
-def test_a_key_the_command_layer_does_not_use_is_kept_from_the_browser(sagitta, home, quiver):
+def test_a_key_the_command_layer_does_not_use_is_kept_from_the_browser(sagitta, home):
     """Firefox's quick find takes `'` otherwise."""
-    if quiver:
-        _quiver_mode(home)
     script = """(() => {
-        if (!ui.keymap.active) {
-            ui.keymap.enter();
-        }
         const event = new KeyboardEvent("keydown", { key: "'", cancelable: true });
         document.dispatchEvent(event);
         return event.defaultPrevented;
@@ -367,14 +371,75 @@ def test_a_key_the_command_layer_does_not_use_is_kept_from_the_browser(sagitta, 
     assert sagitta("evaluate", _diagram(home / "paper"), script)
 
 
-@pytest.mark.parametrize("quiver", [False, True])
-def test_return_on_an_empty_cell_makes_one_to_label(sagitta, home, quiver):
-    if quiver:
-        _quiver_mode(home)
+def test_return_on_an_empty_cell_makes_one_to_label(sagitta, home):
     diagram = _diagram(home / "paper")
     result = sagitta("typing", diagram, json.dumps(["Right", "Right", "Enter", "E", "Enter"]))
     assert result["counts"]["vertices"] == 5
     assert "& B & E" in diagram.read_text()
+
+
+@pytest.mark.parametrize("key", ["b", "t"])
+def test_return_lets_go_of_a_slider_or_list_without_editing(sagitta, home, key):
+    """RET after stepping a slider, or with a style list open, only lets go of it."""
+    script = """(() => {
+        const press = (key) => document.dispatchEvent(
+            new KeyboardEvent("keydown", { key, cancelable: true }));
+        ui.select(...ui.quiver.all_cells());
+        press("%s");
+        press("ArrowRight");
+        press("Enter");
+        return [ui.input_is_active() !== false, ui.keymap.property, ui.keymap.component];
+    })()""" % key
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == [False, None, None]
+
+
+@pytest.mark.parametrize("keys,command", [
+    (["i", "Up"], "insert-row-above"),
+    (["i", "Down"], "insert-row-below"),
+    (["i", "Left"], "insert-column-left"),
+    (["i", "Right"], "insert-column-right"),
+])
+def test_the_insert_list_opens_a_gap_as_its_command_does(sagitta, home, keys, command):
+    by_key, by_command = _diagram(home / "key"), _diagram(home / "command")
+    sagitta("layer", by_key, json.dumps(keys))
+    sagitta("commands", by_command, json.dumps([command]))
+    assert by_key.read_text() == by_command.read_text() != _diagram(home / "plain").read_text()
+
+
+def test_saving_as_shows_the_export_options_first(sagitta, home):
+    """Save as opens the export layer, which lists saving; RET there goes on to the dialog, and
+    the mode line names the options that differ from the defaults."""
+    script = """(async () => {
+        ui.settings.set("export.standalone", true);
+        ui.mode_line.run(ui, "save-as");
+        const layer = ui.keymap.current_layer() === ui.keymap.layers.export;
+        const lines = [...document.querySelectorAll(".which-key .submenu .entry span:first-of-type")]
+            .map((span) => span.textContent);
+        // The dialog itself is the host's, so what RET asks for is recorded instead.
+        const asked = [];
+        ui.file.save = async (...args) => { asked.push(args); return false; };
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
+        return { layer, asked, saving: lines.includes("save as, with these options"),
+            marker: document.querySelector(".mode-line .export-options")?.textContent };
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == {
+        "layer": True, "asked": [[None]], "saving": True, "marker": " [standalone]"}
+
+
+def test_the_export_layer_copies_the_hash_and_draws_an_svg(sagitta, home):
+    """`q` copies the `#q=` hash that opens the diagram; the SVG holds a label per labelled cell
+    and per labelled arrow, the arrows, and the fonts the labels use."""
+    script = """(async () => {
+        await ui.keymap.layers.export.copy_hash();
+        const hash = await host.read_clipboard();
+        const svg = await DiagramSVG.build(ui);
+        const count = (text) => svg.split(text).length - 1;
+        return { hash: hash.startsWith("#q=") && ui.file.text().includes(`%${hash}`),
+            svg: svg.startsWith("<svg"), labels: count("<foreignObject"),
+            arrows: count("<g transform="), fonts: count("@font-face") > 0 };
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == {
+        "hash": True, "svg": True, "labels": 8, "arrows": 4, "fonts": True}
 
 
 def test_return_with_a_selection_still_edits_it(sagitta, home):
@@ -383,13 +448,7 @@ def test_return_with_a_selection_still_edits_it(sagitta, home):
     result = sagitta("typing", diagram, json.dumps(
         [["Space", ["shift"]], "Right", "Right", "Enter", "x", "Enter"]))
     assert result["counts"]["vertices"] == 4
-    assert "\tAx & B" in diagram.read_text()
-
-
-def test_quiver_mode_command_switches_it(sagitta, home):
-    sagitta("commands", _diagram(home / "paper"), json.dumps(["quiver-mode"]))
-    settings = json.loads((home / ".config" / "sagitta" / "settings.json").read_text())
-    assert settings["ui.quiver_mode"] is True
+    assert "\tx & B" in diagram.read_text()
 
 
 def test_the_corner_takes_the_kind_last_used(sagitta, home):
@@ -442,22 +501,22 @@ def test_a_nudge_bends_the_arrow_beside_a_loop(sagitta, home):
 # ── Key bindings ──────────────────────────────────────────────────────────────
 #
 # Every binding goes through `Keymap.dispatch`. A binding marked `layer` runs only in the command
-# layer; outside it, the same key types a label.
+# layer, which is open whenever no label, prompt, or other layer has the keys.
 
 
 @pytest.mark.parametrize("keys,expected", [
     ([[";"], ["r"], ["Escape"]], '\\arrow["f"\', from=1-2, to=1-1]'),
     ([["r", ["control"]]], '\\arrow["f"\', from=1-2, to=1-1]'),
-    ([["r"], ["Enter"]], '\\arrow["r", from=1-1, to=1-2]'),
-    # An opening delimiter wraps the label it would replace, or the selected part of one, and
+    ([["Enter"], ["r"], ["Enter"]], '\\arrow["r", from=1-1, to=1-2]'),
+    # An opening delimiter wraps the selected part of a label, as RET leaves the whole of it, and
     # otherwise brings its closing one, which typing steps over.
-    ([["Escape"], ["("], ["Enter"]], "\t{(A)} & B"),
-    ([["Escape"], ["Enter"], ["Left", ["shift"]], ["["], ["{"], ["Enter"]], "\t{[{A}]} & B"),
-    ([["Escape"], ["Backspace"], ["Escape"], ["("], ["x"], ["Enter"]], "\t{(x)} & B"),
-    ([["Escape"], ["Enter"], ["("], ["x"], [")"], ["Enter"]], "\t{A(x)} & B"),
+    ([["Escape"], ["Enter"], ["("], ["Enter"]], "\t{(A)} & B"),
+    ([["Escape"], ["Enter"], ["Right"], ["Left", ["shift"]], ["["], ["{"], ["Enter"]], "\t{[{A}]} & B"),
+    ([["Escape"], ["Enter"], ["Backspace"], ["("], ["x"], ["Enter"]], "\t{(x)} & B"),
+    ([["Escape"], ["Enter"], ["Right"], ["("], ["x"], [")"], ["Enter"]], "\t{A(x)} & B"),
     # Not before its closing one; and deleting an empty pair deletes both.
-    ([["Escape"], ["Enter"], ["("], ["("], ["Enter"]], "\t{A(()} & B"),
-    ([["Escape"], ["Enter"], ["["], ["Backspace"], ["Enter"]], "\tA & B"),
+    ([["Escape"], ["Enter"], ["Right"], ["("], ["("], ["Enter"]], "\t{A(()} & B"),
+    ([["Escape"], ["Enter"], ["Right"], ["["], ["Backspace"], ["Enter"]], "\tA & B"),
 ])
 def test_keys_change_the_diagram(sagitta, home, keys, expected):
     diagram = _diagram(home / "paper")
@@ -466,8 +525,8 @@ def test_keys_change_the_diagram(sagitta, home, keys, expected):
 
 
 def _typed(*keys):
-    """Edit `A` in place, type `keys`, and commit."""
-    return [["Escape"], ["Enter"], *([key] for key in keys), ["Enter"]]
+    """Edit `A` in place, after it rather than over it, type `keys`, and commit."""
+    return [["Escape"], ["Enter"], ["Right"], *([key] for key in keys), ["Enter"]]
 
 
 @pytest.mark.parametrize("keys,expected", [
@@ -487,7 +546,7 @@ def _typed(*keys):
     (_typed("\\", *"left|x|"), "\t{A\\left|x\\right|} & B"),
     (_typed("\\", "|", "x"), "\t{A\\|x\\|} & B"),
     # `|` alone is as often a restriction as a delimiter, so it neither wraps nor pairs.
-    ([["Escape"], ["|"], ["Enter"]], "\t{|} & B"),
+    ([["Escape"], ["Enter"], ["|"], ["Enter"]], "\t{|} & B"),
     (_typed("|", "U"), "\t{A|U} & B"),
     (_typed("|", "|", "Backspace"), "\t{A|} & B"),
     # `\(` and `\[` are left alone, as is a delimiter after a line break.
@@ -518,16 +577,18 @@ def test_the_help_layer_lists_every_binding(sagitta, home):
     for the keys handled elsewhere."""
     help = dict(sagitta("help", _diagram(home / "paper")))
     assert list(help) == ["Typing", "Moving", "Mouse", "Layers", "Chords", "Help", "About"]
-    assert help["Typing"][0] == ["a \\ 2 …", "replace the label"]
-    assert ["RET", "edit the label in place, or label a new cell"] in help["Typing"]
+    # Letters are commands, and DEL deletes.
+    assert help["Typing"][0] == ["( [ { | \\{ \\langle …", "pair brackets in a label"]
+    assert ["DEL", "delete"] in help["Typing"]
+    assert ["RET", "edit the label"] in help["Typing"]
     assert ["<delete>", "delete"] in help["Typing"]
-    assert help["Moving"][0] == ["arrows", "move the focus point"]
-    assert help["Mouse"][0] == ["click", "select; again to edit the label"]
+    assert help["Moving"][0] == ["arrows", "move"]
+    assert help["Mouse"][0] == ["click", "select, again to edit"]
     assert help["Mouse"][-1] == ["S-scroll  C-scroll", "zoom"]
-    assert ["C-drag  A-drag  middle-drag", "pan by dragging"] in help["Mouse"]
-    assert ["C-e", "export tikz-cd"] in help["Layers"]
+    assert ["C-drag  A-drag  middle-drag", "pan"] in help["Mouse"]
+    assert ["C-e", "export"] in help["Layers"]
     assert ["C-m", "macros"] in help["Layers"]
-    assert ["/  C-f", "search labels, or type cell codes"] in help["Layers"]
+    assert ["/  C-f", "search"] in help["Layers"]
     assert ["C-r", "reverse"] in help["Chords"]
     assert ["C-x", "cut"] in help["Chords"]
     assert not any(keys.startswith(";") for keys, _ in help["Chords"])
@@ -604,6 +665,72 @@ def test_the_command_layer_opens_the_code_prompts(sagitta, home):
     assert result["mode_line"].startswith("TOGGLE")
 
 
+def test_a_prompt_leaves_the_label_input_named_label(sagitta, home):
+    """The prompt names itself in the box the label input shows "label" in."""
+    script = """(() => {
+        const press = (key) => document.dispatchEvent(
+            new KeyboardEvent("keydown", { key, cancelable: true }));
+        press(";");
+        press("s");
+        const during = document.querySelector(".input-mode").textContent;
+        ui.switch_mode(UIMode.default);
+        return [during, document.querySelector(".input-mode").textContent];
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == ["Toggle", ""]
+
+
+def test_the_hints_give_way_only_where_there_is_no_room(sagitta, home):
+    """A short message leaves every hint showing; a narrow mode line drops them whole, from the
+    right, and keeps `; commands`."""
+    script = """(() => {
+        const line = document.querySelector(".mode-line");
+        const shown = () => Array.from(line.querySelectorAll(".hint"))
+            .filter((hint) => hint.offsetTop === 0 && hint.offsetWidth > 0)
+            .map((hint) => hint.dataset.action ?? "layer");
+        ui.mode_line.flash("v unbound");
+        const message = shown();
+        line.style.right = `${window.innerWidth - 700}px`;
+        return [message, shown()];
+    })()"""
+    message, narrow = sagitta("evaluate", _diagram(home / "paper"), script)
+    assert message == ["layer", "undo", "save", "export", "shortcuts"]
+    assert narrow[0] == "layer" and len(narrow) < 5 and narrow == message[:len(narrow)]
+
+
+def test_the_first_bullet_is_as_wide_as_an_empty_column_beyond_it(sagitta, home):
+    """KaTeX's font loads only once the first label needs it, which must be waited for, or that
+    label is measured in a fallback font, and its column is narrower than the space round it."""
+    frames = sagitta("frames", home / "new.tikzcd", json.dumps([["Space"], ["Space"], ["Escape"]]))
+    # The vertex is in column 0, and columns 1 to 3 are empty, beyond the diagram.
+    columns = frames[-1]["columns"]
+    assert abs(columns[2] - columns[3]) <= 1, columns
+
+
+def _monotonic(values):
+    steps = [b - a for a, b in zip(values, values[1:]) if b != a]
+    return all(step > 0 for step in steps) or all(step < 0 for step in steps)
+
+
+@pytest.mark.parametrize("keys", [
+    # Delete a vertex at the edge, whose column stays as it was.
+    [["Space"], ["Space"], ["Right"], ["Space"], ["Backspace"]],
+    # Move the only vertex either way, and the second of two away from the first.
+    [["Space"], ["Space"], ["Right", ["control"]]],
+    [["Space"], ["Space"], ["Left", ["control"]]],
+    [["Space"], ["Space"], ["Right"], ["Space"], ["Right", ["control"]]],
+])
+def test_a_column_a_vertex_leaves_or_joins_changes_size_one_way(sagitta, home, keys):
+    """From before the last key, each column grows or shrinks straight to its new size, rather
+    than shrinking to an empty column's size within the diagram and growing back, and the view
+    keeps still. A vertex moves to its new cell at once, and then only one way, with the columns."""
+    frames = sagitta("frames", home / "new.tikzcd", json.dumps(keys))
+    assert len({frame["view"] for frame in frames}) == 1, frames
+    for column in zip(*(frame["columns"] for frame in frames)):
+        assert _monotonic(column), frames
+    for left in zip(*(frame["left"] for frame in frames[1:])):
+        assert _monotonic(left), frames
+
+
 def test_slash_searches_in_the_command_layer_too(sagitta, home):
     result = sagitta("keys", _diagram(home / "paper"), json.dumps([[";"], ["/"]]))
     assert result["mode_line"].startswith("/ SEARCH")
@@ -647,6 +774,120 @@ def test_removing_a_cell_frees_its_code(sagitta, home):
     restored = _codes(sagitta, _diagram(home / "restored"), [*search_s, ["Delete"], ["z", ["control"]]])
     assert restored == (["A", "D", "F", "S"], ["AD", "AS", "DF", "SF"])
 
+
+def test_delete_takes_the_cell_under_the_focus_point_with_nothing_selected(sagitta, home):
+    """Searching for `S` moves the focus point to it, Escape lets go of the selection, and stepping
+    away and back shows the focus point there."""
+    search_s = [["/"], ["s"], ["Enter"], ["Escape"], ["Left"], ["Right"]]
+    for key in ["Delete", "Backspace"]:
+        removed = _codes(sagitta, _diagram(home / key), [*search_s, [key]])
+        assert removed == (["A", "D", "F"], ["AD", "DF"]), key
+
+
+def test_delete_takes_only_the_selection_when_there_is_one(sagitta, home):
+    """Searching for `S` (the top right vertex) selects it, and Down moves the focus point onto
+    `F`, below it, which stays."""
+    keys = [["/"], ["s"], ["Enter"], ["Down"]]
+    for key in ["Delete", "Backspace"]:
+        removed = _codes(sagitta, _diagram(home / f"selected-{key}"), [*keys, [key]])
+        assert removed == (["A", "D", "F"], ["AD", "DF"]), key
+
+
+WIDE = """\\begin{tikzcd}
+\t{X \\times_{S} Y \\times_{S} W} & {\\mathrm{Hom}(X \\otimes Y, Z)} & {M \\otimes N \\otimes P}
+\t\\arrow["f", from=1-1, to=1-2]
+\t\\arrow["g", from=1-2, to=1-3]
+\\end{tikzcd}
+"""
+
+
+def test_an_arrow_between_wide_labels_shows_its_label(sagitta, home):
+    """Before their columns are sized, wide labels overlap, so the arrows between them cannot be
+    drawn at first, and had no label to render into."""
+    labels = sagitta("evaluate", _diagram(home / "wide", WIDE), """(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return ui.quiver.all_cells().filter((cell) => cell.is_edge())
+            .map((edge) => edge.arrow.label.element.element.textContent.length > 0);
+    })()""")
+    assert labels == [True, True]
+
+LOOP_BELOW = """\\begin{tikzcd}
+\tX
+\t\\arrow["e"', from=1-1, to=1-1, loop, in=235, out=305, distance=10mm]
+\\end{tikzcd}
+"""
+
+
+def test_a_loops_label_on_its_inside_sits_in_the_loop(sagitta, home):
+    """TikZ sets the label's anchor on the loop, so `'` puts it inside the loop below `X`, under
+    the cell and above the loop's lowest point, rather than over the cell."""
+    place = sagitta("evaluate", _diagram(home / "loop", LOOP_BELOW), """(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const box = (element) => element.getBoundingClientRect();
+        const edge = ui.quiver.all_cells().find((cell) => cell.is_edge());
+        const vertex = ui.quiver.all_cells().find((cell) => cell.is_vertex());
+        const loop = box([...edge.arrow.svg.element.querySelectorAll("path")]
+            .reduce((a, b) => box(a).height >= box(b).height ? a : b));
+        const label = box(edge.arrow.label.element.element);
+        return [box(vertex.element.query_selector(".content").element).bottom, label.top,
+            label.bottom, loop.bottom];
+    })()""")
+    cell, top, bottom, lowest = place
+    assert cell <= top and bottom <= lowest + 2, place
+
+PAIR_OF_CELLS = """\\begin{tikzcd}
+\tX & {Y \\oplus Y'}
+\\end{tikzcd}
+"""
+
+
+def test_a_cells_node_is_tikz_cds(sagitta, home):
+    """tikz-cd's node round a cell is its box with `inner ysep` and `outer sep`, centred on the
+    maths axis, and the label's baseline sits that far below it. The figures, in pt from the
+    centre, are TikZ's own, from `Y.north`, `Y.south`, `Y.35`, and `Y.325`."""
+    nodes = sagitta("evaluate", _diagram(home / "pair", PAIR_OF_CELLS), """(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const pt = Edge.PX_PER_PT;
+        return ui.quiver.all_cells().filter((cell) => cell.is_vertex()).map((vertex) => {
+            const shape = vertex.shape;
+            const at = (degrees) => {
+                const point = Arrow.border(shape, -degrees * Math.PI / 180);
+                return [point.x / pt, -point.y / pt];
+            };
+            const strut = vertex.element.query_selector(".label .strut").element;
+            const depth = -(parseFloat(strut.style.verticalAlign) || 0)
+                * parseFloat(getComputedStyle(strut).fontSize);
+            const content = vertex.element.query_selector(".content").element
+                .getBoundingClientRect();
+            return {
+                up: (shape.size.height / 2 - shape.offset.y) / pt,
+                down: (shape.size.height / 2 + shape.offset.y) / pt,
+                at: [...at(35), ...at(325)],
+                baseline: (strut.getBoundingClientRect().bottom - depth
+                    - (content.top + content.bottom) / 2) / pt,
+            };
+        });
+    })()""")
+    x, y = nodes
+    assert [x["up"], x["down"]] == pytest.approx([8.19, 6.36], abs=0.05)
+    assert [y["up"], y["down"]] == pytest.approx([8.88, 7.19], abs=0.05)
+    assert y["at"] == pytest.approx([12.68, 8.88, 10.27, -7.19], abs=0.05)
+    assert [x["baseline"], y["baseline"]] == pytest.approx([2.5, 2.5], abs=0.05)
+
+
+def test_an_error_stands_clear_of_the_command_line(sagitta, home):
+    """A standing error takes the line above the mode line, which the command line takes while it
+    is open, so the error moves above it."""
+    boxes = sagitta("evaluate", _diagram(home / "paper"), """(async () => {
+        UI.display_error("a standing error");
+        ui.prompt.open("Command");
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+        return [box(".mode-line .message.error").bottom, box(".label-input-container").top,
+            document.activeElement === ui.label_input.element];
+    })()""", expected_error="a standing error")
+    error, prompt, focused = boxes
+    assert focused and error <= prompt + 0.5, boxes
 
 def test_a_key_press_ends_a_pan_whose_key_was_released_unseen(sagitta, home):
     result = sagitta("stale_pan", _diagram(home / "paper"))
@@ -748,16 +989,16 @@ def test_the_help_layer_shows_rebound_chords(sagitta, home):
 
 
 def test_the_keys_file_reports_its_problems_and_keeps_the_rest(sagitta, home):
-    _keys(home, "sav C-s\nreverse ; w\nflip a\n")
+    _keys(home, "sav C-s\nreverse ; w\nflip ; 5\n")
     opened = sagitta("open", _diagram(home / "paper"))
-    assert 'line 1: nothing is called "sav" (and 1 more)' in opened["mode_line"]
+    assert 'keys line 1: no command "sav" (+1 more, :keys-file)' in opened["mode_line"]
     # A line replaces every default key of what it names, chords included.
     assert ["w", "reverse", ""] in sagitta("which_key", _diagram(home / "other"))
 
 
 @pytest.mark.parametrize("text,problem", [
-    ("sav C-s", 'line 1: nothing is called "sav"'),
-    ("save s", '"s" would type'),
+    ("sav C-s", 'line 1: no command "sav"'),
+    ("save 5", "keeps its own meaning in the command layer"),
     ("save ; 5", "keeps its own meaning in the command layer"),
     ("save ; :", "keeps its own meaning in the command layer"),
     ("save C-S-#", "write the shifted character itself"),
@@ -919,6 +1160,35 @@ def test_shift_space_selects_and_space_connects(sagitta, home):
     assert steps["deselect B"] == {"vertices": 4, "edges": 4, "selected": 1}
     assert steps["empty cell"] == {"vertices": 4, "edges": 4, "selected": 2}
     assert steps["connect to D"]["edges"] == 6
+    # `D` is selected, with the two arrows just drawn to it.
+    assert steps["connect to D"]["selected"] == 3
+
+
+def test_space_selects_the_arrow_it_draws_and_return_labels_the_cell(sagitta, home):
+    """A preset then restyles the new arrow, RET labels the new cell alone, and the arrow is
+    selected again once the label is put down."""
+    script = """(() => {
+        const press = (key, init = {}) => document.dispatchEvent(
+            new KeyboardEvent("keydown", { key, cancelable: true, ...init }));
+        ui.deselect();
+        ui.select(ui.positions.get("0 0"));
+        ui.focus_point.class_list.add("focused");
+        ui.reposition_focus_point(new Position(0, 0));
+        press("ArrowRight");
+        press("ArrowRight");
+        press(" ");
+        const drawn = [ui.selection.size, ui.selection_contains_edge()];
+        press("Enter");
+        const editing = Array.from(ui.selection).map((cell) => cell.is_vertex());
+        ui.label_input.element.value = "E";
+        ui.label_input.element.dispatchEvent(new Event("input"));
+        press("Enter");
+        return { drawn, editing, after: ui.selection.size,
+            labels: ui.quiver.all_cells().filter((cell) => cell.is_edge()
+                && cell.target.label === "E").map((cell) => cell.label) };
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == {
+        "drawn": [2, True], "editing": [True], "after": 2, "labels": [""]}
 
 
 def test_the_mark_selects_a_rectangle_of_cells(sagitta, home):
@@ -979,12 +1249,12 @@ def test_set_names_a_setting_and_its_value(sagitta, home):
     result = sagitta("set_command", _diagram(home / "paper"), json.dumps([
         "set ui.zoom 150",
         "set ui.dark_mode on",
-        "set ui.which_key_delay null",
+        "set ui.which_key_compact yes",
         "set diagram.arrow_preset equals",
     ]))
     assert result["settings"]["ui.zoom"] == 150
     assert result["settings"]["ui.dark_mode"] is True
-    assert result["settings"]["ui.which_key_delay"] is None
+    assert result["settings"]["ui.which_key_compact"] is True
     assert result["settings"]["diagram.arrow_preset"] == "equals"
     # Every change is reported, and reaches the file.
     assert all("is now" in line for line in result["lines"])
@@ -1084,33 +1354,6 @@ def test_the_gap_is_saved_as_an_empty_row(sagitta, home):
     assert "\t\\\\\n" in diagram.read_text()
 
 
-def test_snake_draws_an_arrow_as_a_chain_through_empty_cells(sagitta, home):
-    diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
-    steps = sagitta("snake", diagram, None)
-    assert steps["selected"] == {"vertices": 2, "edges": 1, "selected": 3}
-    # One corner between `P` and `Q`, so one new cell and two arrows.
-    assert steps["drawn"]["vertices"] == 3
-    assert steps["drawn"]["edges"] == 2
-    # The new cell is empty, and sits at the corner that x-first gives.
-    assert steps["cells"] == "-10 P00 Q11"
-    # One undo puts the single arrow back.
-    assert (steps["undone"]["vertices"], steps["undone"]["edges"]) == (2, 1)
-    # The chain is what was saved.
-    saved = diagram.read_text()
-    assert saved.count("\\arrow[") == 2
-
-
-def test_snake_can_be_told_which_axis_steps_first(sagitta, home):
-    steps = sagitta("snake", _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd"), "y")
-    assert steps["cells"] == "-01 P00 Q11"
-
-
-def test_snake_refuses_what_has_no_staircase(sagitta, home):
-    """Neighbours are already joined, so there is nothing to put between them."""
-    sagitta("snake", _diagram(home / "paper"), None,
-            expected_error="Select one arrow to draw as a staircase.")
-
-
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 
@@ -1122,7 +1365,9 @@ def test_snake_refuses_what_has_no_staircase(sagitta, home):
     (["route"], "-- (\\tikzcdmatrixname-2-2.center |- \\tikzcdmatrixname-1-1.center)"),
     (["route", "route"], "-- (\\tikzcdmatrixname-1-1.center |- \\tikzcdmatrixname-2-2.center)"),
     (["route x", "rounding 0"], "to path={-- (\\tikzcdmatrixname-2-2.center"),
-    (["route x", "rounding 8"], "to path={[rounded corners=16pt] --"),
+    # A one-cell end leg holds no more than 13pt at normal separations, with room for the head
+    # (see `QuiverExport.route_radius`).
+    (["route x", "rounding 8"], "to path={[rounded corners=13pt] --"),
     (["route x", "squiggly"], "[sharp corners]}, squiggly, from=1-1, to=2-2]"),
 ])
 def test_route_commands_write_a_to_path(sagitta, home, commands, expected):
@@ -1331,6 +1576,8 @@ def test_a_changed_setting_is_written_to_the_settings_file(sagitta, home):
     assert settings["export.ampersand_replacement"] is True
     # The defaults are written alongside it, so the file shows every setting there is.
     assert settings["export.centre_diagram"] is True
+    # But for dark mode, which follows the system's colour scheme until it is set.
+    assert "ui.dark_mode" not in settings
 
 
 def _settings(home, text):
@@ -1367,7 +1614,9 @@ def test_the_view_starts_at_the_zoom_of_the_settings(sagitta, home):
     assert "50%" in sagitta("open", _diagram(home / "paper"))["mode_line"]
 
 
-def test_the_cell_and_label_sizes_come_from_the_settings(sagitta, home):
+def test_the_grid_is_laid_out_at_the_label_size(sagitta, home):
+    """As tikz-cd lays out the matrix, scaled to the labels: two letters at normal separation are
+    128px apart at 26px, and proportionally further at 40px."""
     def measure():
         layout = sagitta("layout", _diagram(home / "paper", PAIR), json.dumps({}))
         a, b = layout["vertices"]
@@ -1375,15 +1624,15 @@ def test_the_cell_and_label_sizes_come_from_the_settings(sagitta, home):
                        'getComputedStyle(document.querySelector(".vertex .label")).fontSize')
         return _centre(b)[0] - _centre(a)[0], size
 
-    assert measure() == (pytest.approx(128, abs=1), "26px")
-    _settings(home, '{"ui.cell_size": 200, "ui.label_size": 40}')
-    assert measure() == (pytest.approx(200, abs=1), "40px")
+    assert measure() == (pytest.approx(128, abs=2), "26px")
+    _settings(home, '{"ui.label_size": 40}')
+    assert measure() == (pytest.approx(128 * 40 / 26, abs=3), "40px")
 
 
 def test_bad_settings_are_reported_and_left_at_their_defaults(sagitta, home):
     _settings(home, '{"ui.zoom": 500, "diagram.arrow_preset": "fancy", "ui.dark_mode": "yes"}')
     opened = sagitta("open", _diagram(home / "paper"))
-    assert "settings.json: ui.zoom should be a number from 20 to 200 (and 2 more)" \
+    assert "settings: ui.zoom should be a number from 20 to 200 (+2 more, :settings-file)" \
         in opened["mode_line"]
     assert "100%" in opened["mode_line"]
 
@@ -1422,9 +1671,12 @@ def test_the_panel_is_gone(sagitta, home):
 def test_a_setting_the_app_no_longer_has_is_dropped(sagitta, home):
     settings = home / ".config" / "sagitta"
     settings.mkdir(parents=True)
-    (settings / "settings.json").write_text('{"ui.side_panel": true}\n')
+    (settings / "settings.json").write_text('{"ui.cell_size": 3, "ui.later": true}\n')
     sagitta("settings", _diagram(home / "paper"))
-    assert "ui.side_panel" not in json.loads((settings / "settings.json").read_text())
+    written = json.loads((settings / "settings.json").read_text())
+    assert "ui.cell_size" not in written
+    # A name that is not a setting, such as a newer version's, is kept.
+    assert written["ui.later"] is True
 
 
 # ── The settings layer ────────────────────────────────────────────────────────
@@ -1454,19 +1706,19 @@ def _saved_settings(home):
 def test_the_settings_layer_changes_the_view_straight_away(sagitta, home):
     found = sagitta("script", _diagram(home / "paper", PAIR), json.dumps([
         ["press", ",", ["control"]],
-        *_presses("c", "2", "0", "0", "Enter", "l", "4", "0", "Enter"),
+        *_presses("l", "4", "0", "Enter"),
         ["wait", 300],
         ["eval", _PAIR_LAYOUT],
         *_presses("d", "z", "5", "0", "Enter"),
         ["eval", 'document.body.classList.contains("dark")'],
         ["eval", 'document.querySelector(".mode-line").textContent'],
     ]))
-    assert found[0] == [200, "40px"]
+    assert found[0][0] == pytest.approx(128 * 40 / 26, abs=3)
+    assert found[0][1] == "40px"
     assert found[1] is True
     assert "SETTINGS" in found[2] and "50%" in found[2]
     settings = _saved_settings(home)
-    assert (settings["ui.cell_size"], settings["ui.label_size"], settings["ui.zoom"]) \
-        == (200, 40, 50)
+    assert (settings["ui.label_size"], settings["ui.zoom"]) == (40, 50)
     assert settings["ui.dark_mode"] is True
 
 
@@ -1487,46 +1739,26 @@ def test_the_settings_layer_refuses_a_number_out_of_range(sagitta, home):
 
 def test_the_settings_buttons_step_their_settings(sagitta, home):
     result = sagitta("pointer", _diagram(home / "paper"), json.dumps(
-        [["press", ",", ["control"]], ["step", "cell size", "+"], ["step", "label size", "−"]]))
+        [["press", ",", ["control"]], ["step", "zoom to start at", "+"],
+         ["step", "label size", "−"]]))
     assert result["open"]
     settings = _saved_settings(home)
-    assert (settings["ui.cell_size"], settings["ui.label_size"]) == (144, 24)
+    assert (settings["ui.zoom"], settings["ui.label_size"]) == (110, 24)
 
 
-def test_the_command_list_waits_for_a_key_or_for_question_mark(sagitta, home):
+def test_question_mark_shows_or_hides_the_command_list(sagitta, home):
     found = sagitta("script", _diagram(home / "paper"), json.dumps([
-        # Listed once `;` has waited 300ms for a key, and hidden and shown again by `?`.
         ["press", ";"], ["eval", _LIST_HIDDEN],
-        ["wait", 300], ["eval", _LIST_HIDDEN],
         ["press", "?"], ["eval", _LIST_HIDDEN],
-        ["press", "Escape"],
-        # Stepping the wait below none at all sets it to never: 200, 100, 0, then never.
-        ["press", ",", ["control"]], *_presses("w", "Left", "Left", "Left", "Left", "Escape"),
-        ["press", ";"], ["wait", 600], ["eval", _LIST_HIDDEN],
         ["press", "?"], ["eval", _LIST_HIDDEN],
     ]))
-    assert found == [True, False, True, True, False]
-    assert _saved_settings(home)["ui.which_key_delay"] is None
-
-
-def test_a_key_typed_before_the_command_list_shows_keeps_it_hidden(sagitta, home):
-    """`; (` does its preset and leaves the list hidden, but `; t` waits on a choice, so a pause
-    there lists the tails."""
-    found = sagitta("script", _diagram(home / "paper"), json.dumps([
-        ["press", "a", ["control"]],
-        ["press", ";"], ["press", "("], ["wait", 600], ["eval", _LIST_HIDDEN],
-        ["press", "Escape"],
-        ["press", ";"], ["press", "t"], ["eval", _LIST_HIDDEN],
-        ["wait", 400], ["eval", _LIST_HIDDEN],
-        ["eval", 'document.querySelector(".which-key .submenu h3").textContent'],
-    ]))
-    assert found == [True, True, False, "tail (again to cancel)"]
+    assert found == [False, True, False]
 
 
 def test_the_compact_command_list_shows_only_keys_and_values(sagitta, home):
     found = sagitta("script", _diagram(home / "paper"), json.dumps([
         ["press", ",", ["control"]], *_presses("k", "Escape"),
-        ["press", "a", ["control"]], ["press", ";"], ["press", "?"],
+        ["press", "a", ["control"]], ["press", ";"],
         ["eval", """[
             document.querySelector(".which-key").classList.contains("compact"),
             [...document.querySelectorAll(".which-key .main .entry kbd:first-child + span")]
@@ -1638,6 +1870,19 @@ def test_dark_mode_draws_black_in_white_and_changes_nothing_saved(sagitta, home)
     result = sagitta("dark_mode", diagram)
     assert result == {"dark": False, "stroke": "rgb(0, 0, 0)", "label": "rgb(0, 0, 0)"}
     assert json.loads(settings.read_text())["ui.dark_mode"] is False
+
+
+def test_dark_mode_follows_the_system_until_it_is_set(sagitta, home, monkeypatch):
+    monkeypatch.setenv("SAGITTA_TEST_SCHEME", "dark")
+    diagram = _diagram(home / "paper")
+    script = 'document.body.classList.contains("dark")'
+    assert sagitta("evaluate", diagram, script) is True
+    # Set, it stays as set, whatever the system's scheme.
+    assert sagitta("dark_mode", diagram)["dark"] is False
+    assert sagitta("evaluate", diagram, script) is False
+    monkeypatch.setenv("SAGITTA_TEST_SCHEME", "light")
+    _settings(home, "{}")
+    assert sagitta("evaluate", diagram, script) is False
 
 
 def test_the_page_never_navigates_away(sagitta, home):
@@ -1756,6 +2001,13 @@ def test_the_page_runs_on_the_web_host(browser):
     assert result == {"built": 1, "title": "untitled - Sagitta", "web": True}
 
 
+def test_the_help_says_a_browser_keeps_c_n(browser, sagitta, home):
+    lines = """ui.keymap.layers.help.groups().find(([section]) => section === "Chords")[1]
+        .filter(([key]) => key === "C-n")"""
+    assert browser(lines) == [["C-n", "new (use :new on browser)"]]
+    assert ["C-n", "new"] in dict(sagitta("help", _diagram(home / "paper")))["Chords"]
+
+
 def test_a_device_with_no_mouse_is_told_what_works(browser):
     fine, notice = browser('matchMedia("(any-pointer: fine)").matches', notice=True)
     if fine:
@@ -1811,17 +2063,40 @@ def test_the_settings_are_edited_in_the_page(browser):
         await host.open_settings();
         const dialog = document.querySelector("dialog.web-dialog[open]");
         const areas = [...dialog.querySelectorAll("textarea")];
-        // Keys typed here are the dialog's, not the page's.
+        // Keys typed here are the dialog's, not the page's, so the mode line does not change.
+        const before = document.querySelector(".mode-line").textContent;
         const event = new KeyboardEvent("keydown", { key: "x", bubbles: true, cancelable: true });
         areas[0].dispatchEvent(event);
         return {
             fields: areas.length,
             zoom: JSON.parse(areas[0].value)["ui.zoom"],
-            mode_line: document.querySelector(".mode-line").textContent.startsWith("TYPE"),
+            mode_line: document.querySelector(".mode-line").textContent === before,
         };
     })()""")
     assert result == {"fields": 2, "zoom": 150, "mode_line": True}
 
+
+
+def test_the_keys_file_command_edits_the_keys_in_the_page(browser):
+    result = browser("""(async () => {
+        ui.commands.run("keys-file");
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const dialog = document.querySelector("dialog.web-dialog[open]");
+        return dialog === null ? 0 : dialog.querySelectorAll("textarea").length;
+    })()""")
+    assert result == 2
+
+
+def test_the_help_command_opens_the_help(browser):
+    result = browser("""(async () => {
+        ui.prompt.open("Command");
+        ui.label_input.element.value = "hel";
+        const listed = ui.prompt.candidates().candidates;
+        ui.switch_mode(UIMode.default);
+        ui.commands.run("help");
+        return [listed, ui.keymap.layer === ui.keymap.layers.help];
+    })()""")
+    assert result == [["help"], True]
 
 # The origin's private file system stands in for a folder on disk: its handles need no picker, and
 # the browser grants them without asking. `PAPER` lays out a paper in it, with `macros.tex` at the

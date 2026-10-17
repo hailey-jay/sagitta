@@ -1,19 +1,15 @@
-/// The type-through keymap.
+/// The keymap.
 ///
-/// quiver's stock bindings put a command on nearly every bare letter, so a label can only be typed
-/// after pressing Enter. This inverts that, spreadsheet-style:
+/// Keys work as in quiver, whose stock bindings put a command on nearly every bare letter, so a
+/// label is typed only after pressing Enter:
 ///
-/// - Base layer: printable keys edit the label of the targeted cell (replacing it); Enter edits in
-///   place (appending); Backspace clears the label; `/` searches; `:` opens the command line; `;`
-///   enters the command layer. Arrows, Tab, Space, Escape, Delete, and modifier
-///   chords are unchanged.
-/// - Command layer (`;`, sticky): every stock bare-key binding (`R`, `K`, `D`, `S`, `G`, ...) is
-///   live. After focusing a slider (`K`, `O`, `L`, ...), typing a signed number and pressing Enter
-///   sets it. Punctuation applies arrow presets. `;`, Escape, or Enter (with no pending number)
-///   leave the layer.
-///   In quiver mode (`ui.quiver_mode`), the command layer is latched open instead: its keys are live
-///   whenever nothing else has them, RET edits the label, and Escape does what it does outside
-///   the layer once there is nothing in the layer to let go of. The keys are listed only on `;`.
+/// - Command layer: latched open whenever no other layer, mode, or text field has the keys, so
+///   every stock bare-key binding (`R`, `K`, `D`, `S`, `G`, ...) is live. After focusing a slider
+///   (`K`, `O`, `L`, ...), typing a signed number and pressing Enter sets it. Punctuation applies
+///   arrow presets. Enter edits the label, Backspace deletes, `/` searches, `:` opens the command
+///   line, and `;` lists the layer's keys. Escape lets go of whatever the layer holds, then does
+///   what it does outside the layer. Arrows, Tab, Space, Delete, and modifier chords are
+///   unchanged.
 /// - Command line (`:`): named commands, with Tab completion, separated by `;`.
 /// - Import layer (`C-i`): pasting tikz-cd (`C-v`) replaces the diagram, as one undo step, and
 ///   lists any problems parsing it.
@@ -32,7 +28,7 @@
 ///
 /// Every key press goes through `dispatch`: first to the layers (`intercept`), then to the bindings
 /// (`Keymap.BINDINGS`, and the named bindings, `keys`, which the keys file can change; see
-/// `Bindings`), and last, if nothing claimed it, to type-through (`after`). A binding marked `layer`
+/// `Bindings`), and last, if nothing claimed it, to `after`, which says so. A binding marked `layer`
 /// is one of the command layer's keys, and only runs there.
 ///
 /// The command layer is handled here. The other layers are classes in `src/layers.js`, the prompts
@@ -80,11 +76,13 @@ class Keymap {
         // Whether Shift is held, which shortens both ends of an arrow together.
         this.symmetric = false;
 
-        // The list of the command layer's bindings, shown while it is active, once it has waited
-        // `ui.which_key_delay` for a key (see `enter`), and the timeout ending the wait.
+        // The arrows set aside from the selection while its cells' label is edited, and those
+        // cells, or `null` (see `edit_target`).
+        this.set_aside = null;
+
+        // The list of the command layer's bindings, and whether it is shown (see `enter`).
         this.which_key = null;
         this.listed = false;
-        this.list_timeout = null;
     }
 
     /// Read the keys file over the default bindings. The problems with it are reported once the
@@ -181,7 +179,7 @@ class Keymap {
         }
     }
 
-    /// Whether the command layer is active: entered, or latched open in quiver mode.
+    /// Whether the command layer is active: entered, or latched open.
     get active() {
         return this.entered || this.latched();
     }
@@ -190,12 +188,11 @@ class Keymap {
         this.entered = value;
     }
 
-    /// Whether quiver mode holds the command layer open: whenever no other layer, mode, or text
-    /// field has the keys, so that finishing a label, a prompt, or a layer comes back to it.
+    /// Whether the command layer is held open: whenever no other layer, mode, or text field has
+    /// the keys, so that finishing a label, a prompt, or a layer comes back to it.
     latched() {
         const ui = this.ui;
-        return ui.settings?.get("ui.quiver_mode") === true && this.layer === null
-            && ui.in_mode(UIMode.Default) && !ui.input_is_active();
+        return this.layer === null && ui.in_mode(UIMode.Default) && !ui.input_is_active();
     }
 
     /// Whether the command layer's bindings may run: while it is active and no text field has the
@@ -207,20 +204,12 @@ class Keymap {
         return this.active && !this.ui.input_is_active();
     }
 
-    /// Handle a key press or release (`type` is `keydown` or `keyup`). A key pressed while the
-    /// command layer waits to list its keys ends the wait, unless it leaves something to finish.
+    /// Handle a key press or release (`type` is `keydown` or `keyup`).
     dispatch(type, event) {
         // A pan whose key came up while the window did not have the focus ends with the next key,
         // as it does with the next pointer move, rather than stealing the arrows until a click.
         this.ui.pointer.stop_stale_pan(event);
-        // Only a layer entered with `;` lists its keys by itself: in quiver mode, where the layer
-        // is latched open, the list waits for `;`.
-        const waiting = type === "keydown" && this.entered && !this.listed
-            && !Keymap.MODIFIERS.has(event.key);
         this.handle(type, event);
-        if (waiting && this.entered && !this.listed) {
-            this.wait_to_list(this.property !== null || this.component !== null);
-        }
     }
 
     /// Handle a key press or release, as `dispatch` says.
@@ -402,55 +391,23 @@ class Keymap {
         if (this.active) {
             return this.intercept_layer(event);
         }
-        if (!ui.in_mode(UIMode.Default) || ui.input_is_active()) {
-            return false;
-        }
-        switch (event.key) {
-            case ";":
-                this.enter();
-                return true;
-            case ":":
-                this.ui.prompt.open("Command");
-                return true;
-            case "/":
-                this.ui.prompt.open("Search");
-                return true;
-            case "Backspace":
-                if (this.edit_target(false)) {
-                    this.begin_edit("");
-                }
-                return true;
-        }
         return false;
     }
 
-    /// Type-through: a printable key that no binding claimed replaces the targeted cell's label,
-    /// or, for an opening delimiter, wraps it (bringing the closing one, if it was empty).
+    /// A printable key that no binding claimed, in the command layer, does nothing, rather than
+    /// what the browser gives it (Firefox's quick find, on `'`), but says so, since it is as
+    /// likely to be the start of a label typed without RET.
     after(event) {
         const ui = this.ui;
         if (event.defaultPrevented
             || event.ctrlKey || event.metaKey || event.altKey
-            || [...event.key].length !== 1 || Keymap.BASE_KEYS.has(event.key)
-            || !ui.in_mode(UIMode.Default) || ui.input_is_active()
+            || [...event.key].length !== 1
+            || !this.active || !ui.in_mode(UIMode.Default) || ui.input_is_active()
         ) {
             return;
         }
-        if (this.active) {
-            // A key the command layer does not use does nothing, rather than what the browser
-            // gives it (Firefox's quick find, on `'`).
-            event.preventDefault();
-            return;
-        }
-        if (this.edit_target(true)) {
-            event.preventDefault();
-            // An empty label gets the pair, with the caret between.
-            const label = ui.label_input.element.value;
-            if (Object.hasOwn(Delimiters.PLAIN, event.key)) {
-                this.begin_edit(Delimiters.wrap(label, event.key), label === "" ? 1 : null);
-            } else {
-                this.begin_edit(event.key);
-            }
-        }
+        event.preventDefault();
+        ui.mode_line.flash(`${event.key} unbound`);
     }
 
     /// Select the cell that typing should edit. With the focus point visible, that is the cell
@@ -473,16 +430,57 @@ class Keymap {
                 ui.history.add(ui, [{ kind: "create", cells: new Set([vertex]) }]);
             }
         }
+        // The selection Space leaves after drawing to a cell, the cell and its new arrows, is
+        // labelled by the cell: the arrows are set aside, so as not to take the same label, and
+        // come back once it is put down (see `restore_selection`).
+        const drawn = Keymap.drawn_to(ui.selection);
+        if (drawn !== null) {
+            const edges = Array.from(ui.selection).filter((cell) => cell !== drawn);
+            this.set_aside = { edges, vertices: new Set([drawn]) };
+            for (const edge of edges) {
+                ui.deselect(edge);
+            }
+        }
         return ui.selection.size > 0;
     }
 
-    /// Focus the label input with the caret at `caret` (by default, the end), first replacing its
-    /// contents with `text` unless `text` is `null`.
+    /// The cell of `selection` if it is one cell and arrows into it, as Space leaves it after
+    /// drawing to the cell, or `null`.
+    static drawn_to(selection) {
+        const vertices = Array.from(selection).filter((cell) => cell.is_vertex());
+        if (vertices.length !== 1 || selection.size === 1) {
+            return null;
+        }
+        const [vertex] = vertices;
+        return Array.from(selection).every((cell) => cell === vertex || cell.target === vertex)
+            ? vertex : null;
+    }
+
+    /// Bring back the arrows `edit_target` set aside, once the label is put down, unless the
+    /// selection has changed since.
+    restore_selection() {
+        const set_aside = this.set_aside;
+        this.set_aside = null;
+        const ui = this.ui;
+        if (set_aside !== null && ui.selection.size === set_aside.vertices.size
+            && Array.from(ui.selection).every((cell) => set_aside.vertices.has(cell))
+        ) {
+            ui.select(...set_aside.edges);
+        }
+    }
+
+    /// Focus the label input, first replacing its contents with `text` unless `text` is `null`,
+    /// with the caret at `caret` (by default, the end). With neither, the whole label is selected,
+    /// as RET leaves it: typing replaces it, and an arrow key goes to either end of it.
     begin_edit(text = null, caret = null) {
         const ui = this.ui;
         const input = ui.label_input.element;
         this.unchoose();
         input.focus();
+        if (text === null && caret === null) {
+            input.setSelectionRange(0, input.value.length);
+            return;
+        }
         if (text !== null) {
             input.value = text;
             input.dispatchEvent(new Event("input"));
@@ -528,45 +526,27 @@ class Keymap {
 
     /// The command layer.
 
-    /// Enter the command layer. Its keys are listed once it has waited `ui.which_key_delay` for one
-    /// (so that a key typed straight after `;` need not flash the list up), never if that is
-    /// `null`, until `?`, and at once if `list`, as for the pointer.
+    /// Enter the command layer, where it is not latched open already, listing its keys if `list`,
+    /// as for the pointer.
     enter(list = false) {
         const ui = this.ui;
         this.active = true;
         this.count = "";
-        this.listed = list || ui.settings.get("ui.which_key_delay") === 0;
-        this.wait_to_list(!this.listed);
+        this.listed = list;
         ui.cancel_creation();
         this.render();
     }
 
-    /// Stop waiting to list the command layer's keys, then, if `again`, wait afresh: after a key
-    /// that chose a list or a slider, so that a pause there lists the keys, but not after one that
-    /// did what it does, so that typing `; (` does not bring the list up behind it.
-    wait_to_list(again) {
-        const wait = this.ui.settings.get("ui.which_key_delay");
-        clearTimeout(this.list_timeout);
-        if (again && wait !== null) {
-            this.list_timeout = setTimeout(() => {
-                this.listed = true;
-                this.render();
-            }, wait);
-        }
-    }
-
     leave() {
         this.active = false;
-        // Quiver mode keeps the layer open, but not its list.
+        // The layer stays latched open, but not its list.
         this.listed = false;
         this.count = "";
-        clearTimeout(this.list_timeout);
         this.render();
     }
 
     /// Show the command layer's list of keys, or hide it, for `?`.
     toggle_list() {
-        clearTimeout(this.list_timeout);
         this.listed = !this.listed;
         this.render();
     }
@@ -591,10 +571,8 @@ class Keymap {
     update_which_key() {
         const ui = this.ui;
         const layer = this.current_layer();
-        // In quiver mode, a component's list shows as soon as it is chosen, though the main list
-        // waits for `;` (see `dispatch`). Entered with `;`, the layer waits as it always has.
-        const shown = this.active && (this.listed || this.component !== null && !this.entered)
-            || layer !== null;
+        // A component's list shows as soon as it is chosen, though the main list waits for `;`.
+        const shown = this.active && (this.listed || this.component !== null) || layer !== null;
         this.which_key.class_list.toggle("hidden", !shown);
         // Lines that describe keys rather than being them (the help's) get room to be read.
         this.which_key.class_list.toggle("descriptive", layer !== null && !layer.clickable);
@@ -831,9 +809,11 @@ class Keymap {
         // A choice's key makes it, while a component's list is open. The key that opened the list
         // still closes it, even if rebound to one of its choices' keys.
         if (this.component !== null && !this.opens(this.component, event)) {
-            const choice = this.choices(this.component).find(([choice_key]) => choice_key === key);
+            // A choice's key is written as the lists show it, so an arrow is its glyph.
+            const choice = this.choices(this.component)
+                .find(([choice_key]) => (Bindings.NAMED[choice_key] ?? choice_key) === key);
             if (choice !== undefined) {
-                if (ui.selection_contains_edge()) {
+                if (this.applies(this.component)) {
                     choice[3]();
                     this.component = null;
                     this.render();
@@ -875,8 +855,9 @@ class Keymap {
                 }
                 this.unchoose();
                 this.leave();
-                // In quiver mode, RET goes on to edit the label.
-                return !this.latched();
+                // RET goes on to edit the label, unless it let go of a slider or a list, which is
+                // all it is pressed for then.
+                return !this.latched() || !resting;
             case "Backspace":
                 ui.mode_line.run(ui, "delete");
                 return true;
@@ -938,12 +919,24 @@ class Keymap {
         return edges.every((edge) => edge.is_routed()) ? "rounding" : property;
     }
 
-    /// What the list of `component` (`tail`, `body`, `head`, or `align`, the label alignment)
-    /// chooses between, as `[key, title, current, choose]` (see `Keymap.CHOICE_KEYS`).
+    /// Whether the list of `component` has anything to act on: the selected arrows, but for
+    /// `insert`, which opens a gap at the focus point.
+    applies(component) {
+        return component === "insert" || this.ui.selection_contains_edge();
+    }
+
+    /// What the list of `component` (`tail`, `body`, `head`, `align`, the label alignment, or
+    /// `insert`, a row or a column) chooses between, as `[key, title, current, choose]` (see
+    /// `Keymap.CHOICE_KEYS`).
     choices(component) {
         const ui = this.ui;
         const options = ui.arrow_options;
         const keys = Keymap.CHOICE_KEYS[component];
+        if (component === "insert") {
+            return Keymap.INSERTIONS.map(([command, title]) => [
+                keys[command], title, false, () => ui.commands.run(command),
+            ]);
+        }
         if (component === "align") {
             const current = options.label_alignment(ui);
             return Keymap.ALIGNMENTS.map(([value, title]) => [
@@ -969,7 +962,7 @@ class Keymap {
     /// List the choices of the selected arrows' `component` (see `choices`), entering the layer if
     /// need be, or stop listing them.
     choose_component(component) {
-        if (!this.ui.selection_contains_edge()) {
+        if (!this.applies(component)) {
             return;
         }
         if (!this.active) {
@@ -1061,7 +1054,6 @@ class Keymap {
         this.unchoose();
         ui.cancel_creation();
         ui.colour_picker.close();
-        clearTimeout(this.list_timeout);
         this.active = false;
         this.count = "";
         this.layer = null;
@@ -1113,9 +1105,6 @@ Keymap.NAMED_CODES = new Set([
     ...Array.from({ length: 12 }, (_, i) => `F${i + 1}`),
 ]);
 
-/// Keys that keep their meaning in the base layer, rather than typing.
-Keymap.BASE_KEYS = new Set([" ", ";", ":", "/"]);
-
 /// When a binding runs while a text field has the focus.
 Keymap.CONTEXT = new Enum(
     "CONTEXT",
@@ -1149,27 +1138,27 @@ Keymap.CONTEXT = new Enum(
         {
             combinations: [{ key: "Enter", context: Always }],
             press: (ui) => ui.keys.enter(),
-            help: [["Typing", "edit the label in place, or label a new cell"]],
+            help: [["Typing", "edit the label"]],
         },
         // Without the modifier, which is the mark's (see `Bindings.DEFAULTS`).
         {
             combinations: [{ key: " ", shift: null, modifier: false }],
             press: (ui, event) => ui.keys.space(event),
             help: [
-                ["Typing", "create, connected to the selection", "SPC"],
-                ["Typing", "select or deselect", "S-SPC"],
+                ["Typing", "new cell, connected", "SPC"],
+                ["Typing", "toggle in the selection", "S-SPC"],
             ],
         },
         // Shift cycles backwards.
         {
             combinations: [{ key: "Tab", shift: null, context: Always }],
             press: (ui, event) => ui.keys.tab(event),
-            help: [["Typing", "label the next, or previous, queued cell", "TAB S-TAB"]],
+            help: [["Typing", "next, or previous, queued cell", "TAB S-TAB"]],
         },
         {
             combinations: [{ key: "Escape", shift: null, context: Always }],
             press: (ui) => ui.keys.escape(),
-            help: [["Typing", "cancel, then deselect"]],
+            help: [["Typing", "cancel"]],
         },
         // Holding Option or Control pans (and releasing it stops).
         {
@@ -1192,10 +1181,9 @@ Keymap.CONTEXT = new Enum(
             })),
             press: (ui, event) => ui.keys.arrow(event),
             help: [
-                ["Moving", "move the focus point", "arrows"],
-                ["Moving", "select what it passes over", "S-arrows"],
-                ["Moving", "move the selection; bend or shift arrows; resize or turn loops",
-                    "C-arrows"],
+                ["Moving", "move", "arrows"],
+                ["Moving", "extend the selection", "S-arrows"],
+                ["Moving", "move, bend, or turn the selection", "C-arrows"],
             ],
         },
     ];
@@ -1206,35 +1194,33 @@ Keymap.CONTEXT = new Enum(
 /// function of the keymap. These are kept in sync with their handlers by hand.
 Keymap.HELP_ELSEWHERE = {
     before: [
-        // `Keymap.after`.
-        ["Typing", "replace the label", "a \\ 2 …"],
         // `UI.create_label_input` and `Delimiters.type`.
-        ["Typing", "pair, or wrap the label or selection", "( [ { | \\{ \\langle …"],
-        // `Keymap.intercept`.
-        ["Typing", "clear the label", "DEL"],
-        ["Layers", "commands (lists its keys)", ";"],
-        ["Layers", "command line (TAB lists every command)", ":"],
-        ["Layers", "search labels, or type cell codes", (keymap) => ["/", keymap.describe_name(
+        ["Typing", "pair brackets in a label", "( [ { | \\{ \\langle …"],
+        // `Keymap.intercept_layer`.
+        ["Typing", "delete", "DEL"],
+        ["Layers", "list the commands", ";"],
+        ["Layers", "command line", ":"],
+        ["Layers", "search", (keymap) => ["/", keymap.describe_name(
             "search", ({ layer }) => !layer)].filter((keys) => keys !== "").join("  ")],
-        ["Layers", "colour arrows, or labels", (keymap) => ["colour", "label-colour"]
+        ["Layers", "colour", (keymap) => ["colour", "label-colour"]
             .map((name) => keymap.describe_name(name, ({ layer }) => layer))
             .filter((keys) => keys !== "").join("  ")],
     ],
     after: [
         // `Cell.initialise`, `Pointer`, and `Edge.initialise` (the ends' handles).
-        ["Mouse", "select; again to edit the label", "click"],
-        ["Mouse", "add to, or take from, the selection", "S-click"],
-        ["Mouse", "create a cell in an empty space", "click twice"],
-        ["Mouse", "draw an arrow from a cell (or empty space)", "drag"],
-        ["Mouse", "move a cell, held by the edge of its space", "drag edge"],
+        ["Mouse", "select, again to edit", "click"],
+        ["Mouse", "toggle in the selection", "S-click"],
+        ["Mouse", "new cell", "click twice"],
+        ["Mouse", "draw an arrow", "drag"],
+        ["Mouse", "move a cell", "drag edge"],
         ["Mouse", "reconnect an arrow", "drag its end"],
         // `Pointer.grab`.
-        ["Mouse", "move a selected arrow's checkpoint", "drag its ring"],
-        ["Mouse", "commands, as ; (click a line to run it)", "right-click"],
+        ["Mouse", "move a checkpoint", "drag its ring"],
+        ["Mouse", "list the commands", "right-click"],
         // `Pointer.scroll` and `Pointer.press`. The middle button drags from a cell as well as
         // from empty space, which the modifiers cannot.
         ["Mouse", "pan", "scroll"],
-        ["Mouse", "pan by dragging", "C-drag  A-drag  middle-drag"],
+        ["Mouse", "pan", "C-drag  A-drag  middle-drag"],
         ["Mouse", "zoom", "S-scroll  C-scroll"],
     ],
 };
@@ -1279,6 +1265,9 @@ Keymap.WHICH_KEY = [
         ["align-centre", "align centre", "edge", "label_alignment:centre"],
         ["align-over", "align over", "edge", "label_alignment:over"],
     ]],
+    ["Grid", [
+        ["insert", "insert a row or column (arrows)"],
+    ]],
     ["Select", [
         ["toggle-selection", "select or deselect, by code"],
         ["select-at-focus", "select at focus"],
@@ -1307,6 +1296,15 @@ Keymap.ALIGNMENTS = [
     ["right", "right"],
     ["centre", "centre, in a gap"],
     ["over", "over the arrow"],
+];
+
+/// What `; i` lists, as `[command, title]`: a gap for a row or a column at the focus point (see
+/// `Commands.insert`).
+Keymap.INSERTIONS = [
+    ["insert-row-above", "row above"],
+    ["insert-row-below", "row below"],
+    ["insert-column-left", "column left"],
+    ["insert-column-right", "column right"],
 ];
 
 /// The keys of the choices in each component's list, by value (see `choices`): `n` is none and `a`
@@ -1345,10 +1343,17 @@ Keymap.CHOICE_KEYS = {
         "centre": "c",
         "over": "o",
     },
+    // The way the gap opens from the focus point.
+    insert: {
+        "insert-row-above": "↑",
+        "insert-row-below": "↓",
+        "insert-column-left": "←",
+        "insert-column-right": "→",
+    },
 };
 
 /// The titles of the choices' lists, where not the component's name.
-Keymap.CHOICE_TITLES = { align: "label alignment" };
+Keymap.CHOICE_TITLES = { align: "label alignment", insert: "insert at the focus point" };
 
 /// The command layer's keys that keep their meaning (see `intercept_layer`), by their names in
 /// `Keymap.WHICH_KEY`.

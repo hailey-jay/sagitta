@@ -19,21 +19,13 @@ const SETTINGS = {
         "diagram.var_corner": false,
         // The preset new arrows take (see `Commands.PRESETS` and `Edge.suggested_options`).
         "diagram.arrow_preset": "plain",
-        // Whether keys work as in quiver: the command layer's keys are live without `;`, and a
-        // label is typed only after RET (see `Keymap.latched`). Otherwise typing edits the label,
-        // spreadsheet-style.
-        "ui.quiver_mode": false,
-        // Whether the canvas is grey, with the default colour drawn in white (see `main.css`).
+        // Whether the canvas is grey, with the default colour drawn in white (see `main.css`). Until
+        // it is set, it follows the system's colour scheme (see `UI.initialise`).
         "ui.dark_mode": false,
         // The zoom the view starts at, and that `reset-zoom` returns to, in percent.
         "ui.zoom": 100,
-        // The width and height of an empty column or row, in pixels, which they grow from.
-        "ui.cell_size": 128,
         // The size of the labels, in pixels.
         "ui.label_size": 26,
-        // How long the command layer waits for a key before listing its keys, in milliseconds,
-        // or `null` to list them only on `?` (see `Keymap.enter`).
-        "ui.which_key_delay": 300,
         // Whether the command layer lists only its keys and their values, without what they do.
         "ui.which_key_compact": false,
         // The characters of the codes that select cells, in the order they are given out (see
@@ -44,13 +36,11 @@ const SETTINGS = {
     /// The numbers a numeric setting may be, as `[least, most]`.
     ranges: {
         "ui.zoom": [20, 200],
-        "ui.cell_size": [48, 512],
         "ui.label_size": [8, 72],
-        "ui.which_key_delay": [0, 5000],
     },
 
-    /// The settings that may also be `null`.
-    nullable: new Set(["ui.which_key_delay"]),
+    /// The settings that may also be `null`, of which this diagram has none.
+    nullable: new Set(),
 
     /// What each setting that is not true or false may be, as `[check, description]`, where the
     /// description may be a function returning it, for a list that is built elsewhere.

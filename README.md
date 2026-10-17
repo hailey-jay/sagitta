@@ -96,9 +96,8 @@ sagitta [--macros FILE] [--devtools] [DIAGRAM.tikzcd] [-- SWITCHES]
 `sagitta --help` explains the options.
 `DIAGRAM` need not exist yet.
 
-Typing labels the cell under the cursor, spreadsheet-style.
-The `;` key opens the command layer, `:` the command line, and `C-/` the help, which lists every key.
-If you mean to put a `;` or `:` as the first character in a cell, `RET` focuses the text interface.
+Keys work as in quiver: a letter runs a command, and `RET` edits the label of the cell under the cursor.
+`:` opens the command line, and `C-/` the help, which lists every key.
 With a mouse, right-click or the `; commands` button opens the command layer, and clicking a line of its list runs it.
 `C-s` saves.
 

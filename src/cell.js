@@ -330,13 +330,15 @@ class Vertex extends Cell {
         // unimportant.
         this.shape = new Shape.RoundedRect(
             Point.zero(),
-            new Dimensions(ui.grid.default_size / 2, ui.grid.default_size / 2),
-            ui.grid.default_size / 8,
+            Dimensions.diag(ui.grid.content_minimum()),
+            ui.grid.content_minimum() / 4,
         );
         // This property is only relevant for edges. For vertices, it is always simply the shape.
         this.phantom_shape = this.shape;
         // The label's `[width, height]`, as last measured (see `measure_label`), or `null`.
         this.label_size = null;
+        // The box TeX sets the label in, as last measured (see `UI.cell_box`), or `null`.
+        this.box = null;
 
         this.render(ui);
         super.initialise(ui);
@@ -355,6 +357,11 @@ class Vertex extends Cell {
     set_position(ui, position) {
         ui.grid.unconstrain(this);
         this.position = position;
+        // Its size holds its new column and row open at once, so that resizing those it left (or
+        // laying out the grid afresh) before it is rendered there sees it.
+        if (this.label_size !== undefined && this.label_size !== null) {
+            ui.grid.constrain(this, ...this.label_size);
+        }
         this.shape.origin = ui.grid.centre_offset_from_position(this.position);
     }
 
@@ -402,8 +409,8 @@ class Vertex extends Cell {
         // Resize the content according to the grid cell. This is just the default size: it will be
         // updated by `render_maths`.
         this.content_element.set_style({
-            width: `${ui.grid.default_size / 2}px`,
-            height: `${ui.grid.default_size / 2}px`,
+            width: `${ui.grid.content_minimum()}px`,
+            height: `${ui.grid.content_minimum()}px`,
             left: `${cell_width / 2}px`,
             top: `${cell_height / 2}px`,
         });
@@ -430,26 +437,50 @@ class Vertex extends Cell {
     measure_label() {
         const { offsetWidth, offsetHeight } = this.element.query_selector(".label").element;
         this.label_size = [offsetWidth, offsetHeight];
+        this.box = UI.cell_box(this);
         return this.label_size;
     }
 
-    /// Get the size of the cell content.
+    /// Get the size of the cell content: the node tikz-cd draws round the label, which arrows
+    /// stop at, or, for a small or empty label, enough to click.
     content_size(ui, sizes) {
-        const [width, height] = sizes;
-        return new Dimensions(
-            Math.max(ui.grid.default_size / 2, width + CONSTANTS.CONTENT_PADDING * 2),
-            Math.max(ui.grid.default_size / 2, height + CONSTANTS.CONTENT_PADDING * 2),
-        );
+        const node = ui.grid.node_size(...sizes);
+        const minimum = ui.grid.content_minimum();
+        return new Dimensions(Math.max(minimum, node.width), Math.max(minimum, node.height));
     }
 
-    /// Resize the cell content to match the label width.
+    /// Resize the cell content to match the label width, and make the node arrows meet: tikz-cd's,
+    /// the box TeX sets the label in with its padding, centred on the maths axis rather than in the
+    /// middle of the box, with the label set on the axis to match. A label that is not maths (an
+    /// error) has no such box, and arrows meet the content, as the label is centred in it.
     resize_content(ui, sizes) {
         const size = this.content_size(ui, sizes);
         this.content_element.set_style({
             width: `${size.width}px`,
             height: `${size.height}px`,
         });
-        this.shape.size = size;
+        const label = this.element.query_selector(".label");
+        if (this.box === null) {
+            this.shape.size = size;
+            this.shape.radius = ui.grid.content_minimum() / 4;
+            this.shape.offset = Point.zero();
+            label.set_style({ transform: null });
+            return;
+        }
+        const { width, height, depth, shift, em } = this.box;
+        const { CELL_SEP, EX, AXIS, OUTER_SEP, EM } = CONSTANTS.TEX;
+        const outer = OUTER_SEP * em / EM;
+        const sep = { x: CELL_SEP.x * EX * em + outer, y: CELL_SEP.y * EX * em + outer };
+        this.shape.size = new Dimensions(width + sep.x * 2, height + depth + sep.y * 2);
+        this.shape.radius = 0;
+        // The axis is the origin, so the baseline is below it, and the box's middle is between
+        // its top (`height` above the baseline) and its bottom (`depth` below it).
+        this.shape.offset = new Point(0, AXIS * em + (depth - height) / 2);
+        // The box's middle is `shift` below the label's, which is centred on the origin (as the
+        // stylesheet's transform, kept here, centres it).
+        label.set_style({
+            transform: `translate(-50%, calc(-50% + ${this.shape.offset.y - shift}px))`,
+        });
     }
 }
 
@@ -554,7 +585,7 @@ class Edge extends Cell {
 
         // All arrow styles support labels, shifting, and colour.
         style.label_position = options.label_position / 100;
-        style.shift = options.offset * CONSTANTS.EDGE_OFFSET_DISTANCE;
+        style.shift = options.offset * CONSTANTS.TEX.SHIFT * Edge.PX_PER_PT;
         style.colour = options.colour.css();
 
         switch (options.style.name) {
@@ -568,18 +599,37 @@ class Edge extends Cell {
                     case "bezier":
                         if (Edge.is_routed_for_options(options)) {
                             style.shape = CONSTANTS.ARROW_SHAPE.ROUTE;
-                            style.rounding = options.rounding * CONSTANTS.ROUNDING;
+                            // The radius the export writes, in the canvas's pixels.
+                            style.rounding = options.rounding * CONSTANTS.ROUNDING
+                                * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER
+                                * Edge.PX_PER_PT;
                             style.shift = 0;
                             break;
                         }
                         style.shape = CONSTANTS.ARROW_SHAPE.BEZIER;
-                        style.curve = options.curve * CONSTANTS.CURVE_HEIGHT * 2;
+                        // The export writes quiver's `curve={height=H}`, whose control points are
+                        // `H` from the line, which the canvas draws as TikZ does (see
+                        // `Arrow.tikz_curve`), in the canvas's pixels.
+                        // The export, and the parser, scale every curve the same way, whatever its
+                        // angle (see `QuiverExport`).
+                        style.curve = options.curve * CONSTANTS.CURVE_HEIGHT
+                            * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER
+                            * Edge.PX_PER_PT;
                         break;
                     case "arc":
                         style.shape = CONSTANTS.ARROW_SHAPE.ARC;
                         const radius = [2, 3, 4][Math.floor(Math.abs(options.radius) / 2)];
                         style.curve = radius * Math.sign(options.radius) * CONSTANTS.LOOP_HEIGHT;
                         style.angle = deg_to_rad(options.angle);
+                        // The loop the export writes, which the canvas draws as TikZ does (see
+                        // `Arrow.tikz_loop`): TikZ's angles run anticlockwise with y upwards, and
+                        // the canvas's clockwise with y downwards.
+                        const { in: into, out, distance } = QuiverExport.loop(options);
+                        style.loop = {
+                            out: -deg_to_rad(out),
+                            in: -deg_to_rad(into),
+                            distance: distance * CONSTANTS.TEX.PT_PER_MM * Edge.PX_PER_PT,
+                        };
                         break;
                 }
 
@@ -1092,7 +1142,14 @@ class Edge extends Cell {
         this.arrow.label_leg = this.is_routed() ? QuiverExport.route_leg(
             QuiverExport.route_points(this), this.options.label_position / 100) : null;
         Edge.update_style(this.arrow, this.options);
+        const label = this.arrow.label.element;
         this.arrow.redraw();
+        // An arrow that could not be drawn (its ends overlapping, as wide labels do before their
+        // columns are sized) has no label element for `render_maths` to fill, so the first drawing
+        // that makes one renders the label into it.
+        if (this.arrow.label.element !== label && label === null) {
+            ui.render_maths(this);
+        }
 
         // Update the origin, which is given by the centre of the edge.
         const curve = this.arrow.curve(Point.zero(), 0);
@@ -1222,3 +1279,7 @@ class Edge extends Cell {
         this.flip(ui, true, true);
     }
 }
+
+/// How many of the canvas's pixels a pt of the TeX it exports to is, which the arrows' curves,
+/// offsets, and rounding are drawn by (see `UI.update_scale`).
+Edge.PX_PER_PT = 26 * CONSTANTS.TEX.KATEX_SCALE / CONSTANTS.TEX.EM;

@@ -311,19 +311,23 @@ Layer.Help = class extends Layer {
             ({ modifier, layer }) => !layer && Boolean(modifier) === (which === "chords"),
         ));
         const layers = {
-            "import": "import tikz-cd",
+            "import": "import",
             "macros": "macros",
-            "export": "export tikz-cd",
+            "export": "export",
             "settings": "settings",
             "shortcuts": null,
         };
         const sections = new Map(
             ["Typing", "Moving", "Mouse", "Layers", "Chords", "Help"].map((section) => [section, []]),
         );
-        const elsewhere = (key) => typeof key === "function" ? key(this.keymap) : key;
-        for (const [section, description, key] of Keymap.HELP_ELSEWHERE.before) {
-            sections.get(section).push([elsewhere(key), description]);
-        }
+        const elsewhere = (lines) => {
+            for (const [section, description, key] of lines) {
+                sections.get(section).push([
+                    typeof key === "function" ? key(this.keymap) : key, description,
+                ]);
+            }
+        };
+        elsewhere(Keymap.HELP_ELSEWHERE.before);
         for (const { combinations, help = [] } of Keymap.BINDINGS) {
             for (const [section, description, key = Keymap.describe(combinations)] of help) {
                 sections.get(section).push([key, description]);
@@ -346,14 +350,16 @@ Layer.Help = class extends Layer {
                         sections.get("Layers").push([key, layers[name]]);
                     }
                 } else {
-                    sections.get(which === "plain" ? "Typing" : "Chords")
-                        .push([key, label.toLowerCase()]);
+                    // A browser keeps `C-n` for a new window, whatever the keys file says.
+                    const browser = name === "new" && which === "chords"
+                        && typeof host.open_folder === "function";
+                    sections.get(which === "plain" ? "Typing" : "Chords").push([
+                        key, browser ? "new (use :new on browser)" : label.toLowerCase(),
+                    ]);
                 }
             }
         }
-        for (const [section, description, key] of Keymap.HELP_ELSEWHERE.after) {
-            sections.get(section).push([elsewhere(key), description]);
-        }
+        elsewhere(Keymap.HELP_ELSEWHERE.after);
         const shortcuts = keys(this.keymap.combinations("shortcuts"), "chords");
         sections.get("Help").push([`${shortcuts} RET ; ESC`.trim(), "leave"]);
         sections.set("About", this.about());
@@ -408,8 +414,39 @@ Layer.Help.SOURCE = "https://github.com/hailey-jay/sagitta";
 /// The export layer (`C-e`): the diagram's tikz-cd encoding as an object, whose options are toggled
 /// and stepped by key, and which `y` or Enter copies to the clipboard.
 Layer.Export = class extends Layer {
+    constructor(keymap) {
+        super(keymap);
+        // Whether the layer was opened to review the options before saving as (see `review`).
+        this.saving = false;
+    }
+
     describe() {
-        return ["EXPORT", "tikz-cd"];
+        return ["EXPORT", this.saving ? "save as" : "tikz-cd"];
+    }
+
+    entered() {
+        this.saving = false;
+    }
+
+    /// Open the layer to review the options a diagram is saved with, before saving it as a new
+    /// file: the file is the export, so these are what it will hold. RET goes on to save it.
+    review() {
+        this.enter();
+        this.saving = true;
+        this.keymap.render();
+    }
+
+    /// The export options that differ from their defaults, briefly, for the mode line: what saving
+    /// writes besides the plain diagram.
+    static differences(ui) {
+        const toggles = Layer.Export.TOGGLES
+            .filter(([, , setting]) => ui.settings.get(setting) !== SETTINGS.defaults[setting])
+            .map(([, description, setting]) => SETTINGS.defaults[setting]
+                ? `no ${description.replace(/ diagram$/, "")}` : description);
+        const seps = Layer.Export.SEPS
+            .filter(([, axis]) => ui.sep[axis] !== DiagramFile.SEPS.normal)
+            .map(([, axis]) => `${axis} sep ${Layer.Export.describe_sep(ui.sep[axis])}`);
+        return [...toggles, ...seps];
     }
 
     /// The diagram's tikz-cd encoding under the current export options: `{ data, metadata }`.
@@ -432,7 +469,13 @@ Layer.Export = class extends Layer {
                 key, `${axis} sep`, false, Layer.Export.describe_sep(ui.sep[axis]),
             ])],
             ["Result", [
-                ["y RET", "copy to clipboard", false, `${lines} line${lines === 1 ? "" : "s"}`],
+                ...(this.saving ? [["RET", "save as, with these options"]] : []),
+                [this.saving ? "y" : "y RET", "copy to clipboard", false,
+                    `${lines} line${lines === 1 ? "" : "s"}`],
+                ["q", "copy the #q= hash"],
+                ["v", "save as SVG"],
+                [Keymap.describe(this.keymap.combinations("save").slice(0, 1)),
+                    "save, with these options"],
                 ["; ESC", "leave"],
             ]],
         ];
@@ -468,15 +511,31 @@ Layer.Export = class extends Layer {
             const { SEP_STEP, SEP_TICKS } = Layer.Export;
             const ticks = Math.round(ui.sep[axis] / SEP_STEP)
                 + (key === key.toLowerCase() ? 1 : -1);
-            ui.sep[axis] = Number(
-                (Math.min(Math.max(ticks, 1), SEP_TICKS) * SEP_STEP).toFixed(2)
-            );
+            // Assigned whole, so that the grid is laid out afresh (see `UI.sep`).
+            ui.sep = {
+                ...ui.sep,
+                [axis]: Number((Math.min(Math.max(ticks, 1), SEP_TICKS) * SEP_STEP).toFixed(2)),
+            };
         } else {
             switch (key) {
-                case "y":
                 case "Enter":
+                    if (this.saving) {
+                        this.leave();
+                        this.ui.file.save(null);
+                        break;
+                    }
                     this.copy();
                     break;
+                case "y":
+                    this.copy();
+                    break;
+                case "q":
+                    this.copy_hash();
+                    break;
+                case "v":
+                    this.leave();
+                    this.ui.file.export_svg();
+                    return true;
                 case "Escape":
                     // As elsewhere, Escape first dismisses an error banner (e.g. a failed copy).
                     if (!UI.dismiss_error()) {
@@ -494,6 +553,17 @@ Layer.Export = class extends Layer {
         }
         this.keymap.render();
         return true;
+    }
+
+    /// Copy the diagram's encoding as the end of an address, `#q=...`, which quiver's links, and
+    /// Sagitta's page, open: after `https://q.uiver.app/`, it opens the diagram in quiver.
+    async copy_hash() {
+        const ui = this.ui;
+        const { data } = QuiverImportExport.base64.export(
+            ui.quiver, ui.settings, ui.options(), ui.definitions());
+        await host.write_clipboard(`#q=${data}`);
+        this.leave();
+        ui.mode_line.flash("copied the #q= hash");
     }
 
     /// Copy the export to the clipboard, leaving the layer.
@@ -641,6 +711,14 @@ Layer.Settings = class extends Layer {
         }
     }
 
+    /// Open the keys file in the desktop's editor.
+    async open_keys() {
+        const error = await host.open_keys();
+        if (error !== "") {
+            this.ui.mode_line.flash(`could not open the keys file: ${error}`, true);
+        }
+    }
+
     intercept(event) {
         const ui = this.ui;
         const key = event.key;
@@ -712,14 +790,9 @@ Layer.Settings.GROUPS = [
     ["View", [
         ["d", "ui.dark_mode", "dark mode"],
         ["z", "ui.zoom", "zoom to start at"],
-        ["c", "ui.cell_size", "cell size"],
         ["l", "ui.label_size", "label size"],
     ]],
-    ["Keys", [
-        ["q", "ui.quiver_mode", "quiver mode: RET to type"],
-    ]],
     ["Command list", [
-        ["w", "ui.which_key_delay", "list keys after"],
         ["k", "ui.which_key_compact", "compact"],
     ]],
     ["Diagram", [
@@ -731,17 +804,13 @@ Layer.Settings.GROUPS = [
 /// How far each step moves the numeric settings, which are typed or stepped (see `step`).
 Layer.Settings.STEPS = {
     "ui.zoom": 10,
-    "ui.cell_size": 16,
     "ui.label_size": 2,
-    "ui.which_key_delay": 100,
 };
 
 /// The units the numeric settings are listed in.
 Layer.Settings.UNITS = {
     "ui.zoom": "%",
-    "ui.cell_size": "px",
     "ui.label_size": "px",
-    "ui.which_key_delay": " ms",
 };
 
 /// The keys of the presets new arrows may take, by name: the command layer's defaults for the
