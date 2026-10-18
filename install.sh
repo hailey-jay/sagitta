@@ -74,8 +74,8 @@ if [[ -n "$DOCS" ]]; then
 fi
 
 # The desktop entry is rendered rather than linked: it holds an absolute path.
-# .tikzcd files are text/x-tikzcd, a kind of text/x-tex, and open in Sagitta
-# rather than the TeX editor.
+# .cd.tex and .tikzcd files are text/x-tikzcd, a kind of text/x-tex, and open in
+# Sagitta rather than the TeX editor.
 printf '\nDesktop:\n'
 _sym "${SAGITTA}/icon.svg" "${SHARE}/icons/hicolor/scalable/apps/sagitta.svg" "icons/sagitta.svg"
 _sym "${SAGITTA}/text-x-tikzcd.xml" "${SHARE}/mime/packages/text-x-tikzcd.xml" "mime/text-x-tikzcd.xml"

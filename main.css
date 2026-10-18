@@ -1051,6 +1051,16 @@ body:has(.label-input-container:focus-within:not(.hidden)) .mode-line .message.e
     opacity: var(--ui-disabled);
 }
 
+/* What amscd cannot draw, while the diagram is in amscd. */
+.which-key.amscd .not-amscd {
+    opacity: var(--ui-disabled);
+}
+
+/* A layer's line that would do nothing now (e.g. copying maths when the diagram is not a row). */
+.which-key .entry.disabled {
+    opacity: var(--ui-disabled);
+}
+
 /* The compact list: each line only its key and value (what it does shows on hovering), packed
    along its group's row, under a narrower title. Lists other than the command layer's keep their
    descriptions, which they need. */

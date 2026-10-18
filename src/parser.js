@@ -238,9 +238,14 @@ class Parser {
             // to be those exported by quiver for a special purpose, not any edge with the `phantom`
             // attribute.
             for (const phantom of phantoms) {
-                this.ui.remove_cell(edges.get(phantom), this.ui.present);
+                // A phantom that could not be made, as one between cells that were not read, has
+                // nothing to remove.
+                if (edges.has(phantom)) {
+                    this.ui.remove_cell(edges.get(phantom), this.ui.present);
+                }
             }
             this.ui.quiver.flush(this.ui.present);
+            Parser.share_layers(this.ui.quiver, Array.from(edges.values()));
 
             // Update all the affected columns and rows.
             delay(() => {
@@ -269,6 +274,15 @@ class Parser {
                                 = convert_length(parser_edge.shorten.source);
                             edge.options.shorten.target
                                 = convert_length(parser_edge.shorten.target);
+                            // The lengths read are kept, to be written again while the arrow is
+                            // as it was read (see `Edge.read_shortening`).
+                            if (edge.is_routed()) {
+                                edge.read_shortening = {
+                                    shape: edge.shortening_shape(this.ui.sep),
+                                    shorten: { ...edge.options.shorten },
+                                    lengths: { ...parser_edge.shorten },
+                                };
+                            }
                         }
                         if (edge.options.shorten.source + edge.options.shorten.target >= 100) {
                             this.log(
@@ -521,6 +535,16 @@ class Parser {
             }
             return Colour.from_rgba(r, g, b);
         }
+        // A colour by name, as the export writes the ones LaTeX predefines and those the macros
+        // file defines: `{white}` after `\textcolor`, or `white` as an arrow's option.
+        const named = this.code.match(/^\{([A-Za-z]\w*)\}/)
+            ?? this.code.match(/^([A-Za-z]\w*)(?=\s*[,\]}])/);
+        const colour = named === null ? undefined
+            : Parser.COLOURS[named[1]] ?? this.ui.colours?.get(named[1]);
+        if (colour !== undefined) {
+            this.code = this.code.slice(named[0].length);
+            return new Colour(...colour.hsla());
+        }
         if (expected) {
             throw this.error("Expected colour specification.");
         }
@@ -557,6 +581,11 @@ class Parser {
             if (brackets === 0) {
                 label = this.code.substr(0, i);
                 this.code = this.code.slice(i + 1);
+                // A coloured label is braced twice, once by `\textcolor` and once by the export,
+                // as it is any label that is not a single word.
+                if (colour !== null) {
+                    label = Parser.unbrace(label);
+                }
             }
         } else if (this.check(/^\S+/)) {
             // Parse a node label without curly brackets. This is a little tricky, but occurs
@@ -584,7 +613,7 @@ class Parser {
         if (label !== null) {
             return new Vertex(
                 this.ui,
-                label,
+                Parser.unarray(label),
                 new Position(this.x, this.y),
                 colour || Colour.black(),
             );
@@ -678,24 +707,34 @@ class Parser {
             "\\circ": "bullet hollow"
         };
         for (const [marking, body] of Object.entries(markings)) {
-            if (this.eat(`"${marking}"{marking`)) {
+            // A label set over the arrow (`"\bullet"{marking, allow upside down}`) is a label,
+            // not a mark on the arrow's body: the export never turns a mark upside down.
+            const escaped = marking.replace(/[\\{}]/g, (character) => `\\${character}`);
+            if (this.check(new RegExp(`^"${escaped}"\\{marking(?!, allow upside down)`))
+                && this.eat(`"${marking}"{marking`)
+            ) {
+                // The mark's position and colour, either, both, or neither, follow. The export
+                // writes them from the arrow's shortening and colour, so they are read past.
                 this.eat_whitespace();
-                if (this.eat(",") && this.eat_whitespace() && this.eat("pos")) {
+                while (this.eat(",")) {
                     this.eat_whitespace();
-                    this.eat("=", true);
-                    this.eat_whitespace();
-                    this.parse_float(true);
-                    this.eat_whitespace();
-                }
-                if (this.eat(",")) {
-                    this.eat_whitespace();
-                    this.eat("text", true);
-                    this.eat_whitespace();
-                    this.eat("=", true);
-                    this.eat_whitespace();
-                    if (!this.eat("\\pgfkeysvalueof{/tikz/commutative diagrams/background color}")) {
-                        this.parse_colour(true);
+                    if (this.eat("pos")) {
+                        this.eat_whitespace();
+                        this.eat("=", true);
+                        this.eat_whitespace();
+                        this.parse_float(true);
+                    } else {
+                        this.eat("text", true);
+                        this.eat_whitespace();
+                        this.eat("=", true);
+                        this.eat_whitespace();
+                        if (!this.eat(
+                            "\\pgfkeysvalueof{/tikz/commutative diagrams/background color}")
+                        ) {
+                            this.parse_colour(true);
+                        }
                     }
+                    this.eat_whitespace();
                 }
                 this.eat("}", true);
                 edge.options.style.body.name = body;
@@ -731,7 +770,7 @@ class Parser {
         if (this.eat("\"")) {
             const label = this.eat(/[^"]*/);
             this.eat("\"", true);
-            edge.label = Parser.unbrace(label);
+            edge.label = Parser.unarray(Parser.unbrace(label));
             while (this.eat("'")) {
                 swap_label_alignment();
             }
@@ -930,30 +969,38 @@ class Parser {
             edge.reverse = reverse;
             return true;
         };
+        // A preset draws a plain line, but leaves the marks on it: quiver writes a barred or
+        // bulleted arrow's mark as a label, which comes before its preset (`Rightarrow`).
+        const plain_body = () => {
+            if (!["barred", "double barred", "bullet solid", "bullet hollow"]
+                .includes(edge.options.style.body.name)) {
+                edge.options.style.body.name = "cell";
+            }
+        };
         if ((this.eat("Rightarrow") && flip(edge, false))
             || (this.eat("Leftarrow") && flip(edge, true))) {
-                edge.options.style.body.name = "cell";
+                plain_body();
                 edge.options.level = 2;
                 edge.options.style.tail.name = "none";
                 edge.options.style.head.name = "arrowhead";
             return;
         }
         if (this.eat("Leftrightarrow")) {
-            edge.options.style.body.name = "cell";
+            plain_body();
             edge.options.level = 2;
             edge.options.style.tail.name = "arrowhead";
             edge.options.style.head.name = "arrowhead";
         }
         if ((this.eat("mapsto") && flip(edge, false))
             || (this.eat("mapsfrom") && flip(edge, true))) {
-            edge.options.style.body.name = "cell";
+            plain_body();
             edge.options.style.tail.name = "maps to";
             edge.options.style.head.name = "arrowhead";
             return;
         }
         if ((this.eat("Mapsto") && flip(edge, false))
             || (this.eat("Mapsfrom") && flip(edge, true))) {
-            edge.options.style.body.name = "cell";
+            plain_body();
             edge.options.level = 2;
             edge.options.style.tail.name = "maps to";
             edge.options.style.head.name = "arrowhead";
@@ -961,7 +1008,7 @@ class Parser {
         }
         if ((this.eat("hookrightarrow") && flip(edge, false))
             || (this.eat("hookleftarrow") && flip(edge, true))) {
-            edge.options.style.body.name = "cell";
+            plain_body();
             edge.options.style.tail.name = "hook";
             edge.options.style.tail.side = "top";
             edge.options.style.head.name = "arrowhead";
@@ -969,26 +1016,26 @@ class Parser {
         }
         if ((this.eat("rightarrowtail") && flip(edge, false))
             || (this.eat("leftarrowtail") && flip(edge, true))) {
-            edge.options.style.body.name = "cell";
+            plain_body();
             edge.options.style.tail.name = "mono";
             edge.options.style.head.name = "arrowhead";
             return;
         }
         if ((this.eat("rightarrow") && flip(edge, false))
             || (this.eat("leftarrow") && flip(edge, true))) {
-            edge.options.style.body.name = "cell";
+            plain_body();
             edge.options.style.tail.name = "none";
             edge.options.style.head.name = "arrowhead";
             return;
         }
         if (this.eat("leftrightarrow")) {
-            edge.options.style.body.name = "cell";
+            plain_body();
             edge.options.style.tail.name = "arrowhead";
             edge.options.style.head.name = "arrowhead";
         }
         if ((this.eat("twoheadrightarrow") && flip(edge, false))
             || (this.eat("twoheadleftarrow") && flip(edge, true))) {
-            edge.options.style.body.name = "cell";
+            plain_body();
             edge.options.style.tail.name = "none";
             edge.options.style.head.name = "epi";
         }
@@ -996,7 +1043,7 @@ class Parser {
             || this.check("leftharpoonup") || this.check("leftharpoondown"))
             && ((this.eat("rightharpoon") && flip(edge, false))
             || (this.eat("leftharpoon") && flip(edge, true)))) {
-            edge.options.style.body.name = "cell";
+            plain_body();
             edge.options.style.tail.name = "none";
             edge.options.style.head.name = "harpoon";
             if (this.eat("up")) {
@@ -1027,7 +1074,7 @@ class Parser {
             return;
         }
         if (!this.check("dashed") && this.eat("dash")) {
-            edge.options.style.body.name = "cell";
+            plain_body();
             edge.options.level = 1;
             edge.options.style.tail.name = "none";
             edge.options.style.head.name = "none";
@@ -1035,7 +1082,7 @@ class Parser {
         }
         if (this.eat("equal")) {
             this.eat("s");
-            edge.options.style.body.name = "cell";
+            plain_body();
             edge.options.level = 2;
             edge.options.style.tail.name = "none";
             edge.options.style.head.name = "none";
@@ -1275,8 +1322,11 @@ Parser.prototype.parse_route = function (edge) {
     let rounding = 0;
     const radius = take(/^\[rounded corners=([0-9.]+)pt\]/);
     if (radius !== null) {
-        rounding = Math.round(parseFloat(radius[1]) / (CONSTANTS.ROUNDING
-            * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER));
+        // The export rounds a corner no more than the route's shortest leg allows (see
+        // `QuiverExport.route_radius`), so a radius between two steps was kept short by its legs,
+        // and the step above it gives it back.
+        rounding = Math.ceil(parseFloat(radius[1]) / (CONSTANTS.ROUNDING
+            * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER) - 1e-6);
     }
     const node = String.raw`\\tikzcdmatrixname-([0-9]+)-([0-9]+)\.center`;
     const route = [];
@@ -1332,6 +1382,57 @@ Parser.unbrace = (label) => {
         }
     }
     return label;
+};
+
+/// Join layers of the arrows read with `crossing over` where the export would otherwise write the
+/// arrows in another order than they were read. Each arrow read with `crossing over` takes a layer
+/// of its own, above those before it, but the export writes the arrows of a layer together, with
+/// the arrows between arrows attached to them, sorted by where they are: so an arrow between arrows
+/// could be written before an arrow crossing over that it followed, and the file would change when
+/// saved. A layer is joined to the one below it only if that brings the order nearer to the one
+/// read (`read`, the arrows in the order they were written).
+Parser.share_layers = (quiver, read) => {
+    read = read.filter((edge) => quiver.contains_cell(edge));
+    const position = new Map(read.map((edge, i) => [edge, i]));
+    // How many arrows the export would write out of the order they were read in.
+    const misplaced = () => quiver.drawing_groups().flat()
+        .filter((edge) => position.has(edge))
+        .filter((edge, i) => edge !== read[i]).length;
+    let wrong = misplaced();
+    const ranks = Array.from(new Set(read.map((edge) => edge.options.crossing_over)
+        .filter((rank) => rank > 0))).sort((a, b) => a - b);
+    for (let i = 1; i < ranks.length && wrong > 0;) {
+        const raised = read.filter((edge) => edge.options.crossing_over === ranks[i]);
+        for (const edge of raised) {
+            edge.options.crossing_over = ranks[i - 1];
+        }
+        const now = misplaced();
+        if (now < wrong) {
+            wrong = now;
+            ranks.splice(i, 1);
+        } else {
+            for (const edge of raised) {
+                edge.options.crossing_over = ranks[i];
+            }
+            ++i;
+        }
+    }
+};
+
+/// The colours LaTeX predefines that the export writes by name (see `Colour.latex`).
+Parser.COLOURS = {
+    black: new Colour(0, 0, 0),
+    white: new Colour(0, 0, 100),
+    red: new Colour(0, 100, 50),
+    green: new Colour(120, 100, 50),
+    blue: new Colour(240, 100, 50),
+};
+
+/// A label of several lines without the table the export sets it in (see `format_label` in
+/// `QuiverImportExport.tikz_cd`), so that reading it gives back the lines as they were typed.
+Parser.unarray = (label) => {
+    const match = label.match(/^\\begin\{array\}\{c\} ([^]*) \\end\{array\}$/);
+    return match !== null && match[1].includes("\\\\") ? match[1] : label;
 };
 
 /// Represents the essential information about an edge.

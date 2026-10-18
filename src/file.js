@@ -1,11 +1,10 @@
 /// The diagram's file on disk, and the macros file that goes with it, by way of the desktop shell's
 /// `window.host` (see `electron/`).
 ///
-/// A `.tikzcd` file is the tikz-cd export verbatim, so that LaTeX can `\input` it. Its first line,
-/// `%#q=...`, encodes the diagram exactly: opening a file trusts it when it still reproduces the
-/// file's `tikzcd` environment, and otherwise parses the tikz-cd, so that edits made by hand win.
-/// Files written by quiver (`% https://q.uiver.app/#q=...`) and the bare `% ...` form are read
-/// just the same, and prefixing our own line with `https://q.uiver.app/` opens it in quiver.
+/// A diagram's file is its export verbatim, so that LaTeX can `\input` it, and opening it parses
+/// the export, so that edits made by hand are read as any others. Older files began with a line,
+/// `%#q=...`, encoding the diagram, as do quiver's (`% https://q.uiver.app/#q=...`): such a line is
+/// trusted while it still reproduces the file's `tikzcd` environment, and saving leaves it out.
 ///
 /// Macros come from the nearest `macros.tex` in the diagram's directory or its ancestors, up to the
 /// git repository's root and short of the home directory, unless one was chosen explicitly
@@ -57,7 +56,8 @@ class DiagramFile {
             if (path === "") {
                 return;
             }
-            if (/\.(tex|sty)$/.test(path)) {
+            // A diagram's own file ends in `.cd.tex`; any other `.tex` file is macros.
+            if (/\.(tex|sty)$/.test(path) && !DiagramFile.is_diagram(path)) {
                 this.use_macros(path, true);
             } else {
                 this.open(path);
@@ -90,7 +90,7 @@ class DiagramFile {
     /// The diagram as it would be saved.
     text() {
         const ui = this.ui;
-        return `${ui.quiver.export("tikz-cd", ui.settings, ui.options(), ui.definitions()).data}\n`;
+        return `${ui.quiver.export(ui.format, ui.settings, ui.options(), ui.definitions()).data}\n`;
     }
 
     mark_saved(text = this.text()) {
@@ -176,33 +176,53 @@ class DiagramFile {
         this.ui.mode_line.flash("new diagram");
     }
 
-    /// Load the diagram from the contents of a `.tikzcd` file, into an empty quiver (whose
-    /// separations `restore_sep` has already set).
+    /// Load the diagram from the contents of its file, into an empty quiver (whose separations
+    /// `restore_sep` has already set).
     load(text) {
         const ui = this.ui;
-        // `%#q=...`, quiver's `% https://q.uiver.app/#q=...`, or a bare `% ...`, which must be
-        // the whole line, and long enough not to be an ordinary comment.
+        const { legacy, trusted, diagnostics } = DiagramFile.read(ui, text);
+        this.mark_saved();
+        if (trusted) {
+            ui.mode_line.flash(`opened ${this.name()}${this.describe_macros()}`);
+            return;
+        }
+        // The arrows are shortened once they are laid out, a moment after the parse, which is
+        // what saving would then write.
+        delay(() => this.mark_saved());
+        ui.keymap.layers.import.settle(text, new Set(ui.quiver.all_cells()), diagnostics, `opened ${
+            this.name()
+        }${legacy ? " (edited by hand, so parsed)" : ""}${this.describe_macros()}`);
+    }
+
+    /// Read the diagram in `text`, the contents of its file, into the empty quiver of `ui`, in the
+    /// format its environment is in, as `{ legacy, trusted, diagnostics }`: whether the file has an
+    /// encoded line, as older files and quiver's do, whether that line was trusted, and the
+    /// problems parsing found, which do not throw. The line, `%#q=...`, quiver's `% https://q.uiver.app/#q=...`, or a bare `% ...`, must
+    /// be a whole line, long enough not to be an ordinary comment, and is trusted only while it
+    /// still reproduces the file's `tikzcd` environment, so that a hand edit wins.
+    static read(ui, text) {
+        // The file's environment says which format the diagram is in (see `Formats.detect`).
+        ui.format = Formats.detect(text);
+        if (ui.format !== "tikz-cd") {
+            const { diagnostics } = ui.quiver.import(ui, ui.format, text, ui.settings);
+            return { legacy: false, trusted: false, diagnostics };
+        }
         const encoding = text.match(/^%(?:.*#q=|\s*)([A-Za-z0-9+/=]{8,})\s*$/m);
         if (encoding !== null) {
             try {
                 QuiverImportExport.base64.import(ui, encoding[1]);
-                if (DiagramFile.body(this.text()) === DiagramFile.body(text)) {
-                    // Store what we would write, so that the file is only rewritten after a change.
-                    this.mark_saved();
-                    ui.mode_line.flash(`opened ${this.name()}${this.describe_macros()}`);
-                    return;
+                const written = ui.quiver.export(
+                    "tikz-cd", ui.settings, ui.options(), ui.definitions()).data;
+                if (DiagramFile.body(written) === DiagramFile.body(text)) {
+                    return { legacy: true, trusted: true, diagnostics: [] };
                 }
             } catch (_) {
                 // Fall back on the tikz-cd, below.
             }
             ui.reset();
         }
-        // Parse errors do not throw: they are reported in `diagnostics`.
         const { diagnostics } = ui.quiver.import(ui, "tikz-cd", text, ui.settings);
-        this.mark_saved();
-        ui.keymap.layers.import.settle(text, new Set(ui.quiver.all_cells()), diagnostics, `opened ${
-            this.name()
-        } (${encoding === null ? "parsed" : "edited by hand, so parsed"})${this.describe_macros()}`);
+        return { legacy: encoding !== null, trusted: false, diagnostics };
     }
 
     /// Save the diagram to `path`, or to its own path, asking for one if it has none. Returns
@@ -218,7 +238,8 @@ class DiagramFile {
         try {
             path = path === null
                 ? await host.save_dialog(this.path
-                    ?? (this.base === null ? "diagram.tikzcd" : `${this.base}/diagram.tikzcd`))
+                    ?? (this.base === null ? DiagramFile.UNTITLED
+                        : `${this.base}/${DiagramFile.UNTITLED}`))
                 : await host.resolve(this.directory(), path);
             if (path === null) {
                 return false;
@@ -274,7 +295,7 @@ class DiagramFile {
         let path = null;
         try {
             const name = `${this.path === null ? "diagram"
-                : DiagramFile.basename(this.path).replace(/\.[^.]*$/, "")}.svg`;
+                : DiagramFile.stem(DiagramFile.basename(this.path))}.svg`;
             const directory = this.directory();
             path = await host.save_dialog(directory === null ? name : `${directory}/${name}`, "svg");
             if (path === null) {
@@ -408,6 +429,16 @@ class DiagramFile {
         ui.sep = sep;
     }
 
+    /// Whether `path` is named as a diagram's file: `.cd.tex`, or `.tikzcd`, as older ones are.
+    static is_diagram(path) {
+        return /\.(cd\.tex|tikzcd)$/.test(path);
+    }
+
+    /// A file's name without its extension, which for a diagram's is `.cd.tex` or `.tikzcd`.
+    static stem(name) {
+        return name.replace(/\.cd\.tex$|\.[^.]*$/, "");
+    }
+
     static basename(path) {
         return path.slice(path.lastIndexOf("/") + 1);
     }
@@ -416,6 +447,10 @@ class DiagramFile {
         return path.slice(0, path.lastIndexOf("/")) || "/";
     }
 }
+
+/// What a new diagram's file is called until it is saved somewhere: `.cd.tex`, which LaTeX
+/// `\input`s as `\input{diagram.cd}`, whatever format it is in.
+DiagramFile.UNTITLED = "diagram.cd.tex";
 
 /// tikz-cd's named separations, in `em` (as `QuiverImportExport.tikz_cd` writes them).
 DiagramFile.SEPS = {

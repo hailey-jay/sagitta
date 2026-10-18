@@ -1,7 +1,7 @@
 # Sagitta
 
-Sagitta is a keyboard-driven editor for tikz-cd commutative diagrams, grown from my personal tweaks to [quiver](https://q.uiver.app), and run as a desktop app on Electron or as a web page.
-It edits `.tikzcd` files that a paper `\input`s directly.
+Sagitta is a keyboard-driven editor for commutative diagrams in tikz-cd and amscd, grown from my personal tweaks to [quiver](https://q.uiver.app), and run as a desktop app on Electron or as a web page.
+It edits `.cd.tex` files that a paper `\input`s directly.
 
 Status: I use Sagitta daily on Linux.
 The Windows packages and the web page are new, and less tested than the Linux app.
@@ -20,7 +20,7 @@ chmod +x Sagitta-*.AppImage
 
 It bundles Electron and needs only FUSE 3 (`fusermount3`), which most distributions install.
 Older AppImages need FUSE 2 instead.
-It takes the same options as `sagitta`, but does not register `.tikzcd` files with the desktop.
+It takes the same options as `sagitta`, but does not register `.cd.tex` files with the desktop.
 An AppImage manager such as Gear Lever or AppImageLauncher adds it to the application menu.
 
 On Ubuntu 24.04 and later, AppArmor stops Chromium's sandbox inside an AppImage, and Sagitta exits at once.
@@ -33,9 +33,10 @@ Download either package for Windows from the [latest release](https://github.com
 
 - `Sagitta-<version>-x64-setup.exe` installs for the current user, with no administrator prompt.
   It adds a Start menu entry and opens `.tikzcd` files from Explorer.
+  Explorer goes by a file's last extension alone, so `.cd.tex` files, which new diagrams are saved as, open from Sagitta's own Open dialog instead.
   Uninstall it from Settings, under Installed apps.
 - `Sagitta-<version>-x64-portable.exe` runs without installing and leaves nothing behind except its settings.
-  It registers nothing, so `.tikzcd` files do not open in it from Explorer.
+  It registers nothing, so diagrams do not open in it from Explorer.
 
 Both are unsigned, so SmartScreen says "Windows protected your PC" the first time.
 Choose "More info", then "Run anyway".
@@ -54,7 +55,7 @@ Firefox and Safari open a copy, and saving downloads the diagram.
 A page sees only the folders it is given, so in Chromium, `:open-folder` hands over the paper's folder: opening a diagram from it then finds the nearest `macros.tex`, as the desktop app does, and relative paths work inside it.
 Without a folder, or in Firefox and Safari, take macros from `f` in the macros layer, or drop a `.tex` file on the page.
 Chromium also reopens the last diagram, and its folder, on the next visit, once you agree.
-A link ending in `#q=...`, as quiver's do, opens the diagram it encodes, untitled; the encoding is the same as a `.tikzcd` file's `%#q=` line, so the page's address with a file's line after `#q=` opens that diagram.
+A link ending in `#q=...`, as quiver's do, opens the diagram it encodes, untitled; `q` in the export layer copies a diagram's, so the page's address followed by it opens that diagram.
 Once loaded, the page opens without a network, and browsers that install web apps (Chrome and Edge, or Safari's Add to Dock) can install it to run in a window of its own.
 Settings and the keys file live in the browser's storage, and opening the settings file (`o` in the settings layer) edits both.
 The browser keeps `C-n` for itself, so start a new diagram with `:new`.
@@ -72,7 +73,7 @@ npm install
 ```
 
 There is no build step: KaTeX and its fonts are vendored.
-To put `sagitta` on PATH and open `.tikzcd` files from the file manager:
+To put `sagitta` on PATH and open diagrams from the file manager:
 
 ```
 ./install.sh [--bin=DIR] [--docs=DIR] [--dry-run]
@@ -82,7 +83,7 @@ To put `sagitta` on PATH and open `.tikzcd` files from the file manager:
 On Windows, use the installer above.
 
 This links the launcher into `--bin` (default `~/.local/bin`) and the icon into the hicolor theme.
-It also renders `sagitta.desktop` and registers `text/x-tikzcd`, so `.tikzcd` files open in Sagitta.
+It also renders `sagitta.desktop` and registers `text/x-tikzcd`, so `.cd.tex` and `.tikzcd` files open in Sagitta, while other `.tex` files keep opening in your TeX editor.
 `--docs` also links the manual into a directory of your choice.
 
 If your distribution packages Electron 43 (`electron43` on Arch), the launcher uses that instead of the copy in `node_modules`, and you can skip `npm install`.
@@ -90,7 +91,7 @@ If your distribution packages Electron 43 (`electron43` on Arch), the launcher u
 ## Usage
 
 ```
-sagitta [--macros FILE] [--devtools] [DIAGRAM.tikzcd] [-- SWITCHES]
+sagitta [--macros FILE] [--devtools] [DIAGRAM.cd.tex] [-- SWITCHES]
 ```
 
 `sagitta --help` explains the options.
@@ -103,34 +104,34 @@ With a mouse, right-click or the `; commands` button opens the command layer, an
 
 ### In a paper
 
-`examples/` contains two diagrams, their macros, and a paper:
+`examples/` contains three diagrams, their macros, and a paper:
 
 ```
 examples/
 ├── macros.tex          \pr and \coker, which both the diagrams and the paper use
-├── pullback.tikzcd     a pullback square, as Sagitta saves it
-├── snake-lemma.tikzcd  the snake lemma, with a routed dashed connecting morphism
-└── paper.tex           \usepackage{quiver}, \input{macros}, then each diagram
+├── pullback.cd.tex     a pullback square, as Sagitta saves it
+├── snake-lemma.cd.tex  the snake lemma, with a routed dashed connecting morphism
+├── five-lemma.cd.tex   the five lemma, in amscd
+└── paper.tex           \usepackage{amscd} and {quiver}, \input{macros}, then each diagram
 ```
 
-Open the diagram with `sagitta examples/pullback.tikzcd`.
+Open the diagram with `sagitta examples/pullback.cd.tex`.
 Its labels render with `examples/macros.tex`, since Sagitta uses the nearest `macros.tex` at or above the diagram, stopping at the git repository's root.
 Sagitta reloads that file when it changes.
 
-A paper needs the `quiver.sty` package, which loads tikz-cd and defines the arrow styles that Sagitta's export uses (curves, shortened arrows, and some heads and tails).
+A tikz-cd diagram needs the `quiver.sty` package, which loads tikz-cd and defines the arrow styles that Sagitta's export uses (curves, shortened arrows, and some heads and tails).
 It is distributed on CTAN and in TeX Live, so `\usepackage{quiver}` usually works as is.
 If not, copy [`quiver.sty`](https://github.com/varkor/quiver/blob/master/package/quiver.sty) beside the paper.
+An amscd diagram needs `\usepackage{amscd}`, which comes with `amsmath`.
 
-A `.tikzcd` file is the export verbatim, so `\input{pullback.tikzcd}` typesets it, centred on its own line.
-Its first line, `%#q=...`, is a comment holding the diagram exactly.
-Since Sagitta is a fork of quiver, this hash is the same.
-Navigating to `https://q.uiver.app/#q=...` yields the same diagram.
-Hand edits to the rest of the file still win: Sagitta reads the tikz-cd whenever that line no longer matches it.
+A `.cd.tex` file is the export verbatim, so `\input{pullback.cd}` typesets it, centred on its own line.
+There is nothing else in it: Sagitta reads the tikz-cd or amscd itself when it opens the file, so hand edits are read like any others.
+`q` in the export layer (`C-e`) copies the `#q=...` hash quiver uses, so `https://q.uiver.app/#q=...` opens the same diagram in quiver.
 
 ## Documentation
 
 - `docs/sagitta.md`: the manual.
-  It covers the file format, macros, keys, the keys file, and settings.
+  It covers the file, formats, macros, keys, the keys file, and settings.
 - `CHANGELOG.md`: what each release changed.
 - `CONTRIBUTING.md`: the source, the tests, and how to report a bug.
 - `LICENSE`, `NOTICE`: the licence, and quiver's and KaTeX's notices.

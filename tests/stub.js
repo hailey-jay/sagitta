@@ -264,6 +264,9 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
         macros: new Map(),
         colours: new Map(),
         sep: { column: 1.8, row: 1.8 },
+        // The format the diagram is written in, which nothing here lays out (see `UI.format`).
+        format: "tikz-cd",
+        amscd_ends: new Map(),
         // The separations `DiagramFile.SEPS` calls normal, which a diagram keeps unless its file
         // says otherwise.
         present: 0,
@@ -294,6 +297,10 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
                 cell.recalculate_size(ui);
             }
         },
+
+        /// As `UI.add_cells`, which has nothing to stack or code here.
+        add_cells: (add) => add(),
+        draw_unrendered: () => {},
 
         /// As `UI.change_setting`, without what it shows: nothing here is drawn.
         change_setting: (setting, value) => ui.settings.set(setting, value),
@@ -355,7 +362,7 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
 
         /// The text the diagram would be saved as, as `DiagramFile.text` writes it.
         text: () => `${
-            ui.quiver.export("tikz-cd", ui.settings, ui.options(), ui.definitions()).data}\n`,
+            ui.quiver.export(ui.format, ui.settings, ui.options(), ui.definitions()).data}\n`,
 
         /// Start again on an empty diagram, as `UI.reset` does.
         reset: () => {
@@ -363,6 +370,7 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
             ui.grid.clear();
             ui.positions.clear();
             ui.selection.clear();
+            ui.format = "tikz-cd";
         },
     };
     return ui;

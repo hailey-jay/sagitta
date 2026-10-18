@@ -1,36 +1,64 @@
 # Sagitta manual
 
-Sagitta is a keyboard-driven editor for tikz-cd commutative diagrams, grown from quiver (q.uiver.app) and run as a desktop app on Electron 43 (`$SAGITTA_ELECTRON`, else `electron43` or `electron` on PATH, else `npm install`'s).
-It edits `.tikzcd` files that a paper `\input`s directly.
+Sagitta is a keyboard-driven editor for commutative diagrams in tikz-cd and amscd, grown from quiver (q.uiver.app) and run as a desktop app on Electron 43 (`$SAGITTA_ELECTRON`, else `electron43` or `electron` on PATH, else `npm install`'s).
+It edits `.cd.tex` files that a paper `\input`s directly.
 
 ## Command line
 
 ```
-sagitta [--macros FILE] [--devtools] [DIAGRAM.tikzcd] [-- SWITCHES]
+sagitta [--macros FILE] [--devtools] [DIAGRAM.cd.tex] [-- SWITCHES]
 ```
 
 `DIAGRAM` need not exist yet.
 `sagitta --help` lists the options, and `--version` gives the version.
 Anything after `--` goes to Electron and Chromium, such as `-- --ozone-platform=wayland`.
-`.tikzcd` files are registered as `text/x-tikzcd` and open in Sagitta from the file manager.
+`.cd.tex` files, and the `.tikzcd` files of earlier versions, are registered as `text/x-tikzcd` and open in Sagitta from the file manager; other `.tex` files do not.
 
 ## The file
 
-A `.tikzcd` file is the tikz-cd export verbatim, so LaTeX can `\input` it.
-Its first line, `%#q=...`, encodes the diagram exactly.
-Opening a file trusts that line only while it still reproduces the `tikzcd` environment; otherwise, the tikz-cd is parsed, so hand edits win.
-quiver's own `% https://q.uiver.app/#q=...` first line is read too, and prefixing Sagitta's line with `https://q.uiver.app/` opens it in quiver.
+A diagram's file is its export verbatim, so LaTeX can `\input` it, and opening it reads the export, so hand edits are read as any others.
+A new diagram is saved as `diagram.cd.tex`, which a paper inputs as `\input{diagram.cd}` or `\input{diagram.cd.tex}`.
+Files named `.tikzcd`, as earlier versions saved them, open and save as before, under their own names.
 
 Opening and saving an unchanged file leaves it byte-for-byte the same.
 
+Files written before 0.6.0, and quiver's, begin with a line encoding the diagram: `%#q=...`, or quiver's `% https://q.uiver.app/#q=...`.
+Opening such a file trusts the line while it still reproduces the `tikzcd` environment; otherwise, the tikz-cd is read, so hand edits win.
+Saving leaves the line out.
+
 Since the file is the export, saving writes it with the export layer's options (`C-e`).
-Saving a new file, or saving as, opens that layer first, so the options can be checked: RET goes on to save, and `C-s` there saves too.
+Saving a new file, or saving as, opens that layer first, so the options can be checked: RET goes on to save, and `S` or `C-s` there saves too; `S` in the export layer saves at any time.
 In the export layer, `q` copies the diagram's `#q=...` hash, which opens it after `https://q.uiver.app/` or the address of Sagitta's page, and `v` saves it as an SVG image, beside the diagram by default.
 The SVG is drawn as the canvas draws it in light mode, with KaTeX's styles and the fonts its labels use inside it, so it shows the same anywhere a browser draws it; editors that ignore `foreignObject` show its arrows without their labels.
-The mode line follows the file's name with any option that differs from its default, as in `square.tikzcd [no centre, column sep large]`.
+The mode line follows the file's name with its format, if it is not tikz-cd, and any option that differs from its default, as in `square.cd.tex [amscd, no centre]`.
 
 The file is centred in `\[ \]` by default (`export.centre_diagram`), which a paper wants.
 A `\documentclass{standalone}` document typesets what it inputs in a box, where display math is not allowed, so it stops with "Bad math environment delimiter": turn centring off (`c` in the export layer) for a diagram such a document inputs.
+
+## Formats
+
+A diagram is written in tikz-cd or amscd, and the canvas lays it out as that format sets it, so that it looks like the PDF in either.
+The file's environment says which: a `CD` environment is amscd, and anything else tikz-cd.
+A new diagram is tikz-cd.
+
+`f` in the export layer, or `:format amscd` and `:format tikz-cd`, switches the diagram's format, as one step to undo; `:format` alone says which it is in.
+Pasting a `CD` environment in the import layer (`C-i`) switches to amscd too.
+
+amscd's `CD` environment holds a grid of objects, with straight arrows between neighbours in a row or a column, each plain (`@>>>`, `@<<<`, `@VVV`, `@AAA`) or equals (`@=`, `@|`), and labelled on either side; tikz-cd holds all of that and more.
+A paper that inputs an amscd diagram needs `\usepackage{amscd}`, and `xcolor` for coloured objects.
+
+- Switching to amscd first lists what it cannot draw, such as diagonal arrows, loops, curves, or styles other than plain and equals, and selects it.
+  Converting drops it: the arrows amscd cannot draw at all are deleted, and the rest are drawn plainly, straight, black, and with their labels to one side.
+  Undo brings it all back, in tikz-cd.
+- In amscd, the command layer's list dims what amscd cannot draw, and anything that would draw it is undone at once, with an error saying why, so that a step taken by mistake leaves the diagram as amscd can write it.
+  Moves are refused before they are made: moving vertices with `C-arrows`, or inserting a row or column (`; i`), is refused if it would leave an arrow diagonal or between cells that are not neighbours, and a dragged vertex only goes where its arrows stay drawable.
+- amscd sets the arrows and labels itself: a horizontal arrow is at least 30pt long, or as long as its label, in a column as wide as the longest arrow in it; the rows are two baselines apart, or further for tall labels; and a vertical arrow is `\Big\downarrow`, 18pt long.
+  The canvas lays the diagram out by the same rules, so the separations (`w` and `h` in the export layer), ampersand replacement, and cramped, which are tikz-cd's, are not offered.
+
+`m` in the export layer copies the diagram as inline maths, as in `0 \to A \xhookrightarrow{f} B \to C \to 0`, for `$ $`, and `M` as display maths, in `\[ \]`.
+Only a row of objects side by side, with one arrow between each two neighbours, is a formula; anything else is refused, with why, and `m` and `M` are greyed out.
+Labelled arrows stretch over their labels, which `amsmath` does for plain arrows, `mathtools` for hooked, maps-to, and double ones, and `extpfeil` for two-headed and equals ones (`\xtwoheadrightarrow`, `\xlongequal`); a paper that loads `stmaryrd` must load it after `extpfeil`, which loads part of it; the mode line says which packages the formula needs, and anything it leaves out, such as colours.
+Formulas are only copied: a diagram's file stays in its format.
 
 ## Macros
 
@@ -216,7 +244,7 @@ Everything at or beyond the gap moves one cell on, and the arrows come with thei
 One undo closes the gap.
 A gap with nothing at or beyond it is refused, rather than doing nothing quietly.
 
-A connecting morphism is one arrow: curved (`; b`, and `; -` for dashed), or routed round the diagram (see Routes), as `examples/snake-lemma.tikzcd` draws $\delta$.
+A connecting morphism is one arrow: curved (`; b`, and `; -` for dashed), or routed round the diagram (see Routes), as `examples/snake-lemma.cd.tex` draws $\delta$.
 
 ## The canvas
 
@@ -229,6 +257,7 @@ That change, and its reverse, take a moment rather than happening at once, so th
 The separations are the export layer's (`w` and `h` there), so changing them redraws the canvas.
 Curves, offsets, loops, and a route's rounding are drawn as the export writes them: a curve as quiver's `curve` cubic, and a loop as TikZ's `loop`, leaving and coming back to its cell's border at the angles, and with the distance, the export gives it.
 An arrow's label is set in script style, as tikz-cd sets it, and placed by the box TeX sets it in, with tikz-cd's padding round it, against the middle of the line, as in the PDF.
+A diagram in amscd is laid out as amscd sets it instead (see Formats): its columns and rows by the arrows between them as well as the objects in them, and each arrow, and its label, where amscd draws them.
 
 ## Settings
 

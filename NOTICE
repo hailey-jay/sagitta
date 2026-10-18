@@ -1,4 +1,4 @@
-Sagitta, a keyboard-driven editor for tikz-cd commutative diagrams.
+Sagitta, a keyboard-driven editor for commutative diagrams in tikz-cd and amscd.
 Copyright (C) 2026 Hailey Jay Garcia
 
 This program is free software: you can redistribute it and/or modify it under

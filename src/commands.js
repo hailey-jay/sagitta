@@ -114,6 +114,10 @@ class Commands {
             from: vertex.position,
             to: move(vertex.position),
         }));
+        const refused = Formats.refuses_move(ui.format, ui.quiver, displacements);
+        if (refused !== null) {
+            throw new Error(`${ui.format} has no ${refused}.`);
+        }
         ui.history.add(ui, [{
             kind: "move",
             displacements,
@@ -421,6 +425,25 @@ for (const [name, axis, after] of [
         run: (commands) => commands.insert(axis, commands.ui.focus_position[axis] + after),
     };
 }
+
+/// `format amscd` switches the diagram to another format (see `UI.switch_format`), asking first if
+/// that format cannot draw all of it; `format` alone says which it is in.
+Commands.TABLE["format"] = {
+    arguments: true,
+    completions: Formats.NAMES,
+    run: (commands, [format]) => {
+        const ui = commands.ui;
+        if (format === undefined) {
+            ui.mode_line.flash(`the diagram is in ${ui.format}`);
+            return;
+        }
+        if (!Formats.NAMES.includes(format.toLowerCase())) {
+            throw new Error(`"${format}" is not a format: format takes ${
+                Formats.NAMES.join(" or ")}.`);
+        }
+        ui.switch_format(format.toLowerCase());
+    },
+};
 
 /// `route x` and `route y` bend the selected arrows round one corner, going along a row or a column
 /// first, and `route none` straightens them. With nothing, it steps through those three.

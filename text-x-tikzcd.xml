@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- A .tikzcd file is Sagitta's tikz-cd export, which LaTeX \inputs. Linked
+<!-- A .cd.tex file (or an older .tikzcd one) is a Sagitta diagram, its tikz-cd
+     or amscd export, which LaTeX \inputs. The longer glob beats text/x-tex's
+     *.tex, so these open in Sagitta while other .tex files do not. Linked
      into ~/.local/share/mime/packages by install.sh. -->
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
     <mime-type type="text/x-tikzcd">
-        <comment>tikz-cd diagram</comment>
+        <comment>Sagitta diagram</comment>
         <sub-class-of type="text/x-tex"/>
         <icon name="text-x-tex"/>
+        <glob pattern="*.cd.tex"/>
         <glob pattern="*.tikzcd"/>
     </mime-type>
 </mime-info>

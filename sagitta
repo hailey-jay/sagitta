@@ -1,5 +1,5 @@
 #!/bin/sh
-# sagitta [--macros FILE] [--devtools] [DIAGRAM.tikzcd] [-- SWITCHES]
+# sagitta [--macros FILE] [--devtools] [DIAGRAM.cd.tex] [-- SWITCHES]
 #
 # Runs the app on Electron: $SAGITTA_ELECTRON if set, else the first of
 # electron43 and electron on PATH, else the one `npm install` puts in

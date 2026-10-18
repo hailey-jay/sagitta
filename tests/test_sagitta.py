@@ -5,8 +5,9 @@ Sagitta's own `electron/main.js`, opens a diagram under `tmp_path`, runs one sce
 `tests/sagitta/scenarios.js` with trusted key and mouse events, and prints the result as JSON.
 Every run also fails on any console error the page logged.
 
-The promise most worth keeping is the `.tikzcd` round trip: a paper `\\input`s these files, so
-opening and saving must not change them, and hand edits must win over the encoded first line.
+The promise most worth keeping is the round trip of a diagram's file: a paper `\\input`s these files,
+so opening and saving must not change them, and hand edits must win over the encoded first line of
+older files.
 
 HOME and XDG_CONFIG_HOME point into `tmp_path` for every run, so Sagitta's settings and its
 `macros.tex` search never see the real home directory. The headless clipboard is Chromium's
@@ -434,7 +435,9 @@ def test_the_export_layer_copies_the_hash_and_draws_an_svg(sagitta, home):
         const hash = await host.read_clipboard();
         const svg = await DiagramSVG.build(ui);
         const count = (text) => svg.split(text).length - 1;
-        return { hash: hash.startsWith("#q=") && ui.file.text().includes(`%${hash}`),
+        return { hash: hash.startsWith("#q=") && !ui.file.text().includes("#q=")
+                && hash === `#q=${QuiverImportExport.base64.export(
+                    ui.quiver, ui.settings, ui.options()).data}`,
             svg: svg.startsWith("<svg"), labels: count("<foreignObject"),
             arrows: count("<g transform="), fonts: count("@font-face") > 0 };
     })()"""
@@ -551,7 +554,7 @@ def _typed(*keys):
     (_typed("|", "|", "Backspace"), "\t{A|} & B"),
     # `\(` and `\[` are left alone, as is a delimiter after a line break.
     (_typed("\\", "("), "\t{A\\(} & B"),
-    (_typed("\\", "\\", "{"), "\\begin{array}{c} A\\\\{} \\end{array} & B"),
+    (_typed("\\", "\\", "{"), "{\\begin{array}{c} A\\\\{} \\end{array}} & B"),
 ])
 def test_latex_delimiters_pair(sagitta, home, keys, expected):
     diagram = _diagram(home / "paper")
@@ -1046,55 +1049,64 @@ def test_the_manual_lists_every_named_binding(sagitta, home):
     assert [name for name in names if f"`{name}`" not in text] == []
 
 
-# ── The .tikzcd round trip ────────────────────────────────────────────────────
+# ── The round trip ────────────────────────────────────────────────────────────
 
 
 def test_hand_written_diagram_is_parsed(sagitta, home):
     diagram = _diagram(home / "paper")
     opened = sagitta("open", diagram)
     assert opened["counts"] == {"vertices": 4, "edges": 4, "selected": 0}
-    assert "(parsed)" in opened["mode_line"]
+    assert "opened square.tikzcd" in opened["mode_line"]
     assert opened["title"] == "square.tikzcd - Sagitta"
 
 
-def test_save_writes_the_encoding_and_the_tikzcd(sagitta, home):
+def test_save_writes_the_tikzcd_alone(sagitta, home):
     diagram = _diagram(home / "paper")
     sagitta("save", diagram)
     text = diagram.read_text()
-    assert text.startswith("%#q=")
+    assert text.startswith("\\[\\begin{tikzcd}")
+    assert "#q=" not in text
     assert '\\arrow["\\alpha"\', from=2-1, to=2-2]' in text
 
 
+# The encoded line older files, and quiver's, begin with.
+ENCODING = "QuiverImportExport.base64.export(ui.quiver, ui.settings, ui.options()).data"
+
+
 @pytest.mark.parametrize("marker", [
-    # quiver's own first line, and the bare form.
+    # Sagitta's own older first line, quiver's, and the bare form.
+    "%#q={}",
     "% https://q.uiver.app/#q={}",
     "% {}",
 ])
-def test_the_encoding_is_read_in_either_form(sagitta, home, marker):
+def test_an_older_encoded_line_is_read_in_any_form(sagitta, home, marker):
     diagram = _diagram(home / "paper")
     sagitta("save", diagram)
-    first, rest = diagram.read_text().split("\n", 1)
-    diagram.write_text(f"{marker.format(first[len('%#q='):])}\n{rest}")
+    encoding = sagitta("evaluate", diagram, ENCODING)
+    diagram.write_text(f"{marker.format(encoding)}\n{diagram.read_text()}")
     opened = sagitta("open", diagram)
     # The encoding was trusted: the tikz-cd was not parsed instead.
     assert "parsed" not in opened["mode_line"]
     assert opened["counts"] == {"vertices": 4, "edges": 4, "selected": 0}
+    sagitta("save", diagram)
+    assert "#q=" not in diagram.read_text() and "% " not in diagram.read_text()
 
 
 def test_opening_and_saving_changes_nothing(sagitta, home):
     diagram = _diagram(home / "paper")
     sagitta("save", diagram)
     first = diagram.read_bytes()
-    opened = sagitta("open", diagram)
-    assert "parsed" not in opened["mode_line"]
+    sagitta("open", diagram)
     sagitta("save", diagram)
     assert diagram.read_bytes() == first
 
 
-def test_hand_edits_win_over_the_encoding(sagitta, home):
+def test_hand_edits_win_over_an_older_encoding(sagitta, home):
     diagram = _diagram(home / "paper")
     sagitta("save", diagram)
-    diagram.write_text(diagram.read_text().replace('\\arrow["f", ', '\\arrow["k", '))
+    encoding = sagitta("evaluate", diagram, ENCODING)
+    diagram.write_text(f"%#q={encoding}\n" + diagram.read_text()
+                       .replace('\\arrow["f", ', '\\arrow["k", '))
     opened = sagitta("open", diagram)
     assert "edited by hand, so parsed" in opened["mode_line"]
     sagitta("save", diagram)
@@ -1106,6 +1118,221 @@ def test_separations_survive_a_save(sagitta, home):
         "\\begin{tikzcd}", "\\begin{tikzcd}[column sep=large, row sep=2.5em]"))
     sagitta("save", diagram)
     assert "\\begin{tikzcd}[column sep=large,row sep=2.50em]" in diagram.read_text()
+
+
+# ── amscd ─────────────────────────────────────────────────────────────────────
+
+AMSCD_SQUARE = """\\[\\begin{CD}
+\tA @>f>> B \\\\
+\t@VgVV @VVhV \\\\
+\tC @>>k> D
+\\end{CD}\\]
+"""
+
+
+def test_an_amscd_file_opens_and_saves_unchanged(sagitta, home):
+    diagram = _diagram(home / "paper", AMSCD_SQUARE, "square.cd.tex")
+    opened = sagitta("open", diagram)
+    assert opened["counts"] == {"vertices": 4, "edges": 4, "selected": 0}
+    assert "square.cd.tex [amscd]" in opened["mode_line"]
+    sagitta("save", diagram)
+    assert diagram.read_text() == AMSCD_SQUARE
+
+
+def test_amscd_is_laid_out_as_amscd_sets_it(sagitta, home):
+    """The rows are amscd's two baselines apart, a horizontal arrow is `\\minCDarrowwidth` long,
+    and a vertical one `\\Big\\downarrow` tall, at the scale the canvas draws pt at."""
+    diagram = _diagram(home / "paper", AMSCD_SQUARE, "square.cd.tex")
+    script = """(() => {
+        const pt = (px) => Math.round(px / Edge.PX_PER_PT * 100) / 100;
+        const at = (label) => ui.quiver.all_cells().find((cell) => cell.label === label);
+        const ends = (label) => ui.amscd_ends.get(at(label));
+        const length = (label) => pt(ends(label).end.sub(ends(label).start).length());
+        return {
+            rows: pt(at("C").shape.origin.y - at("A").shape.origin.y),
+            horizontal: length("f"),
+            vertical: length("g"),
+            fixed: ui.grid.fixed !== null,
+        };
+    })()"""
+    assert sagitta("evaluate", diagram, script) == {
+        "rows": 40, "horizontal": 30, "vertical": 18, "fixed": True}
+
+
+def test_a_lone_amscd_row_has_a_height(sagitta, home):
+    """A row with no other row beside it is as tall as the distance to a neighbour would be (two
+    baselines apart, here), and its objects sit in its middle, rather than on its edge; likewise
+    a lone column, as wide as an object and the shortest arrow."""
+    row = "\\begin{tikzcd}\n\t0 \\arrow[r] & A \\arrow[r] & B\n\\end{tikzcd}\n"
+    script = """(async () => {
+        await ui.switch_format("amscd");
+        const pt = (px) => Math.round(px / Edge.PX_PER_PT * 100) / 100;
+        const a = ui.quiver.all_cells().find((cell) => cell.label === "A");
+        return { height: pt(ui.grid.row_height(0)),
+            middle: pt(ui.grid.cell_centre_at_position(a.position).y) };
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper", row, "row.cd.tex"), script) == {
+        "height": 20, "middle": 10}
+    column = "\\begin{tikzcd}\n\tA \\arrow[d] \\\\\n\tB\n\\end{tikzcd}\n"
+    script = """(async () => {
+        await ui.switch_format("amscd");
+        const a = ui.quiver.all_cells().find((cell) => cell.label === "A");
+        const width = ui.grid.column_width(0) / Edge.PX_PER_PT;
+        return [width > 30 + 10, Math.abs(ui.grid.cell_centre_at_position(a.position).x
+            - ui.grid.column_width(0) / 2) < 0.01];
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "column", column, "column.cd.tex"), script) == [
+        True, True]
+
+
+def test_switching_to_amscd_asks_then_converts_in_one_undoable_step(sagitta, home):
+    diagram = _diagram(home / "paper", TRIANGLE.replace("\\arrow[d]", "\\arrow[d] \\arrow[dl, bend left]"))
+    script = """(async () => {
+        let asked = null;
+        ui.ask = async (message) => { asked = message; return true; };
+        const edges = () => ui.quiver.all_cells().filter((cell) => cell.is_edge()).length;
+        const before = edges();
+        await ui.switch_format("amscd");
+        const after = { format: ui.format, edges: edges(), text: ui.file.text() };
+        ui.history.undo(ui);
+        return { before, asked, after, undone: [ui.format, edges()] };
+    })()"""
+    result = sagitta("evaluate", diagram, script)
+    assert result["asked"].startswith("amscd cannot draw arrows that are not between neighbours (1)")
+    assert result["after"] == {"format": "amscd", "edges": 2,
+                               "text": "\\[\\begin{CD}\n\tX @>>> Y \\\\\n\t@. @VVV \\\\\n\t@. Z\n\\end{CD}\\]\n"}
+    assert result["undone"] == ["tikz-cd", 3] and result["before"] == 3
+
+
+def test_amscd_takes_back_what_it_cannot_draw(sagitta, home):
+    diagram = _diagram(home / "paper", AMSCD_SQUARE, "square.cd.tex")
+    script = """(async () => {
+        const f = ui.quiver.all_cells().find((cell) => cell.label === "f");
+        ui.select(f);
+        ui.commands.run("curve 2");
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return { curve: f.options.curve, redo: ui.history.present === ui.history.actions.length };
+    })()"""
+    assert sagitta("evaluate", diagram, script, expected_error="amscd has no curves") == {
+        "curve": 0, "redo": True}
+
+
+def test_amscd_draws_new_arrows_plainly_and_only_to_neighbours(sagitta, home):
+    """`SPC` from B to the empty cell on its right draws a plain arrow, whatever the preset, and
+    from A to D, which is no neighbour, is undone."""
+    diagram = _diagram(home / "paper", AMSCD_SQUARE, "square.cd.tex")
+    script = """(async () => {
+        ui.change_setting("diagram.arrow_preset", "inclusion");
+        const space = async (from, x, y) => {
+            ui.deselect();
+            ui.select(ui.quiver.all_cells().find((cell) => cell.label === from));
+            ui.reposition_focus_point(new Position(x, y));
+            (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown",
+                { key: " ", code: "Space", bubbles: true }));
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            return ui.quiver.all_cells().filter((cell) => cell.is_edge()).length;
+        };
+        return [await space("B", 2, 0), ui.file.text().includes("B @>>> \\\\bullet"),
+            await space("A", 1, 1)];
+    })()"""
+    assert sagitta("evaluate", diagram, script,
+                   expected_error="amscd has no arrows that are not between neighbours") == [
+        5, True, 5]
+
+
+def test_amscd_refuses_a_move_that_leaves_an_arrow_diagonal(sagitta, home):
+    """Moving `A` down past `C` would leave `f` diagonal: the move is refused before it is made,
+    so nothing moves and there is nothing to undo."""
+    diagram = _diagram(home / "paper", AMSCD_SQUARE, "square.cd.tex")
+    script = """(async () => {
+        const a = ui.quiver.all_cells().find((cell) => cell.label === "A");
+        ui.select(a);
+        const steps = ui.history.present;
+        const moved = ui.move_selection(new Position(0, 1));
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return [moved, `${a.position}`, ui.history.present === steps];
+    })()"""
+    assert sagitta("evaluate", diagram, script,
+                   expected_error="amscd has no arrows that are not between neighbours") == [
+        0, "0 0", True]
+
+
+def test_amscd_takes_back_quick_steps_together(sagitta, home):
+    """Two steps before the check runs, the first leaving `f` diagonal, are both taken back."""
+    diagram = _diagram(home / "paper", AMSCD_SQUARE, "square.cd.tex")
+    script = """(async () => {
+        const at = (label) => ui.quiver.all_cells().find((cell) => cell.label === label);
+        const move = (vertex, to) => ui.history.add(ui, [{
+            kind: "move", displacements: [{ vertex, from: vertex.position, to }], routes: [],
+        }], true);
+        move(at("A"), new Position(0, 3));
+        move(at("D"), new Position(1, 2));
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return [`${at("A").position}`, `${at("D").position}`, ui.history.present];
+    })()"""
+    assert sagitta("evaluate", diagram, script,
+                   expected_error="amscd has no arrows that are not between neighbours") == [
+        "0 0", "1 1", 0]
+
+
+def test_a_dragged_vertex_only_goes_where_amscd_can_draw_it(sagitta, home):
+    """The bullet, narrower than its column, is dragged by the space beside it. With an arrow to
+    `A`, anywhere else would leave the arrow diagonal or too long, so it stays; with none, it goes
+    where it is dragged."""
+    cd = "\\[\\begin{CD}\n\t%s\n\\end{CD}\\]\n"
+    before = cd % "\\bullet @>>> A \\\\\n\tXXXXXX"
+    diagram = _diagram(home / "paper", before, "row.cd.tex")
+    result = sagitta("drag-vertex", diagram, json.dumps([0, -1]))
+    assert not result["mode_line"].startswith("MOVE")
+    assert result["saved"] == before
+    diagram = _diagram(home / "free", cd % "\\bullet \\\\\n\tXXXXXX @>>> A", "row.cd.tex")
+    assert sagitta("drag-vertex", diagram, json.dumps([1, 0]))["saved"] == (
+        cd % "@. \\bullet \\\\\n\tXXXXXX @>>> A")
+
+
+def test_pasting_amscd_switches_to_it(sagitta, home):
+    script = """(async () => {
+        ui.keymap.layers.import.paste(%s);
+        const pasted = [ui.format, ui.quiver.all_cells().length];
+        ui.history.undo(ui);
+        return { pasted, undone: [ui.format, ui.quiver.all_cells().length] };
+    })()""" % json.dumps(AMSCD_SQUARE)
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == {
+        "pasted": ["amscd", 8], "undone": ["tikz-cd", 8]}
+
+
+def test_the_export_layer_copies_a_row_as_maths(sagitta, home):
+    row = "\\begin{tikzcd}\n\t0 \\arrow[r] & A \\arrow[r, \"f\", hook] & B\n\\end{tikzcd}\n"
+    script = """(async () => {
+        await ui.keymap.layers.export.copy_formula(false);
+        const inline = await host.read_clipboard();
+        await ui.keymap.layers.export.copy_formula(true);
+        return [inline, await host.read_clipboard()];
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper", row, "row.cd.tex"), script) == [
+        "0 \\to A \\xhookrightarrow{f} B", "\\[0 \\to A \\xhookrightarrow{f} B\\]"]
+
+
+def test_the_export_layer_greys_out_maths_and_saves_with_s(sagitta, home):
+    """The square is no row, so `m` and `M` are greyed out; `S` saves with the layer's options."""
+    diagram = _diagram(home / "paper")
+    script = """(async () => {
+        const layer = ui.keymap.layers.export;
+        layer.enter();
+        const greyed = Array.from(document.querySelectorAll(".which-key .entry.disabled kbd"),
+            (kbd) => kbd.textContent);
+        layer.intercept({ key: "c" });
+        layer.intercept({ key: "S" });
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        ui.change_setting("export.centre_diagram", true);
+        return { greyed, active: layer.active };
+    })()"""
+    assert sagitta("evaluate", diagram, script) == {"greyed": ["m", "M"], "active": False}
+    assert diagram.read_text().startswith("\\begin{tikzcd}")
+
+
+def test_a_new_diagram_is_saved_as_cd_tex(sagitta, home):
+    assert sagitta("evaluate", home / "new.cd.tex", "DiagramFile.UNTITLED") == "diagram.cd.tex"
 
 
 # ── Saving ────────────────────────────────────────────────────────────────────
@@ -1126,7 +1353,7 @@ def test_save_through_a_symlink_replaces_its_target(sagitta, home):
     link.symlink_to(target)
     sagitta("save", link)
     assert link.is_symlink()
-    assert target.read_text().startswith("%#q=")
+    assert target.read_text().startswith("\\[\\begin{tikzcd}")
 
 
 # ── Layers and keys ───────────────────────────────────────────────────────────
@@ -1147,7 +1374,7 @@ def test_macros_layer_pastes_definitions(sagitta, home):
 def test_export_layer_copies_what_a_save_would_write(sagitta, home):
     diagram = _diagram(home / "paper")
     result = sagitta("export_copy", diagram)
-    assert "copied 9 lines of tikz-cd" in result["mode_line"]
+    assert "copied 8 lines of tikz-cd" in result["mode_line"]
     sagitta("save", diagram)
     assert diagram.read_text() == result["clipboard"] + "\n"
 
@@ -2164,10 +2391,10 @@ def test_the_page_keeps_its_files_to_open_offline(browser):
 
 
 def _square_link(browser):
-    """The square's encoding, as its file's `%#q=` line has it."""
+    """The square's encoding, as `q` in the export layer copies it after `#q=`."""
     return browser("""(async () => {
         await ui.file.open(host.path_of(new File([%s], "square.tikzcd")), true);
-        return ui.file.text().match(/^%%#q=(\\S+)$/m)[1];
+        return QuiverImportExport.base64.export(ui.quiver, ui.settings, ui.options()).data;
     })()""" % json.dumps(SQUARE))
 
 

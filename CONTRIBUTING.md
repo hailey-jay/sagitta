@@ -7,7 +7,7 @@ To report a bug, open an issue with:
 
 - your distribution, and the Electron the launcher picked (`sagitta --version`, and the first of `$SAGITTA_ELECTRON`, `electron43`, `electron`, and `node_modules` that you have);
 - what you did, what you expected, and what happened, including any message in the mode line;
-- the `.tikzcd` file, and the `macros.tex` beside it if labels are involved.
+- the diagram's file, and the `macros.tex` beside it if labels are involved.
 
 A diagram that does not round-trip (opening and saving changes it) is a bug worth reporting even if nothing else goes wrong.
 
@@ -21,6 +21,7 @@ There is no build step.
 - `grid.js`: column and row sizes, and positions to and from pixels.
 - `curve.js`, `arrow.js`, `constants.js`: curves, drawing arrows, and the editor's parameters.
 - `parser.js`, `quiver.js`: reading and writing tikz-cd, and the diagram's cells and dependencies.
+- `formats.js`: amscd, read, written, and laid out as it sets a diagram, what it cannot draw, and inline maths.
 - `settings.js`, `macros.js`, `delimiters.js`: saved settings, `macros.tex`, and delimiter pairing.
 - `history.js`, `colours.js`, `cell.js`, `modes.js`, `options.js`: undo, the colour picker, vertices and edges, the UI's modes, and the selection's arrow options.
 - `modeline.js`: the mode line and the named actions.
@@ -51,7 +52,7 @@ This runs both suites, the fast one first.
 npm run test:fast
 ```
 
-The fast suite (`node tests/tikzcd.js`) is the `.tikzcd` round trip, the encoded first line, the parser, the export settings, and the command line's settings, in about a second.
+The fast suite (`node tests/tikzcd.js`) is the round trip of a diagram's file in tikz-cd and in amscd, over the examples and generated diagrams, the encoded first line of older files, the parser, amscd and inline maths, the export settings, and the command line's settings, in a few seconds.
 It loads the sources that touch the diagram into a `vm` over a stub DOM (`tests/stub.js`), so it needs neither Electron nor a display, and the checks are in `tests/tikzcd-checks.js`.
 A parser or export regression shows here before the slow suite starts.
 

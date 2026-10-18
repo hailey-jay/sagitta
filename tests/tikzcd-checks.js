@@ -1,35 +1,29 @@
 /// The checks `tests/tikzcd.js` runs, in the context it builds: the sources are already loaded,
 /// and `check`, `example`, and `make_ui` are in scope.
 
-/// A diagram loaded from the contents of a `.tikzcd` file, as `DiagramFile.load` does it: the
-/// encoded first line is trusted while it still reproduces the file's `tikzcd` environment, and
-/// otherwise the tikz-cd is parsed, so that a hand edit wins.
+/// A diagram loaded from the contents of its file, as opening it does (see `DiagramFile.read`):
+/// parsed, unless it has an encoded line, as older files do, that still reproduces its picture.
 function load(text) {
     const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
     DiagramFile.restore_sep(ui, text);
-    const encoding = text.match(/^%(?:.*#q=|\s*)([A-Za-z0-9+/=]{8,})\s*$/m);
-    let trusted = false;
-    if (encoding !== null) {
-        try {
-            QuiverImportExport.base64.import(ui, encoding[1]);
-            trusted = DiagramFile.body(ui.text()) === DiagramFile.body(text);
-        } catch (_) {
-            // Fall back on the tikz-cd, below.
-        }
-        if (!trusted) {
-            ui.reset();
-        }
-    }
-    let diagnostics = [];
-    if (!trusted) {
-        ({ diagnostics } = ui.quiver.import(ui, "tikz-cd", text, ui.settings));
-    }
-    return { ui, trusted, diagnostics };
+    return { ui, ...DiagramFile.read(ui, text) };
 }
 
-/// A diagram parsed from tikz-cd alone, with no encoded line.
-function parse(code) {
+/// A file as Sagitta wrote it before 0.6.0: the encoded line, then the picture.
+const legacy = (text) => {
+    const { ui } = load(text);
+    return `%#q=${QuiverImportExport.base64.export(
+        ui.quiver, ui.settings, ui.options(), ui.definitions()).data}\n${text}`;
+};
+
+/// A diagram parsed from tikz-cd alone, with no encoded line, under `settings` if given, and with
+/// the separations the code's options give, as opening a file reads them.
+function parse(code, settings = null) {
     const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+    if (settings !== null) {
+        ui.settings = settings;
+    }
+    DiagramFile.restore_sep(ui, code);
     const { diagnostics } = ui.quiver.import(ui, "tikz-cd", code, ui.settings);
     return { ui, diagnostics };
 }
@@ -48,43 +42,43 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
 const pending = [];
 
 {
-    // The round trip a paper depends on: the example opens from its own encoded line, and saving
-    // it writes the file back byte for byte.
-    const text = example("pullback.tikzcd");
-    const { ui, trusted, diagnostics } = load(text);
-    check("the example's own line is trusted", trusted, true);
+    // The round trip a paper depends on: the example is read from its picture, and saving it
+    // writes the file back byte for byte.
+    const text = example("pullback.cd.tex");
+    const { ui, legacy: encoded, diagnostics } = load(text);
+    check("the example holds no encoded line", encoded, false);
     check("it has no diagnostics", diagnostics.length, 0);
     check("it reads as a square with five arrows", counts(ui), [4, 5]);
     check("and saving it writes the same bytes", ui.text(), text);
-
-    // The same diagram from its tikz-cd alone, with the line taken away.
-    const bare = text.replace(/^%.*\n/, "");
-    const parsed = parse(bare);
-    check("the picture alone reads back", counts(parsed.ui), [4, 5]);
-    check("with no diagnostics", parsed.diagnostics.length, 0);
+    check("with no encoded line", ui.text().includes("#q="), false);
     // The braces the export writes round a label that is not a single word are taken off again,
     // or every reading would add another pair.
-    check("and the same labels", labels(parsed.ui), labels(ui));
-    check("so it writes the same picture",
-        parsed.ui.text().replace(/^%.*\n/, ""), bare);
+    check("the labels come back as typed", labels(ui),
+        ["X \\times_Z Y", "Y", "X", "Z", "\\pr_2", "\\pr_1", "", "g", "f"]);
     check("but braces that close before the end are the label's own",
         ["{a}{b}", "{f'}", "{\\}}", "\\{x\\}"].map(Parser.unbrace),
         ["{a}{b}", "f'", "\\}", "\\{x\\}"]);
     check("the corner survives the parse",
-        parsed.ui.quiver.all_cells().filter((cell) => cell.is_edge())
+        ui.quiver.all_cells().filter((cell) => cell.is_edge())
             .map((edge) => edge.options.style.name).sort(),
         ["arrow", "arrow", "arrow", "arrow", "corner"]);
 
+    // An older file begins with the diagram's encoding, which is trusted while it still
+    // reproduces the picture, and saving leaves it out.
+    const old = legacy(text);
+    const reopened = load(old);
+    check("an older file's encoded line is trusted", reopened.trusted, true);
+    check("and saving it leaves the line out", reopened.ui.text(), text);
+
     // A hand edit to the picture beats the encoded line: the line still parses, but it no longer
     // reproduces the environment, so the tikz-cd is what is read.
-    const edited = text.replace('"g"', '"g\'"');
-    const hand = load(edited);
+    const hand = load(old.replace('"g"', '"g\'"'));
     check("a hand edit is not trusted", hand.trusted, false);
     check("and the edited label is the one read", labels(hand.ui).includes("g'"), true);
 
     // A line that decodes to a different diagram is also distrusted, rather than believed over
     // the picture.
-    const swapped = text.replace(/^%#q=\S+$/m, `%#q=${
+    const swapped = old.replace(/^%#q=\S+$/m, `%#q=${
         QuiverImportExport.base64.export(parse("\\begin{tikzcd}\n\tA \\\\\n\tB\n\\end{tikzcd}\n")
             .ui.quiver, new Settings(SETTINGS), {}).data}`);
     check("a line for another diagram is distrusted", load(swapped).trusted, false);
@@ -95,29 +89,29 @@ const pending = [];
     // The snake lemma example, which the paper `\input`s beside the pullback: a wider figure, with
     // empty cells, a dashed arrow routed round the outside, and labels that need the
     // `\coker` of `examples/macros.tex`.
-    const text = example("snake-lemma.tikzcd");
-    const { ui, trusted, diagnostics } = load(text);
-    check("the snake lemma opens from its own line", trusted, true);
+    const text = example("snake-lemma.cd.tex");
+    const { ui, diagnostics } = load(text);
     check("with no diagnostics", diagnostics.length, 0);
     check("as four rows of terms and the arrows between them", counts(ui), [17, 23]);
     check("and saving it writes the same bytes", ui.text(), text);
 
     // The empty cells of the figure are empty cells, not absent ones: the first row has no fifth
-    // term, and the first and last rows have no first term.
+    // term, and the first and last rows have no first term. The file starts with the empty row and
+    // column the route runs through, so the terms are a row and a column in from the corner.
     check("the corners of the figure are left out",
         ui.quiver.all_cells().filter((cell) => cell.is_vertex())
             .map((cell) => `${cell.position.x}${cell.position.y}`).sort().join(" "),
-        "01 02 10 11 12 13 20 21 22 23 30 31 32 33 41 42 43");
+        "12 13 21 22 23 24 31 32 33 34 41 42 43 44 52 53 54");
 
     // The connecting morphism is one arrow round the whole figure, dashed: up from ker c, along
     // above the kernels, down the left, and in to coker a.
     const [delta] = ui.quiver.all_cells().filter((cell) => cell.label === "\\delta");
     check("the connecting morphism runs from ker c to coker a",
         [`${delta.source.position.x}${delta.source.position.y}`,
-            `${delta.target.position.x}${delta.target.position.y}`], ["30", "13"]);
+            `${delta.target.position.x}${delta.target.position.y}`], ["41", "24"]);
     check("and is routed round the figure and dashed",
         [delta.options.route, delta.options.style.body.name],
-        [[[3, -1], [-1, -1], [-1, 3]], "dashed"]);
+        [[[4, 0], [0, 0], [0, 4]], "dashed"]);
 
     // Its tikz-cd says so too, which is what LaTeX reads.
     check("the export says as much",
@@ -146,7 +140,7 @@ const pending = [];
 {
     // The forms quiver writes, which Sagitta reads the same as its own: the full URL comment, and
     // the bare line.
-    const encoded = example("pullback.tikzcd").match(/^%#q=(\S+)$/m)[1];
+    const encoded = legacy(example("pullback.cd.tex")).match(/^%#q=(\S+)$/m)[1];
     for (const [name, line] of [
         ["quiver's URL comment", `% https://q.uiver.app/#q=${encoded}`],
         ["a bare line", `% ${encoded}`],
@@ -213,11 +207,8 @@ const pending = [];
         true);
     check("as crossing over", text.includes("\\arrow[crossing over, from=1-1, to=2-2]"), true);
     const reloaded = load(text);
-    check("its own line is trusted", reloaded.trusted, true);
-    check("and keeps it", crossing(reloaded.ui), ["AD 1", "BC 0"]);
+    check("and reading it back keeps it", crossing(reloaded.ui), ["AD 1", "BC 0"]);
     check("so saving writes the same bytes", reloaded.ui.text(), text);
-    check("and the picture alone keeps it too",
-        crossing(parse(text.replace(/^%.*\n/, "")).ui), ["AD 1", "BC 0"]);
 
     // An arrow alone at the front is brought to the front by staying there, which is no step to
     // undo, but another arrow brought forward goes above it.
@@ -254,7 +245,8 @@ const pending = [];
         + "\tA \\arrow[ddrr, crossing over] & B \\arrow[dd] & C \\arrow[ddll, crossing over] \\\\\n"
         + "\t&& \\\\\n\tD & E & F\n\\end{tikzcd}\n");
     const ranks = (ui) => Object.fromEntries(ui.quiver.all_cells().filter((cell) => cell.is_edge())
-        .map((edge) => [`${edge.source.label}${edge.target.label}`, edge.options.crossing_over]));
+        .map((edge) => [`${edge.source.label}${edge.target.label}`, edge.options.crossing_over])
+        .sort(([a], [b]) => a < b ? -1 : 1));
     check("crossing arrows rank in the order they are written", ranks(stacked.ui),
         { AF: 1, BE: 0, CD: 2 });
     const order = (ui) => (ui.text().match(/from=\d-\d, to=\d-\d/g) ?? []).join(" ");
@@ -286,10 +278,10 @@ const pending = [];
     // Exporting what the settings ask for.
     const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
     QuiverImportExport.base64.import(ui,
-        example("pullback.tikzcd").match(/^%#q=(\S+)$/m)[1]);
+        legacy(example("pullback.cd.tex")).match(/^%#q=(\S+)$/m)[1]);
     const text = () => ui.text();
 
-    check("the export is centred by default", text().startsWith("%#q="), true);
+    check("the export holds no encoded line", text().includes("#q="), false);
     check("and wrapped in \\[ \\]", text().includes("\\[\\begin{tikzcd}"), true);
 
     ui.settings.set("export.centre_diagram", false);
@@ -576,13 +568,10 @@ const pending = [];
 
     // The file keeps the route, and the picture alone gives it back.
     let text = ui.text();
-    let reloaded = load(text);
-    check("a routed arrow's own line is trusted", reloaded.trusted, true);
-    check("and keeps the route", route(reloaded.ui), "[[0,1]]");
-    check("so saving writes the same bytes", reloaded.ui.text(), text);
-    const pictured = parse(text.replace(/^%.*\n/, ""));
-    check("the picture alone reads the route back",
+    const pictured = load(text);
+    check("reading it back keeps the route",
         [route(pictured.ui), pictured.diagnostics.length], ["[[0,1]]", 0]);
+    check("so saving writes the same bytes", pictured.ui.text(), text);
     check("with the label where it was", pictured.ui.quiver.all_cells()
         .filter((cell) => cell.is_edge()).map((edge) => edge.options.label_position), [50]);
 
@@ -681,9 +670,11 @@ const pending = [];
     text = ui.text();
     check("a cell above the diagram adds a row", text.includes("\t& \\\\\n\tA & B & \\\\\n"), true);
     check("so the arrow's ends are a row lower", text.includes("from=2-1, to=3-2"), true);
+    // The file has no cells above its top row, so the diagram reads back a row lower, with the
+    // route where it was among its cells.
     check("and it reads back where it was", load(text).ui.quiver.all_cells()
         .filter((cell) => cell.is_edge()).map((edge) => edge.options.route),
-    [[[1, 0], [2, 0], [1, -1]]]);
+    [[[1, 1], [2, 1], [1, 0]]]);
 
     ui.focus_position = new Position(2, 0);
     commands.checkpoint();
@@ -1005,4 +996,345 @@ const pending = [];
         QuiverExport.route_radius(points([0, 0], [0, 1], [1, 1], [1, 0]), sep, 6), 6);
     check("long legs leave a radius as it is",
         QuiverExport.route_radius(points([0, 0], [0, 3], [3, 3], [3, 0]), sep, 16), 16);
+}
+
+// The round trip without the encoded line: a diagram written out, read back from its tikz-cd
+// alone, and written out again, gives the same text. Saved files carry no encoding, so this is
+// what keeps a diagram the same across saves. The diagrams are generated from a fixed seed, over
+// every option the export writes.
+{
+    let seed = Number(process.env.ROUNDTRIP_SEED ?? 20261017);
+    const random = () => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return seed / 2147483648;
+    };
+    const pick = (values) => values[Math.floor(random() * values.length)];
+    const between = (min, max, step = 1) => min + step * Math.floor(random() * ((max - min) / step + 1));
+    const labels = ["A", "B'", "\\bullet", "X \\times Y", "f^{-1}(U)", "\\mathbb{Z}", "[a]",
+        "a \\\\ b", "{a}{b}", ""];
+    const colour = () => pick([undefined, [0, 0, 0, 1], [240, 60, 60, 1], [0, 60, 60, 1],
+        [between(0, 360), between(0, 100), between(0, 100), 1]]);
+
+    const diagram = () => {
+        const vertices = [];
+        const taken = new Set();
+        const count = between(2, 5);
+        while (vertices.length < count) {
+            const [x, y] = [between(0, 3), between(0, 3)];
+            if (taken.has(`${x},${y}`)) {
+                continue;
+            }
+            taken.add(`${x},${y}`);
+            const vertex = [x, y, pick(labels.filter((label) => label !== ""))];
+            const c = colour();
+            if (c !== undefined) {
+                vertex.push(c);
+            }
+            vertices.push(vertex);
+        }
+        const edges = [];
+        const cells = () => vertices.length + edges.length;
+        for (let i = between(1, 5); i > 0; --i) {
+            const source = between(0, cells() - 1);
+            let target = between(0, cells() - 1);
+            const loop = source === target && source < vertices.length;
+            if (source === target && !loop) {
+                continue;
+            }
+            const options = {};
+            const style = {};
+            const kind = loop ? "arrow" : pick(["arrow", "arrow", "arrow", "adjunction", "corner",
+                "corner-inverse"]);
+            if (kind !== "arrow") {
+                style.name = kind;
+            } else {
+                style.tail = pick(ArrowOptions.STYLES.tail)[2];
+                style.body = pick(ArrowOptions.STYLES.body)[2];
+                style.head = pick(ArrowOptions.STYLES.head)[2];
+                options.level = between(1, 4);
+                if (loop) {
+                    options.radius = pick([-5, -3, -1, 1, 3, 5]);
+                    options.angle = between(-180, 180, 45);
+                } else if (random() < 0.5) {
+                    options.curve = between(-5, 5);
+                }
+                const source_shorten = between(0, 50, 10);
+                options.shorten = { source: source_shorten,
+                    target: between(0, 100 - source_shorten - 10, 10) };
+            }
+            const vertex_ends = source < vertices.length && target < vertices.length;
+            if (!loop && kind === "arrow" && vertex_ends && random() < 0.25) {
+                options.route = [[between(0, 4), between(0, 4)]];
+                if (random() < 0.5) {
+                    options.route.push([between(0, 4), between(0, 4)]);
+                }
+                options.rounding = between(0, 8);
+                delete options.curve;
+            } else if (!loop && random() < 0.4) {
+                options.offset = between(-5, 5);
+            }
+            if (!vertex_ends && random() < 0.5) {
+                options.edge_alignment = { source: random() < 0.5, target: random() < 0.5 };
+            }
+            options.label_position = random() < 0.5 ? between(0, 100, 10) : between(0, 100);
+            const c = colour();
+            if (c !== undefined && kind === "arrow") {
+                options.colour = c;
+            }
+            if (random() < 0.2 && kind === "arrow") {
+                options.crossing_over = 1;
+            }
+            options.style = style;
+            const label = pick(labels);
+            const alignment = between(0, 3);
+            const edge = [source, target, label, alignment, options];
+            const lc = colour();
+            if (lc !== undefined && label !== "") {
+                edge.push(lc);
+            }
+            edges.push(edge);
+        }
+        return [0, vertices.length, ...vertices, ...edges];
+    };
+
+    const encode = (input) => btoa(String.fromCharCode(
+        ...new TextEncoder().encode(JSON.stringify(input))));
+    const strip = (text) => text.replace(/^%#q=.*\n/, "");
+    // Reading tikz-cd shortens its arrows once the grid is laid out, a moment after the parse
+    // (see `Parser.parse_diagram`), so each diagram is written out again after that.
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const ROUNDS = Number(process.env.ROUNDTRIP_ROUNDS ?? 400);
+    pending.push((async () => {
+        const failed = [];
+        for (let round = 0; round < ROUNDS; ++round) {
+            const input = diagram();
+            const ui = make_ui(
+                { DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+            ui.settings.set("export.ampersand_replacement", random() < 0.2);
+            ui.settings.set("export.cramped", random() < 0.2);
+            ui.settings.set("export.centre_diagram", random() < 0.8);
+            ui.sep = { column: pick([0.9, 1.8, 2.7, 3.15]), row: pick([0.9, 1.8, 2.7]) };
+            try {
+                QuiverImportExport.base64.import(ui, encode(input));
+            } catch (_) {
+                continue;
+            }
+            const first = strip(ui.text());
+            let reread;
+            try {
+                reread = parse(first, ui.settings);
+            } catch (error) {
+                failed.push([JSON.stringify(input), first, `${error.stack}`, []]);
+                continue;
+            }
+            await tick();
+            const again = strip(reread.ui.text());
+            if (again !== first) {
+                failed.push([JSON.stringify(input), first, again, reread.diagnostics]);
+            }
+        }
+        // The first few lines that differ, to start a diagnosis from.
+        for (const [input, first, again, diagnostics] of
+            failed.slice(0, process.env.ROUNDTRIP_SHOW ?? 1)
+        ) {
+            const a = first.split("\n");
+            const b = again.split("\n");
+            const line = a.findIndex((text, i) => text !== b[i]);
+            if (process.env.ROUNDTRIP_DUMP !== undefined
+                && (process.env.ROUNDTRIP_DUMP === "all" || diagnostics.some((d) => `${d.message?.text ?? d.message}`
+                    .includes(process.env.ROUNDTRIP_DUMP)))) {
+                console.log(`${first}\n-----\n${again}`);
+            }
+            console.log(`${input}\n  wrote  ${a[line]}\n  reread ${b[line]}\n  ${
+                diagnostics.map((diagnostic) => diagnostic.message?.text ?? diagnostic.message)
+                    .join("; ")}`);
+        }
+        check(`${ROUNDS} generated diagrams write the same tikz-cd after reading it back`,
+            failed.length, 0);
+    })());
+}
+
+// amscd: a diagram in a `CD` environment is written and read as amscd writes it, and what amscd
+// cannot draw is listed, so that switching to it can say what would be lost.
+{
+    const amscd = (code) => {
+        const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+        const { diagnostics } = DiagramFile.read(ui, code);
+        return { ui, diagnostics };
+    };
+    const five = amscd(example("five-lemma.cd.tex"));
+    check("the five lemma example is amscd", [five.ui.format, counts(five.ui),
+        five.diagnostics.length], ["amscd", [10, 13], 0]);
+    check("and saving it writes the same bytes", five.ui.text(), example("five-lemma.cd.tex"));
+
+    const square = "\\[\\begin{CD}\n\tA @>f>> B \\\\\n\t@VgVV @VVhV \\\\\n\tC @>>k> D\n\\end{CD}\\]\n";
+    const { ui, diagnostics } = amscd(square);
+    check("a CD environment is amscd", ui.format, "amscd");
+    check("a square reads", [counts(ui), diagnostics.length], [[4, 4], 0]);
+    const sides = ui.quiver.all_cells().filter((cell) => cell.is_edge())
+        .map((edge) => `${edge.label} ${edge.options.label_alignment}`).sort();
+    // f above a rightward arrow is on its left; k below one, on its right; g left of a downward
+    // arrow is on its right, and h right of it, on its left.
+    check("with each label on its side", sides, ["f left", "g right", "h left", "k right"]);
+    check("and writing it gives the same text", ui.text(), square);
+
+    const others = amscd("\\begin{CD}\n\tA @<<< B @= C \\\\\n\t@AaAA @. @|\n\\\\ X @)u)) Y @. Z\n"
+        + "\\end{CD}\n");
+    check("leftward, upward, equals, and empty arrows read",
+        [counts(others.ui), others.diagnostics.length], [[6, 5], 0]);
+    const edge = (ui, from) => ui.quiver.all_cells().find((cell) => cell.is_edge()
+        && cell.source.label === from);
+    check("an arrow going left goes from the right", edge(others.ui, "B").target.label, "A");
+    check("one going up goes from below", edge(others.ui, "X").target.label, "A");
+    check("an equals has no head", [edge(others.ui, "B").options.level,
+        others.ui.quiver.all_cells().filter((cell) => cell.is_edge() && cell.options.level === 2)
+            .map((edge) => edge.options.style.head.name)], [1, ["none", "none"]]);
+    check("and is written as amscd writes it", others.ui.text(),
+        "\\[\\begin{CD}\n\tA @<<< B @= C \\\\\n\t@AaAA @. @| \\\\\n\tX @>u>> Y @. Z\n\\end{CD}\\]\n");
+
+    // Empty cells, braced labels, and a label holding its arrow's delimiter.
+    const sparse = amscd("\\begin{CD}\n\t@>{x>y}>> {B'} \\\\\n\t@. @V{V_1}VV \\\\\n\t@. C\n"
+        + "\\end{CD}\n");
+    check("an arrow from an empty cell keeps it", counts(sparse.ui)[0] >= 3, true);
+    check("braced labels are read as typed",
+        labels(sparse.ui).filter((label) => label !== "").sort(), ["B'", "C", "V_1", "x>y"]);
+    const coloured = amscd("\\begin{CD}\n\t\\textcolor{blue}{{X \\times Y}} @>>> B\n\\end{CD}\n");
+    check("a coloured object is read as typed", [labels(coloured.ui)[0],
+        coloured.ui.quiver.all_cells()[0].label_colour.hsla()], ["X \\times Y", [240, 100, 50, 1]]);
+    const written = sparse.ui.text();
+    check("and written braced", [written.includes("@>{x>y}>>"), written.includes("@V{V_1}VV")],
+        [true, true]);
+
+    // What amscd cannot draw, from a tikz-cd diagram.
+    const tikz = parse("\\begin{tikzcd}\n\tA \\arrow[r, \"f\", bend left] \\arrow[dr] & B "
+        + "\\arrow[d, dashed] \\\\\n\t& C \\arrow[loop, in=60, out=120, distance=5mm]\n"
+        + "\\end{tikzcd}\n");
+    check("its problems are listed", Formats.problems("amscd", tikz.ui.quiver)
+        .map(([description, cells]) => `${description} ${cells.length}`).sort(),
+    ["arrows that are not between neighbours 1", "curves 1", "loops 1",
+        "styles other than plain and equals 1"]);
+    check("and tikz-cd has none", Formats.problems("tikz-cd", tikz.ui.quiver), []);
+
+    // Converting resets what amscd cannot draw of the arrows it keeps, once the arrow has been
+    // shortened as reading it does, a moment after the parse.
+    const kept = parse("\\begin{tikzcd}\n\tA \\arrow[r, \"f\"{pos=0.3, description}, "
+        + "shift left=2, between={0.2}{0.7}, crossing over, "
+        + "draw={rgb,255:red,214;green,92;blue,92}] & B\n\\end{tikzcd}\n");
+    pending.push(new Promise((resolve) => setTimeout(resolve, 0)).then(() => {
+        const before = Formats.problems("amscd", kept.ui.quiver)
+            .map(([description]) => description);
+        kept.ui.history.add(kept.ui, AmsCD.convert(kept.ui));
+        const [arrow] = kept.ui.quiver.all_cells().filter((cell) => cell.is_edge());
+        const options = () => [arrow.options.offset, arrow.options.shorten,
+            arrow.options.label_position, arrow.options.label_alignment,
+            arrow.options.crossing_over, arrow.options.colour.is_not_black(), arrow.label];
+        check("converting resets an arrow amscd can draw",
+            [before.sort(), Formats.problems("amscd", kept.ui.quiver), options()],
+            [["arrow colours", "crossing over", "label positions", "labels centred on the arrow",
+                "offsets", "shortening"], [], [0, { source: 0, target: 0 }, 50, "left", 0, false,
+                "f"]]);
+        kept.ui.history.undo(kept.ui);
+        check("and undoing it gives it all back", options(),
+            [-2, { source: 20, target: 30 }, 30, "centre", 1, true, "f"]);
+    }));
+
+    // Converting drops what amscd cannot draw and draws the rest plainly, as one undoable step.
+    tikz.ui.unqueue_selected = () => {};
+    const since = tikz.ui.history.present;
+    const actions = AmsCD.convert(tikz.ui);
+    tikz.ui.history.add(tikz.ui, actions);
+    check("converting leaves what amscd can draw", [counts(tikz.ui),
+        Formats.problems("amscd", tikz.ui.quiver)], [[3, 1], []]);
+    tikz.ui.history.undo(tikz.ui);
+    check("and undoing it brings back the rest", counts(tikz.ui), [3, 4]);
+    check("as they were", Formats.problems("amscd", tikz.ui.quiver).length, 4);
+    check("in one step", tikz.ui.history.present, since);
+}
+
+// amscd's round trip, over generated grids of objects with arrows between neighbours.
+{
+    let seed = 4242;
+    const random = () => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return seed / 2147483648;
+    };
+    const pick = (values) => values[Math.floor(random() * values.length)];
+    const names = ["A", "B'", "X \\times Y", "\\mathbb{Z}", "0", "{a}{b}", "V", "x>y"];
+    const failed = [];
+    for (let round = 0; round < 300; ++round) {
+        const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+        ui.format = "amscd";
+        const [w, h] = [1 + Math.floor(random() * 4), 1 + Math.floor(random() * 3)];
+        const grid = new Map();
+        for (let y = 0; y < h; ++y) {
+            for (let x = 0; x < w; ++x) {
+                if (random() < 0.8 || (x === 0 && y === 0)) {
+                    grid.set(`${x},${y}`, new Vertex(ui, pick(names), new Position(x, y),
+                        random() < 0.2 ? new Colour(240, 60, 60) : Colour.black()));
+                }
+            }
+        }
+        for (const [key, vertex] of grid) {
+            const [x, y] = key.split(",").map(Number);
+            for (const [dx, dy] of [[1, 0], [0, 1]]) {
+                const other = grid.get(`${x + dx},${y + dy}`);
+                if (other === undefined || random() < 0.4) {
+                    continue;
+                }
+                const equals = random() < 0.2;
+                const [source, target] = random() < 0.5 ? [vertex, other] : [other, vertex];
+                new Edge(ui, equals ? "" : pick(["", "f", "g'", "\\alpha", "{u}{v}", "V", "x>y"]),
+                    source, target, Edge.default_options({
+                        level: equals ? 2 : 1,
+                        label_alignment: pick(["left", "right"]),
+                    }, equals ? { head: { name: "none" } } : null));
+            }
+        }
+        const first = ui.text();
+        const { ui: reread } = (() => {
+            const again = make_ui(
+                { DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+            DiagramFile.read(again, first);
+            return { ui: again };
+        })();
+        if (reread.text() !== first) {
+            failed.push([first, reread.text()]);
+        }
+    }
+    if (failed.length > 0) {
+        console.log(`${failed[0][0]}\n-----\n${failed[0][1]}`);
+    }
+    check("300 generated amscd diagrams write the same text after reading it back",
+        failed.length, 0);
+}
+
+// Inline maths: a row of objects and arrows, as a formula for the clipboard.
+{
+    const inline = (code, display = false) => {
+        const { ui } = parse(code);
+        return InlineMaths.export(ui.quiver, display);
+    };
+    const ses = inline("\\begin{tikzcd}\n\t0 \\arrow[r] & A \\arrow[r, \"f\", hook] "
+        + "& B \\arrow[r, two heads] & C \\arrow[r] & 0\n\\end{tikzcd}\n");
+    check("a short exact sequence is a formula", ses.text,
+        "0 \\to A \\xhookrightarrow{f} B \\twoheadrightarrow C \\to 0");
+    check("which needs mathtools and amssymb", ses.needs.sort(), ["amssymb", "mathtools"]);
+    check("and shows in display", inline("\\begin{tikzcd}\n\tA \\arrow[r, \"f\"'] & B\n"
+        + "\\end{tikzcd}\n", true).text, "\\[A \\xrightarrow[f]{} B\\]");
+    check("an arrow going left is a left arrow", inline("\\begin{tikzcd}\n\tA & B "
+        + "\\arrow[l, \"u\"]\n\\end{tikzcd}\n").text, "A \\xleftarrow[u]{} B");
+    check("a square is not a formula", inline(example("pullback.cd.tex")),
+        "a formula is one row: the objects are on several");
+    check("nor a row with a gap", inline("\\begin{tikzcd}\n\tA && B\n\\end{tikzcd}\n"),
+        "a formula has no gaps: the objects are not side by side");
+    const labelled = inline("\\begin{tikzcd}\n\tA \\arrow[r, \"p\", two heads] & B "
+        + "\\arrow[r, \"e\"', equals] & C\n\\end{tikzcd}\n");
+    check("a labelled epi and equals stretch, from extpfeil", labelled.text,
+        "A \\xtwoheadrightarrow{p} B \\xlongequal[e]{} C");
+    check("which needs extpfeil alone", labelled.needs, ["extpfeil"]);
+    check("as does an epi going left", inline("\\begin{tikzcd}\n\tA & B "
+        + "\\arrow[l, \"q\"', two heads]\n\\end{tikzcd}\n").text, "A \\xtwoheadleftarrow{q} B");
+    check("but a labelled tailed arrow is not a formula", inline("\\begin{tikzcd}\n\tA "
+        + "\\arrow[r, \"m\", tail] & B\n\\end{tikzcd}\n")
+        .startsWith("amsmath, mathtools, and extpfeil stretch no tailed arrow"), true);
 }

@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.6.0
+
+### Files
+
+- A diagram's file holds its export alone: the `%#q=...` line that encoded the diagram is gone, and opening a file reads the tikz-cd itself, so hand edits are read as any others. A file written earlier, or by quiver, still opens from its line while that reproduces the picture, and saving leaves the line out. `q` in the export layer still copies the `#q=` hash, which opens the diagram in quiver.
+- New diagrams are saved as `.cd.tex`, which a paper inputs as `\input{diagram.cd}`, and which editors highlight as TeX; `.tikzcd` files open and save as before, under their own names. On Linux, `install.sh` registers both, while other `.tex` files keep opening in the TeX editor; on Windows, Explorer opens only `.tikzcd` files in Sagitta, as it goes by the last extension alone. A dropped `.cd.tex` file opens as a diagram, where any other `.tex` file gives macros.
+- The examples are `.cd.tex` files, and `examples/five-lemma.cd.tex` is an amscd diagram, which `examples/paper.tex` inputs too.
+- Opening a diagram, pasting, and undoing a deletion add their cells together: the codes, the stacking of arrows crossing over, and the palette of the diagram's colours are worked out once, rather than once for each cell added, and opening or pasting draws each arrow once fewer. A grid of 400 objects and 760 arrows opens in about 1.2s, where it took 4.9s, and a 6 by 6 one in 0.1s, where it took 0.3s.
+
+### Formats
+
+- A diagram can be written in amscd's `CD` environment, as well as in tikz-cd. A file holding a `CD` environment opens in amscd, and `f` in the export layer, or `:format amscd` and `:format tikz-cd`, switches format, as one step to undo. Pasting a `CD` environment in the import layer switches to amscd too. The mode line shows `[amscd]` after the file's name.
+- The canvas lays an amscd diagram out as amscd sets it: a horizontal arrow at least 30pt long, or as long as its label, centred in a column as wide as the longest arrow in it; rows two baselines apart, or further for tall labels; vertical arrows 18pt long; and labels set where amscd sets them, above or below an arrow, or beside it.
+- Switching to amscd first selects what it cannot draw (diagonal arrows, loops, arrows on arrows, curves, offsets, styles other than plain and equals, colours on arrows, and the like) and asks before converting, which deletes the arrows it cannot draw at all and draws the rest plainly.
+- In amscd, the command layer's list dims what amscd cannot draw, and a step that would draw it is undone at once, with an error saying why. A move that would leave an arrow diagonal, or between cells that are not neighbours, is refused before it is made, from the keyboard or by inserting a row or column, and a dragged object only goes where amscd can still draw its arrows.
+- `S` in the export layer saves, as `C-s` does.
+- `m` and `M` in the export layer copy a row of objects and arrows as inline maths, as in `0 \to A \xhookrightarrow{f} B`, or display maths in `\[ \]`, saying which packages it needs (`amsmath`, `amssymb`, `mathtools`, or `extpfeil`, for labelled two-headed and equals arrows) and what it leaves out. Anything but a row is refused, with why, and the export layer greys `m` and `M` out.
+
+### Reading tikz-cd
+
+Reading a diagram's tikz-cd now gives back the diagram it was written from, so that saving it writes the same text: the fast suite checks this over hundreds of generated diagrams. Before, the encoded line hid these:
+
+- A coloured object's label, if it was not a single word, gained a pair of braces each time it was read.
+- A barred or bulleted arrow lost its mark when it was also double (`Rightarrow`), or equals.
+- A hollow bullet at the middle of an arrow, with no position written, stopped the arrow being read.
+- A label `\bullet` or `\shortmid` set over its arrow was read as a mark on it.
+- A colour by name (`white`, say, or one the macros file defines) was not read.
+- A colour read could come back a shade off, from rounding to whole degrees and percents.
+- A label of several lines split its row of objects in two.
+- A route's rounded corners came back a step less where its legs had kept them short, and its shortening a point or two off.
+- An arrow between arrows could be written before an arrow crossing over that it followed.
+- An empty cell a route passed through could take its centre from another node after reading.
+- An arrow with several arrows on it, not all on its middle, was written with a phantom for each, and read back with an extra arrow.
+
 ## 0.5.0
 
 ### Breaking changes

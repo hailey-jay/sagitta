@@ -1,8 +1,8 @@
 {
     "name": "sagitta",
     "productName": "Sagitta",
-    "version": "0.5.0",
-    "description": "A keyboard-driven commutative diagram editor for .tikzcd files, grown from quiver",
+    "version": "0.6.0",
+    "description": "A keyboard-driven commutative diagram editor for tikz-cd and amscd, grown from quiver",
     "license": "GPL-3.0-or-later",
     "author": "Hailey Jay Garcia <504haileyjay@gmail.com>",
     "private": true,
@@ -58,7 +58,7 @@
             "desktop": {
                 "entry": {
                     "GenericName": "Commutative diagram editor",
-                    "Comment": "Draw tikz-cd diagrams and edit .tikzcd files",
+                    "Comment": "Draw commutative diagrams and edit .cd.tex files",
                     "Categories": "Science;Math;",
                     "StartupWMClass": "sagitta"
                 }

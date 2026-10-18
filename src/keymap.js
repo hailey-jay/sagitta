@@ -583,6 +583,8 @@ class Keymap {
         // Arrow bindings are only listed while an arrow is selected, to save space.
         this.which_key.class_list.toggle("no-edge", !edges);
         this.which_key.class_list.toggle("no-selection", ui.selection.size === 0);
+        // What amscd cannot draw is dimmed while the diagram is in it (see `AmsCD.slot`).
+        this.which_key.class_list.toggle("amscd", ui.format === "amscd");
         // The compact list shows only the keys and their values, and what each does on hovering.
         const compact = ui.settings.get("ui.which_key_compact");
         this.which_key.class_list.toggle("compact", compact);
@@ -651,8 +653,9 @@ class Keymap {
         }
 
         // Groups of bindings replacing the main list: `[[title, [key, description, current,
-        // value, swatch, steps]]]`, or `null`, where `swatch` is a colour to show, and `steps`
-        // what the line's `−` and `+` buttons step (see `step`).
+        // value, swatch, steps, disabled]]]`, or `null`, where `swatch` is a colour to show,
+        // `steps` what the line's `−` and `+` buttons step (see `step`), and `disabled` whether
+        // the line is greyed out, as one that would do nothing now.
         let submenu_groups = null;
         // Whether clicking a line presses its key.
         const clickable = layer === null || layer.clickable;
@@ -673,10 +676,10 @@ class Keymap {
             const group = new DOM.Div({ class: "group" })
                 .add(new DOM.Element("h3").add(title))
                 .add_to(submenu);
-            for (const [key, description, current = false, value = "", swatch = null, steps = null]
-                of entries) {
+            for (const [key, description, current = false, value = "", swatch = null, steps = null,
+                disabled = false] of entries) {
                 const entry = new DOM.Div({ class: `entry${current ? " current" : ""}${
-                    clickable && key !== "" ? " clickable" : ""}` })
+                    clickable && key !== "" ? " clickable" : ""}${disabled ? " disabled" : ""}` })
                     .add(new DOM.Element("kbd").add(key))
                     .add_to(group);
                 if (swatch !== null) {
@@ -753,7 +756,8 @@ class Keymap {
                 const chords = Object.hasOwn(Keymap.FIXED_KEYS, name)
                     ? "" : this.describe_name(name, ({ modifier }) => modifier);
                 const entry = new DOM.Div({
-                    class: `entry clickable${needs !== null ? ` needs-${needs}` : ""}`,
+                    class: `entry clickable${needs !== null ? ` needs-${needs}` : ""}${
+                        Keymap.NOT_AMSCD.has(name) ? " not-amscd" : ""}`,
                 })
                     .add(new DOM.Element("kbd").add(key))
                     .add(new DOM.Element("span").add(description))
@@ -1289,6 +1293,15 @@ Keymap.WHICH_KEY = [
         ["leave", "leave"],
     ]],
 ];
+
+/// The command layer's bindings for what amscd cannot draw, which its list dims while the diagram
+/// is in amscd: arrows are plain or equals, straight, black, and labelled on either side.
+Keymap.NOT_AMSCD = new Set([
+    "tail", "body", "head", "adjunction", "corner", "crossing-over", "route", "checkpoint",
+    "move-checkpoint", "colour", "level", "curve", "offset", "length", "inclusion", "mono", "epi",
+    "maps-to", "dashed", "dotted", "squiggly", "position", "label-colour", "align-centre",
+    "align-over", "align-source", "align-target",
+]);
 
 /// The label alignments `; A` lists, as `[value, title]`: the sides, then on the arrow.
 Keymap.ALIGNMENTS = [

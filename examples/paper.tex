@@ -1,15 +1,22 @@
 \documentclass{article}
-% quiver.sty loads tikz-cd and defines the styles Sagitta's export uses.
+% quiver.sty loads tikz-cd and defines the styles Sagitta's export uses;
+% amscd has the CD environment of the amscd diagram.
 \usepackage{amsmath}
+\usepackage{amscd}
 \usepackage{quiver}
 \input{macros}
 
 \begin{document}
 The square
-\input{pullback.tikzcd}
+\input{pullback.cd.tex}
 is a pullback.
 
 The snake lemma: the rows are short exact, the kernels sit above and the
 cokernels below, and $\delta$ is the connecting morphism.
-\input{snake-lemma.tikzcd}
+\input{snake-lemma.cd.tex}
+
+The five lemma, drawn in amscd: if $\alpha_2$ and $\alpha_4$ are isomorphisms,
+$\alpha_1$ is an epimorphism, and $\alpha_5$ a monomorphism, then $\alpha_3$ is
+an isomorphism.
+\input{five-lemma.cd.tex}
 \end{document}
