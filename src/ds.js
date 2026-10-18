@@ -319,7 +319,36 @@ class Colour extends Encodable {
         const l = (max + min) / 2;
         const s = l === 0 || l === 1 ? 0 : range / (1 - Math.abs(2 * l - 1));
 
-        return new Colour(...[mod(h * 60, 360), s * 100, l * 100].map((x) => Math.round(x)), a);
+        const nearest = [mod(h * 60, 360), s * 100, l * 100].map((x) => Math.round(x));
+        // A colour is held in whole degrees and percents, which round the colour read, so that it
+        // may no longer give back the same red, green, and blue. A neighbour that does is taken
+        // instead, so that writing the colour out again gives what was read.
+        // Near black or white, saturation and hue move the colour little, so they may have to move
+        // further: the nearest neighbours are tried first.
+        const wanted = [r, g, b].map((x) => Math.round(x * 255)).join();
+        const steps = (reach) => [0, ...Array.from({ length: reach }, (_, i) => [-i - 1, i + 1])
+            .flat()];
+        for (const [hues, saturations] of [[2, 2], [8, 100]]) {
+            for (const dl of steps(2)) {
+                for (const ds of steps(saturations)) {
+                    for (const dh of steps(hues)) {
+                        const [hue, saturation, lightness] = [
+                            mod(nearest[0] + dh, 360), nearest[1] + ds, nearest[2] + dl,
+                        ];
+                        if (saturation < 0 || saturation > 100 || lightness < 0
+                            || lightness > 100
+                        ) {
+                            continue;
+                        }
+                        const candidate = new Colour(hue, saturation, lightness, a);
+                        if (candidate.rgba().slice(0, 3).join() === wanted) {
+                            return candidate;
+                        }
+                    }
+                }
+            }
+        }
+        return new Colour(...nearest, a);
     }
 
     toJSON() {

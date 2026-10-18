@@ -551,7 +551,7 @@ def _typed(*keys):
     (_typed("|", "|", "Backspace"), "\t{A|} & B"),
     # `\(` and `\[` are left alone, as is a delimiter after a line break.
     (_typed("\\", "("), "\t{A\\(} & B"),
-    (_typed("\\", "\\", "{"), "\\begin{array}{c} A\\\\{} \\end{array} & B"),
+    (_typed("\\", "\\", "{"), "{\\begin{array}{c} A\\\\{} \\end{array}} & B"),
 ])
 def test_latex_delimiters_pair(sagitta, home, keys, expected):
     diagram = _diagram(home / "paper")

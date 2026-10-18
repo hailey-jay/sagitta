@@ -27,9 +27,14 @@ function load(text) {
     return { ui, trusted, diagnostics };
 }
 
-/// A diagram parsed from tikz-cd alone, with no encoded line.
-function parse(code) {
+/// A diagram parsed from tikz-cd alone, with no encoded line, under `settings` if given, and with
+/// the separations the code's options give, as opening a file reads them.
+function parse(code, settings = null) {
     const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+    if (settings !== null) {
+        ui.settings = settings;
+    }
+    DiagramFile.restore_sep(ui, code);
     const { diagnostics } = ui.quiver.import(ui, "tikz-cd", code, ui.settings);
     return { ui, diagnostics };
 }
@@ -1005,4 +1010,160 @@ const pending = [];
         QuiverExport.route_radius(points([0, 0], [0, 1], [1, 1], [1, 0]), sep, 6), 6);
     check("long legs leave a radius as it is",
         QuiverExport.route_radius(points([0, 0], [0, 3], [3, 3], [3, 0]), sep, 16), 16);
+}
+
+// The round trip without the encoded line: a diagram written out, read back from its tikz-cd
+// alone, and written out again, gives the same text. Saved files carry no encoding, so this is
+// what keeps a diagram the same across saves. The diagrams are generated from a fixed seed, over
+// every option the export writes.
+{
+    let seed = Number(process.env.ROUNDTRIP_SEED ?? 20261017);
+    const random = () => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return seed / 2147483648;
+    };
+    const pick = (values) => values[Math.floor(random() * values.length)];
+    const between = (min, max, step = 1) => min + step * Math.floor(random() * ((max - min) / step + 1));
+    const labels = ["A", "B'", "\\bullet", "X \\times Y", "f^{-1}(U)", "\\mathbb{Z}", "[a]",
+        "a \\\\ b", "{a}{b}", ""];
+    const colour = () => pick([undefined, [0, 0, 0, 1], [240, 60, 60, 1], [0, 60, 60, 1],
+        [between(0, 360), between(0, 100), between(0, 100), 1]]);
+
+    const diagram = () => {
+        const vertices = [];
+        const taken = new Set();
+        const count = between(2, 5);
+        while (vertices.length < count) {
+            const [x, y] = [between(0, 3), between(0, 3)];
+            if (taken.has(`${x},${y}`)) {
+                continue;
+            }
+            taken.add(`${x},${y}`);
+            const vertex = [x, y, pick(labels.filter((label) => label !== ""))];
+            const c = colour();
+            if (c !== undefined) {
+                vertex.push(c);
+            }
+            vertices.push(vertex);
+        }
+        const edges = [];
+        const cells = () => vertices.length + edges.length;
+        for (let i = between(1, 5); i > 0; --i) {
+            const source = between(0, cells() - 1);
+            let target = between(0, cells() - 1);
+            const loop = source === target && source < vertices.length;
+            if (source === target && !loop) {
+                continue;
+            }
+            const options = {};
+            const style = {};
+            const kind = loop ? "arrow" : pick(["arrow", "arrow", "arrow", "adjunction", "corner",
+                "corner-inverse"]);
+            if (kind !== "arrow") {
+                style.name = kind;
+            } else {
+                style.tail = pick(ArrowOptions.STYLES.tail)[2];
+                style.body = pick(ArrowOptions.STYLES.body)[2];
+                style.head = pick(ArrowOptions.STYLES.head)[2];
+                options.level = between(1, 4);
+                if (loop) {
+                    options.radius = pick([-5, -3, -1, 1, 3, 5]);
+                    options.angle = between(-180, 180, 45);
+                } else if (random() < 0.5) {
+                    options.curve = between(-5, 5);
+                }
+                const source_shorten = between(0, 50, 10);
+                options.shorten = { source: source_shorten,
+                    target: between(0, 100 - source_shorten - 10, 10) };
+            }
+            const vertex_ends = source < vertices.length && target < vertices.length;
+            if (!loop && kind === "arrow" && vertex_ends && random() < 0.25) {
+                options.route = [[between(0, 4), between(0, 4)]];
+                if (random() < 0.5) {
+                    options.route.push([between(0, 4), between(0, 4)]);
+                }
+                options.rounding = between(0, 8);
+                delete options.curve;
+            } else if (!loop && random() < 0.4) {
+                options.offset = between(-5, 5);
+            }
+            if (!vertex_ends && random() < 0.5) {
+                options.edge_alignment = { source: random() < 0.5, target: random() < 0.5 };
+            }
+            options.label_position = random() < 0.5 ? between(0, 100, 10) : between(0, 100);
+            const c = colour();
+            if (c !== undefined && kind === "arrow") {
+                options.colour = c;
+            }
+            if (random() < 0.2 && kind === "arrow") {
+                options.crossing_over = 1;
+            }
+            options.style = style;
+            const label = pick(labels);
+            const alignment = between(0, 3);
+            const edge = [source, target, label, alignment, options];
+            const lc = colour();
+            if (lc !== undefined && label !== "") {
+                edge.push(lc);
+            }
+            edges.push(edge);
+        }
+        return [0, vertices.length, ...vertices, ...edges];
+    };
+
+    const encode = (input) => btoa(String.fromCharCode(
+        ...new TextEncoder().encode(JSON.stringify(input))));
+    const strip = (text) => text.replace(/^%#q=.*\n/, "");
+    // Reading tikz-cd shortens its arrows once the grid is laid out, a moment after the parse
+    // (see `Parser.parse_diagram`), so each diagram is written out again after that.
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const ROUNDS = Number(process.env.ROUNDTRIP_ROUNDS ?? 400);
+    pending.push((async () => {
+        const failed = [];
+        for (let round = 0; round < ROUNDS; ++round) {
+            const input = diagram();
+            const ui = make_ui(
+                { DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+            ui.settings.set("export.ampersand_replacement", random() < 0.2);
+            ui.settings.set("export.cramped", random() < 0.2);
+            ui.settings.set("export.centre_diagram", random() < 0.8);
+            ui.sep = { column: pick([0.9, 1.8, 2.7, 3.15]), row: pick([0.9, 1.8, 2.7]) };
+            try {
+                QuiverImportExport.base64.import(ui, encode(input));
+            } catch (_) {
+                continue;
+            }
+            const first = strip(ui.text());
+            let reread;
+            try {
+                reread = parse(first, ui.settings);
+            } catch (error) {
+                failed.push([JSON.stringify(input), first, `${error.stack}`, []]);
+                continue;
+            }
+            await tick();
+            const again = strip(reread.ui.text());
+            if (again !== first) {
+                failed.push([JSON.stringify(input), first, again, reread.diagnostics]);
+            }
+        }
+        // The first few lines that differ, to start a diagnosis from.
+        for (const [input, first, again, diagnostics] of
+            failed.slice(0, process.env.ROUNDTRIP_SHOW ?? 1)
+        ) {
+            const a = first.split("\n");
+            const b = again.split("\n");
+            const line = a.findIndex((text, i) => text !== b[i]);
+            if (process.env.ROUNDTRIP_DUMP !== undefined
+                && (process.env.ROUNDTRIP_DUMP === "all" || diagnostics.some((d) => `${d.message?.text ?? d.message}`
+                    .includes(process.env.ROUNDTRIP_DUMP)))) {
+                console.log(`${first}\n-----\n${again}`);
+            }
+            console.log(`${input}\n  wrote  ${a[line]}\n  reread ${b[line]}\n  ${
+                diagnostics.map((diagnostic) => diagnostic.message?.text ?? diagnostic.message)
+                    .join("; ")}`);
+        }
+        check(`${ROUNDS} generated diagrams write the same tikz-cd after reading it back`,
+            failed.length, 0);
+    })());
 }

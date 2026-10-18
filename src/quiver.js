@@ -562,8 +562,9 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
         const format_label = (label) => {
             if (label.includes("\\\\")) {
                 // The label may contain a newline. In this case, we place the label inside a table,
-                // which is permitted to contain newlines.
-                return `\\begin{array}{c} ${label} \\end{array}`;
+                // which is permitted to contain newlines. It is braced, so that reading a vertex
+                // back does not take the newline for the end of its row.
+                return `{\\begin{array}{c} ${label} \\end{array}}`;
             }
             if (!simple_label.test(label)) {
                 return `{${label}}`;
@@ -605,7 +606,11 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
         // same row. Failing that, the cell is written out empty, and `QuiverExport.EMPTY_CELLS`
         // gives every empty cell a node of no size, which takes up no room.
         const occupied = (x, y) => rows.has(y) && rows.get(y).get(x) instanceof Vertex;
-        const vertices = Array.from(quiver.cells[0]);
+        // Row by row, so that an empty cell takes its centre from the topmost node in its column
+        // and the leftmost in its row, whatever order the cells were made in: reading the
+        // tikz-cd back makes them in this order, and the export then names the same nodes.
+        const vertices = Array.from(quiver.cells[0]).sort((a, b) =>
+            a.position.y - b.position.y || a.position.x - b.position.x);
         const in_column = (x) => vertices.find((vertex) => vertex.position.x === x);
         const in_row = (y) => vertices.find((vertex) => vertex.position.y === y);
         const routes = quiver.all_cells().filter((cell) => cell.is_edge() && cell.is_routed());
@@ -858,7 +863,21 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                 // parser reads back against the route's own length.
                 const shortened = !edge_is_empty
                     && (edge.options.shorten.source !== 0 || edge.options.shorten.target !== 0);
-                if (shortened && routed) {
+                // A route shortened as it was read keeps the lengths it was read with: they are
+                // measured against the arrow drawn, which may be laid out differently by the time
+                // it was read than when it is written, as when its labels have not been sized.
+                const read = edge.read_shortening ?? null;
+                const unchanged = read !== null
+                    && read.shape === edge.shortening_shape(options.sep)
+                    && read.shorten.source === edge.options.shorten.source
+                    && read.shorten.target === edge.options.shorten.target;
+                if (shortened && routed && unchanged) {
+                    for (const [end, side] of [["source", "<"], ["target", ">"]]) {
+                        if (edge.options.shorten[end] !== 0) {
+                            parameters[`shorten ${side}`] = `${read.lengths[end]}pt`;
+                        }
+                    }
+                } else if (shortened && routed) {
                     try {
                         const curve = edge.arrow.curve();
                         const [start, finish] = edge.arrow.find_endpoints();
@@ -1144,23 +1163,20 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
 
                 // Check whether any edges depend on this one, but are not edge aligned. In this
                 // case, we have to create a phantom edge that does not depend on the labels of the
-                // source and target.
-                if (quiver.dependencies_of(edge).size > 0) {
-                    for (const [dependency, end] of quiver.dependencies_of(edge)) {
-                        if (!dependency.options.edge_alignment[end]) {
-                            output += `\\arrow[""{name=${
-                                current_index
-                            }p, anchor=center, inner sep=0}, phantom, from=${
-                                parameters.from
-                            }, to=${
-                                parameters.to
-                            }, start anchor=center, end anchor=center${
-                                Object.keys(phantom_parameters).length > 0 ?
-                                    `, ${object_to_list(phantom_parameters).join(", ")}`
-                                : ""
-                            }]\n`;
-                        }
-                    }
+                // source and target. One phantom serves every such edge, as each names it.
+                if (Array.from(quiver.dependencies_of(edge))
+                    .some(([dependency, end]) => !dependency.options.edge_alignment[end])) {
+                    output += `\\arrow[""{name=${
+                        current_index
+                    }p, anchor=center, inner sep=0}, phantom, from=${
+                        parameters.from
+                    }, to=${
+                        parameters.to
+                    }, start anchor=center, end anchor=center${
+                        Object.keys(phantom_parameters).length > 0 ?
+                            `, ${object_to_list(phantom_parameters).join(", ")}`
+                        : ""
+                    }]\n`;
                 }
             }
             // Remove any trailing whitespace.

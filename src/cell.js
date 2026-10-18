@@ -851,6 +851,15 @@ class Edge extends Cell {
     }
 
     /// The rank of this edge among those crossing over others, or 0 if it does not.
+    /// What a route's length depends on, to tell whether the lengths a routed arrow was shortened
+    /// by when it was read (`read_shortening`, set by `Parser`) still hold: its route, its ends and
+    /// their labels, and the separations (`sep`, in em).
+    shortening_shape(sep) {
+        const end = (cell) => cell.is_vertex() ? [cell.position.toArray(), cell.label] : null;
+        return JSON.stringify([this.options.route, end(this.source), end(this.target),
+            sep]);
+    }
+
     crossing_rank() {
         return Edge.crossing_rank_for_options(this.options);
     }
