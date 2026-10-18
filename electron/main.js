@@ -14,8 +14,8 @@ const path = require("node:path");
 const USAGE = `\
 Usage: sagitta [--macros FILE] [--devtools] [DIAGRAM.cd.tex] [-- SWITCHES]
 
-A keyboard-driven editor for tikz-cd diagrams. Opens DIAGRAM, which need not
-exist yet, or else an empty diagram. In the app, C-/ lists the keys.
+A keyboard-driven editor for tikz-cd and amscd diagrams. Opens DIAGRAM, which
+need not exist yet, or else an empty diagram. In the app, C-/ lists the keys.
 
   --macros FILE  take macros from FILE, not the nearest macros.tex
   --devtools     open Chromium's developer tools

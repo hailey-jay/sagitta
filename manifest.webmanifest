@@ -1,7 +1,7 @@
 {
     "name": "Sagitta",
     "short_name": "Sagitta",
-    "description": "A keyboard-driven editor for tikz-cd commutative diagrams",
+    "description": "A keyboard-driven editor for commutative diagrams in tikz-cd and amscd",
     "start_url": ".",
     "scope": ".",
     "display": "standalone",
