@@ -1,3 +1,5 @@
-# Sagitta writes .tikzcd files with LF line endings, and the fast suite checks that saving an
-# example writes it back byte for byte, so a Windows checkout must not turn them into CRLF.
+# Sagitta writes diagrams (.cd.tex and .tikzcd) with LF line endings, and the fast suite checks
+# that saving an example writes it back byte for byte, so a Windows checkout must not turn them
+# into CRLF.
+*.cd.tex text eol=lf
 *.tikzcd text eol=lf
