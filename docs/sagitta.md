@@ -51,6 +51,7 @@ A paper that inputs an amscd diagram needs `\usepackage{amscd}`, and `xcolor` fo
   Converting drops it: the arrows amscd cannot draw at all are deleted, and the rest are drawn plainly, straight, black, and with their labels to one side.
   Undo brings it all back, in tikz-cd.
 - In amscd, the command layer's list dims what amscd cannot draw, and anything that would draw it is undone at once, with an error saying why, so that a step taken by mistake leaves the diagram as amscd can write it.
+  Moves are refused before they are made: moving vertices with `C-arrows`, or inserting a row or column (`; i`), is refused if it would leave an arrow diagonal or between cells that are not neighbours, and a dragged vertex only goes where its arrows stay drawable.
 - amscd sets the arrows and labels itself: a horizontal arrow is at least 30pt long, or as long as its label, in a column as wide as the longest arrow in it; the rows are two baselines apart, or further for tall labels; and a vertical arrow is `\Big\downarrow`, 18pt long.
   The canvas lays the diagram out by the same rules, so the separations (`w` and `h` in the export layer), ampersand replacement, and cramped, which are tikz-cd's, are not offered.
 

@@ -457,13 +457,18 @@ class Pointer {
                 return cell.is_vertex() && ui.positions.has(`${new_position(cell)}`);
             });
 
-            if (!position.eq(ui.mode.previous) && !occupied) {
+            // A format that cannot draw the diagram with the vertices there (amscd, with an arrow
+            // gone diagonal, say) leaves them where they are, so that they only go where it can.
+            const displacements = Array.from(ui.mode.selection)
+                .filter((cell) => cell.is_vertex())
+                .map((vertex) => ({ vertex, from: vertex.position, to: new_position(vertex) }));
+            const refused = !position.eq(ui.mode.previous) && !occupied
+                && Formats.refuses_move(ui.format, ui.quiver, displacements) !== null;
+
+            if (!position.eq(ui.mode.previous) && !occupied && !refused) {
                 // We'll need to move all of the edges connected to the moved vertices,
                 // so we keep track of the root vertices in `moved.`
                 const moved = new Set();
-                const displacements = Array.from(ui.mode.selection)
-                    .filter((cell) => cell.is_vertex())
-                    .map((vertex) => ({ vertex, from: vertex.position, to: new_position(vertex) }));
                 // Routes go with the arrows they belong to, when those move whole.
                 for (const { edge, to } of ui.quiver.moved_routes(displacements)) {
                     edge.options.route = to;

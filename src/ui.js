@@ -199,25 +199,33 @@ class UI {
     /// Take back the last step if the diagram's format cannot draw what it did, saying why: in
     /// amscd, an arrow to a cell that is not a neighbour, say, or a curve. Converting to the format
     /// left nothing it cannot draw, so whatever it finds was just done. The step is taken back
-    /// once whatever made it has finished.
+    /// once whatever made it has finished, with any taken since, back to the last the format
+    /// could draw, so that steps quicker than the check cannot slip past it. (Moves are refused
+    /// before they are made: see `Formats.refuses_move`.)
     check_format() {
         if (this.format === "tikz-cd" || this.checking_format) {
             return;
         }
         this.checking_format = true;
+        // The diagram before this step was one the format could draw.
+        const drawable = Math.max(this.history.present - 1, 0);
         delay(() => {
             this.checking_format = false;
-            const problems = Formats.problems(this.format, this.quiver);
+            let problems = Formats.problems(this.format, this.quiver);
             if (problems.length === 0) {
                 return;
             }
-            this.history.undo(this);
+            const found = problems[0][0];
+            while (problems.length > 0 && this.history.present > drawable
+                && this.history.undo(this)) {
+                problems = Formats.problems(this.format, this.quiver);
+            }
             // The step taken back cannot be redone.
             this.quiver.flush(this.history.present);
             this.history.actions.splice(this.history.present);
             this.history.states.splice(this.history.present + 1);
             this.mode_line.update(this);
-            UI.display_error(`${this.format} has no ${problems[0][0]}, so that was undone.`);
+            UI.display_error(`${this.format} has no ${found}.`);
         });
     }
 
@@ -1177,6 +1185,11 @@ class UI {
                     from: vertex.position,
                     to: vertex.position.add(position_delta.mul(distance)),
                 }));
+                const refused = Formats.refuses_move(this.format, this.quiver, displacements);
+                if (refused !== null) {
+                    UI.display_error(`${this.format} has no ${refused}.`);
+                    return 0;
+                }
                 this.history.add(this, [{
                     kind: "move",
                     displacements,

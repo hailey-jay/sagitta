@@ -26,6 +26,24 @@ class Formats {
     static problems(format, quiver) {
         return format === "amscd" ? AmsCD.problems(quiver) : [];
     }
+
+    /// What `format` could not draw of `quiver` if its vertices moved as `displacements` (`{
+    /// vertex, to }`) say, briefly (as `problems` describes it), or `null` if it could draw it
+    /// all. Moves are refused before they are made, rather than taken back after, so that no
+    /// sequence of them, however quick, leaves the diagram in a state the format cannot draw.
+    static refuses_move(format, quiver, displacements) {
+        if (format === "tikz-cd") {
+            return null;
+        }
+        const before = displacements.map(({ vertex }) => vertex.position);
+        displacements.forEach(({ vertex, to }) => vertex.position = to);
+        try {
+            const problems = Formats.problems(format, quiver);
+            return problems.length === 0 ? null : problems[0][0];
+        } finally {
+            displacements.forEach(({ vertex }, i) => vertex.position = before[i]);
+        }
+    }
 }
 
 /// `problems` (see `Formats.problems`) briefly, each with how many cells it holds, as

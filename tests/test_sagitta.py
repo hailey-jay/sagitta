@@ -1214,6 +1214,56 @@ def test_amscd_draws_new_arrows_plainly_and_only_to_neighbours(sagitta, home):
         5, True, 5]
 
 
+def test_amscd_refuses_a_move_that_leaves_an_arrow_diagonal(sagitta, home):
+    """Moving `A` down past `C` would leave `f` diagonal: the move is refused before it is made,
+    so nothing moves and there is nothing to undo."""
+    diagram = _diagram(home / "paper", AMSCD_SQUARE, "square.cd.tex")
+    script = """(async () => {
+        const a = ui.quiver.all_cells().find((cell) => cell.label === "A");
+        ui.select(a);
+        const steps = ui.history.present;
+        const moved = ui.move_selection(new Position(0, 1));
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return [moved, `${a.position}`, ui.history.present === steps];
+    })()"""
+    assert sagitta("evaluate", diagram, script,
+                   expected_error="amscd has no arrows that are not between neighbours") == [
+        0, "0 0", True]
+
+
+def test_amscd_takes_back_quick_steps_together(sagitta, home):
+    """Two steps before the check runs, the first leaving `f` diagonal, are both taken back."""
+    diagram = _diagram(home / "paper", AMSCD_SQUARE, "square.cd.tex")
+    script = """(async () => {
+        const at = (label) => ui.quiver.all_cells().find((cell) => cell.label === label);
+        const move = (vertex, to) => ui.history.add(ui, [{
+            kind: "move", displacements: [{ vertex, from: vertex.position, to }], routes: [],
+        }], true);
+        move(at("A"), new Position(0, 3));
+        move(at("D"), new Position(1, 2));
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return [`${at("A").position}`, `${at("D").position}`, ui.history.present];
+    })()"""
+    assert sagitta("evaluate", diagram, script,
+                   expected_error="amscd has no arrows that are not between neighbours") == [
+        "0 0", "1 1", 0]
+
+
+def test_a_dragged_vertex_only_goes_where_amscd_can_draw_it(sagitta, home):
+    """The bullet, narrower than its column, is dragged by the space beside it. With an arrow to
+    `A`, anywhere else would leave the arrow diagonal or too long, so it stays; with none, it goes
+    where it is dragged."""
+    cd = "\\[\\begin{CD}\n\t%s\n\\end{CD}\\]\n"
+    before = cd % "\\bullet @>>> A \\\\\n\tXXXXXX"
+    diagram = _diagram(home / "paper", before, "row.cd.tex")
+    result = sagitta("drag-vertex", diagram, json.dumps([0, -1]))
+    assert not result["mode_line"].startswith("MOVE")
+    assert result["saved"] == before
+    diagram = _diagram(home / "free", cd % "\\bullet \\\\\n\tXXXXXX @>>> A", "row.cd.tex")
+    assert sagitta("drag-vertex", diagram, json.dumps([1, 0]))["saved"] == (
+        cd % "@. \\bullet \\\\\n\tXXXXXX @>>> A")
+
+
 def test_pasting_amscd_switches_to_it(sagitta, home):
     script = """(async () => {
         ui.keymap.layers.import.paste(%s);

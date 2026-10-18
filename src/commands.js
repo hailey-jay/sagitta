@@ -114,6 +114,10 @@ class Commands {
             from: vertex.position,
             to: move(vertex.position),
         }));
+        const refused = Formats.refuses_move(ui.format, ui.quiver, displacements);
+        if (refused !== null) {
+            throw new Error(`${ui.format} has no ${refused}.`);
+        }
         ui.history.add(ui, [{
             kind: "move",
             displacements,

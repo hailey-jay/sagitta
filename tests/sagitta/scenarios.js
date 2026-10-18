@@ -281,6 +281,37 @@ module.exports = {
         return { mode_line, moved, undone: read() };
     },
 
+    /// Drag the first vertex by a point of its cell that its content leaves bare to the cell
+    /// `argument` (`[dx, dy]`) away, then save. Returns the mode line after the drag and the
+    /// diagram as saved.
+    "drag-vertex": async (ctx) => {
+        const [grip, target] = await ctx.js(`(() => {
+            const vertex = document.querySelectorAll(".vertex")[0];
+            const rect = vertex.getBoundingClientRect();
+            let grip = null;
+            for (let y = rect.top + 1; y < rect.bottom && grip === null; y += 1) {
+                for (let x = rect.left + 1; x < rect.right && grip === null; x += 1) {
+                    if (document.elementFromPoint(x, y) === vertex) {
+                        grip = [x, y];
+                    }
+                }
+            }
+            const cell = ui.quiver.all_cells().find((cell) => cell.is_vertex()
+                && cell.element.element === vertex);
+            const centre = (position) => ui.grid.centre_offset_from_position(position);
+            const shift = centre(cell.position.add(new Position(...${ctx.argument})))
+                .sub(centre(cell.position)).mul(2 ** ui.scale);
+            return [grip, [grip[0] + shift.x, grip[1] + shift.y]];
+        })()`);
+        if (grip === null) {
+            throw new Error("the first vertex's cell has no bare point to drag it by");
+        }
+        await ctx.drag(grip, target);
+        const mode_line = await ctx.mode_line();
+        await ctx.save();
+        return { mode_line, saved: require("node:fs").readFileSync(ctx.diagram, "utf8") };
+    },
+
     /// Click the empty cell right of `B` on the square, once to move the focus point there and
     /// again to create a vertex, then save.
     click: async (ctx) => {
