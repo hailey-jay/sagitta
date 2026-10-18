@@ -44,7 +44,7 @@ const pending = [];
 {
     // The round trip a paper depends on: the example is read from its picture, and saving it
     // writes the file back byte for byte.
-    const text = example("pullback.tikzcd");
+    const text = example("pullback.cd.tex");
     const { ui, legacy: encoded, diagnostics } = load(text);
     check("the example holds no encoded line", encoded, false);
     check("it has no diagnostics", diagnostics.length, 0);
@@ -89,7 +89,7 @@ const pending = [];
     // The snake lemma example, which the paper `\input`s beside the pullback: a wider figure, with
     // empty cells, a dashed arrow routed round the outside, and labels that need the
     // `\coker` of `examples/macros.tex`.
-    const text = example("snake-lemma.tikzcd");
+    const text = example("snake-lemma.cd.tex");
     const { ui, diagnostics } = load(text);
     check("with no diagnostics", diagnostics.length, 0);
     check("as four rows of terms and the arrows between them", counts(ui), [17, 23]);
@@ -140,7 +140,7 @@ const pending = [];
 {
     // The forms quiver writes, which Sagitta reads the same as its own: the full URL comment, and
     // the bare line.
-    const encoded = legacy(example("pullback.tikzcd")).match(/^%#q=(\S+)$/m)[1];
+    const encoded = legacy(example("pullback.cd.tex")).match(/^%#q=(\S+)$/m)[1];
     for (const [name, line] of [
         ["quiver's URL comment", `% https://q.uiver.app/#q=${encoded}`],
         ["a bare line", `% ${encoded}`],
@@ -278,7 +278,7 @@ const pending = [];
     // Exporting what the settings ask for.
     const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
     QuiverImportExport.base64.import(ui,
-        legacy(example("pullback.tikzcd")).match(/^%#q=(\S+)$/m)[1]);
+        legacy(example("pullback.cd.tex")).match(/^%#q=(\S+)$/m)[1]);
     const text = () => ui.text();
 
     check("the export holds no encoded line", text().includes("#q="), false);

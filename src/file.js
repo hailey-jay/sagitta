@@ -56,7 +56,8 @@ class DiagramFile {
             if (path === "") {
                 return;
             }
-            if (/\.(tex|sty)$/.test(path)) {
+            // A diagram's own file ends in `.cd.tex`; any other `.tex` file is macros.
+            if (/\.(tex|sty)$/.test(path) && !DiagramFile.is_diagram(path)) {
                 this.use_macros(path, true);
             } else {
                 this.open(path);
@@ -231,7 +232,8 @@ class DiagramFile {
         try {
             path = path === null
                 ? await host.save_dialog(this.path
-                    ?? (this.base === null ? "diagram.tikzcd" : `${this.base}/diagram.tikzcd`))
+                    ?? (this.base === null ? DiagramFile.UNTITLED
+                        : `${this.base}/${DiagramFile.UNTITLED}`))
                 : await host.resolve(this.directory(), path);
             if (path === null) {
                 return false;
@@ -287,7 +289,7 @@ class DiagramFile {
         let path = null;
         try {
             const name = `${this.path === null ? "diagram"
-                : DiagramFile.basename(this.path).replace(/\.[^.]*$/, "")}.svg`;
+                : DiagramFile.stem(DiagramFile.basename(this.path))}.svg`;
             const directory = this.directory();
             path = await host.save_dialog(directory === null ? name : `${directory}/${name}`, "svg");
             if (path === null) {
@@ -421,6 +423,16 @@ class DiagramFile {
         ui.sep = sep;
     }
 
+    /// Whether `path` is named as a diagram's file: `.cd.tex`, or `.tikzcd`, as older ones are.
+    static is_diagram(path) {
+        return /\.(cd\.tex|tikzcd)$/.test(path);
+    }
+
+    /// A file's name without its extension, which for a diagram's is `.cd.tex` or `.tikzcd`.
+    static stem(name) {
+        return name.replace(/\.cd\.tex$|\.[^.]*$/, "");
+    }
+
     static basename(path) {
         return path.slice(path.lastIndexOf("/") + 1);
     }
@@ -429,6 +441,10 @@ class DiagramFile {
         return path.slice(0, path.lastIndexOf("/")) || "/";
     }
 }
+
+/// What a new diagram's file is called until it is saved somewhere: `.cd.tex`, which LaTeX
+/// `\input`s as `\input{diagram.cd}`, whatever format it is in.
+DiagramFile.UNTITLED = "diagram.cd.tex";
 
 /// tikz-cd's named separations, in `em` (as `QuiverImportExport.tikz_cd` writes them).
 DiagramFile.SEPS = {

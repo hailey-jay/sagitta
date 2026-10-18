@@ -5,7 +5,7 @@
 Type=Application
 Name=Sagitta
 GenericName=Commutative diagram editor
-Comment=Draw tikz-cd diagrams and edit .tikzcd files
+Comment=Draw commutative diagrams and edit .cd.tex files
 Exec=@BIN@/sagitta %f
 Icon=sagitta
 Terminal=false

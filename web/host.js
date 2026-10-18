@@ -37,7 +37,10 @@ if (!("host" in window)) {
         // What the pickers offer, diagrams first. Every type is `text/plain`, which the API takes
         // where it may refuse a type of Sagitta's own.
         const TYPES = {
-            diagram: [{ description: "tikz-cd diagrams", accept: { "text/plain": [".tikzcd"] } }],
+            diagram: [{
+                description: "Diagrams",
+                accept: { "text/plain": [".cd.tex", ".tikzcd"] },
+            }],
             macros: [{ description: "LaTeX", accept: { "text/plain": [".tex", ".sty"] } }],
             svg: [{ description: "SVG images", accept: { "image/svg+xml": [".svg"] } }],
         };
@@ -616,7 +619,7 @@ if (!("host" in window)) {
             },
 
             save_dialog: async (default_path, kind = "diagram") => {
-                const name = default_path === null ? "diagram.tikzcd" : basename(default_path);
+                const name = default_path === null ? "diagram.cd.tex" : basename(default_path);
                 if (has_api) {
                     const handle = await pick(() => window.showSaveFilePicker({
                         suggestedName: name,

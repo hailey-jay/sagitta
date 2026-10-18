@@ -12,7 +12,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const USAGE = `\
-Usage: sagitta [--macros FILE] [--devtools] [DIAGRAM.tikzcd] [-- SWITCHES]
+Usage: sagitta [--macros FILE] [--devtools] [DIAGRAM.cd.tex] [-- SWITCHES]
 
 A keyboard-driven editor for tikz-cd diagrams. Opens DIAGRAM, which need not
 exist yet, or else an empty diagram. In the app, C-/ lists the keys.
@@ -121,7 +121,7 @@ const KEYS_HEADER = `\
 
 // Dialogs offer these, diagrams first.
 const FILTERS = {
-    diagram: [{ name: "tikz-cd diagrams", extensions: ["tikzcd"] }, { name: "All files", extensions: ["*"] }],
+    diagram: [{ name: "Diagrams", extensions: ["cd.tex", "tikzcd"] }, { name: "All files", extensions: ["*"] }],
     macros: [{ name: "LaTeX", extensions: ["tex", "sty"] }, { name: "All files", extensions: ["*"] }],
     svg: [{ name: "SVG images", extensions: ["svg"] }, { name: "All files", extensions: ["*"] }],
 };
