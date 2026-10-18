@@ -25,6 +25,10 @@ class Grid {
         // The diagram's extent, as `{ x: [least, most], y: [least, most] }`, or `null` while it is
         // empty (see `UI.update_extent`).
         this.extent = null;
+        // The columns and rows of a layout worked out whole rather than fitted cell by cell, as
+        // amscd's is (see `AmsCD.layout`): `{ x, y }`, each a map from an index to `{ size, centre }`,
+        // where `centre` is how far into it its cells' centre is, or `null`.
+        this.fixed = null;
 
         this.clear();
     }
@@ -67,7 +71,9 @@ class Grid {
     /// `column_width` and `row_height`) instead of directly accessing `widths` or `heights`, to
     /// ensure an empty one is the gap.
     size(sizes, index) {
-        return sizes.get(index) ?? this.empty_size(sizes === this.widths ? "x" : "y", index);
+        const axis = sizes === this.widths ? "x" : "y";
+        return this.fixed?.[axis].get(index)?.size ?? sizes.get(index)
+            ?? this.empty_size(axis, index);
     }
 
     /// The width of the column `x`.
@@ -131,11 +137,12 @@ class Grid {
         return new Position(col, row);
     }
 
-    /// Returns half the size of the cell at the given `position`.
+    /// How far into the cell at `position` its centre is: halfway, unless a fixed layout puts it
+    /// elsewhere.
     cell_centre_at_position(position) {
         return new Offset(
-            this.column_width(position.x) / 2,
-            this.row_height(position.y) / 2,
+            this.fixed?.x.get(position.x)?.centre ?? this.column_width(position.x) / 2,
+            this.fixed?.y.get(position.y)?.centre ?? this.row_height(position.y) / 2,
         );
     }
 
@@ -206,6 +213,10 @@ class Grid {
     /// Resize the column and the row at `position` to fit the largest cell in each. Returns how
     /// much each grew, as `[delta_x, delta_y]`.
     fit(position) {
+        // A fixed layout is worked out whole, and does not fit its cells one by one.
+        if (this.fixed !== null) {
+            return [0, 0];
+        }
         // Compute how much a column or row size has changed and update the size.
         const delta = (constraints, sizes, offset, axis) => {
             // If we have just deleted a cell, there may be no constraint data for that offset,

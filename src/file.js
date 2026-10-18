@@ -90,7 +90,7 @@ class DiagramFile {
     /// The diagram as it would be saved.
     text() {
         const ui = this.ui;
-        return `${ui.quiver.export("tikz-cd", ui.settings, ui.options(), ui.definitions()).data}\n`;
+        return `${ui.quiver.export(ui.format, ui.settings, ui.options(), ui.definitions()).data}\n`;
     }
 
     mark_saved(text = this.text()) {
@@ -194,13 +194,19 @@ class DiagramFile {
         }${legacy ? " (edited by hand, so parsed)" : ""}${this.describe_macros()}`);
     }
 
-    /// Read the diagram in `text`, the contents of its file, into the empty quiver of `ui`, as
-    /// `{ legacy, trusted, diagnostics }`: whether the file has an encoded line, as older files and
-    /// quiver's do, whether that line was trusted, and the problems parsing found, which do not
-    /// throw. The line, `%#q=...`, quiver's `% https://q.uiver.app/#q=...`, or a bare `% ...`, must
+    /// Read the diagram in `text`, the contents of its file, into the empty quiver of `ui`, in the
+    /// format its environment is in, as `{ legacy, trusted, diagnostics }`: whether the file has an
+    /// encoded line, as older files and quiver's do, whether that line was trusted, and the
+    /// problems parsing found, which do not throw. The line, `%#q=...`, quiver's `% https://q.uiver.app/#q=...`, or a bare `% ...`, must
     /// be a whole line, long enough not to be an ordinary comment, and is trusted only while it
     /// still reproduces the file's `tikzcd` environment, so that a hand edit wins.
     static read(ui, text) {
+        // The file's environment says which format the diagram is in (see `Formats.detect`).
+        ui.format = Formats.detect(text);
+        if (ui.format !== "tikz-cd") {
+            const { diagnostics } = ui.quiver.import(ui, ui.format, text, ui.settings);
+            return { legacy: false, trusted: false, diagnostics };
+        }
         const encoding = text.match(/^%(?:.*#q=|\s*)([A-Za-z0-9+/=]{8,})\s*$/m);
         if (encoding !== null) {
             try {

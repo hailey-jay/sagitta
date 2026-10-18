@@ -115,6 +115,11 @@ class UI {
         // `update_scale`).
         this._sep = { column: 1.8, row: 1.8 };
 
+        // The format the diagram is written in (see `Formats`), which the grid is laid out as, and
+        // where amscd puts each arrow's ends, against its source's centre (see `AmsCD.layout`).
+        this._format = "tikz-cd";
+        this.amscd_ends = new Map();
+
         // Whether the diagram has been laid out since it was opened or emptied, after which a
         // change of extent is animated, and the frame of that animation (see `animate_layout`).
         this.layout_settled = false;
@@ -133,6 +138,82 @@ class UI {
             this.update_scale();
             this.relayout();
         }
+    }
+
+    /// The format the diagram is written in (see `Formats`).
+    get format() {
+        return this._format;
+    }
+
+    /// Change the format, which lays the grid out afresh, as that format sets the diagram.
+    set format(format) {
+        this._format = format;
+        if (this.container !== undefined) {
+            this.relayout();
+        }
+    }
+
+    /// Switch the diagram to `format`, as one step to undo. A format that cannot draw all of it
+    /// first shows what it cannot, by selecting it, and asks before converting, which drops it
+    /// (see `AmsCD.convert`). Returns whether it switched.
+    async switch_format(format) {
+        if (format === this.format) {
+            this.mode_line.flash(`already ${format}`);
+            return false;
+        }
+        const problems = Formats.problems(format, this.quiver);
+        if (problems.length > 0) {
+            const selection = Array.from(this.selection);
+            this.deselect();
+            this.select(...new Set(problems.flatMap(([, cells]) => cells)));
+            const agreed = await this.ask(`${format} cannot draw ${
+                Formats.describe(problems)}, selected. Convert to ${format}, dropping them?`);
+            this.deselect();
+            if (!agreed) {
+                this.select(...selection.filter((cell) => this.quiver.contains_cell(cell)));
+                return false;
+            }
+        }
+        const since = this.history.present;
+        const actions = format === "amscd" ? AmsCD.convert(this) : [];
+        const switched = { kind: "format", from: this.format, to: format };
+        this.format = format;
+        this.history.add(this, [...actions, switched]);
+        this.history.squash(since);
+        this.history.permanentise();
+        this.update_selection();
+        this.mode_line.flash(problems.length > 0 ? `converted to ${format}` : `now ${format}`);
+        return true;
+    }
+
+    /// Ask the user `message`, answered yes or no, as the shell asks (see `host.confirm`).
+    ask(message) {
+        return host.confirm(message);
+    }
+
+    /// Take back the last step if the diagram's format cannot draw what it did, saying why: in
+    /// amscd, an arrow to a cell that is not a neighbour, say, or a curve. Converting to the format
+    /// left nothing it cannot draw, so whatever it finds was just done. The step is taken back
+    /// once whatever made it has finished.
+    check_format() {
+        if (this.format === "tikz-cd" || this.checking_format) {
+            return;
+        }
+        this.checking_format = true;
+        delay(() => {
+            this.checking_format = false;
+            const problems = Formats.problems(this.format, this.quiver);
+            if (problems.length === 0) {
+                return;
+            }
+            this.history.undo(this);
+            // The step taken back cannot be redone.
+            this.quiver.flush(this.history.present);
+            this.history.actions.splice(this.history.present);
+            this.history.states.splice(this.history.present + 1);
+            this.mode_line.update(this);
+            UI.display_error(`${this.format} has no ${problems[0][0]}, so that was undone.`);
+        });
     }
 
     /// Bring the grid's extent in line with the diagram's, its outermost cells and checkpoints,
@@ -171,6 +252,11 @@ class UI {
             this.relayout(before);
             this.layout_settled = extent !== null;
             return true;
+        }
+        // amscd sizes its columns and rows by the arrows between them too, so any change may
+        // move them (see `AmsCD.layout`).
+        if (this.format === "amscd") {
+            this.update_col_row_size();
         }
         return false;
     }
@@ -439,15 +525,25 @@ class UI {
         const struts = Array.from(katex.element.querySelectorAll(".katex-html .strut"))
             .map((strut) => strut.getBoundingClientRect());
         if (struts.length === 0 || outer.height === 0) {
-            return { width, height: katex.element.offsetHeight, shift: Point.zero() };
+            const height = katex.element.offsetHeight;
+            return { width, height, ascent: height, descent: 0, shift: Point.zero() };
         }
         // The canvas may be zoomed, which the screen's measures include.
         const zoom = outer.height / label.element.offsetHeight;
         const top = Math.min(...struts.map(({ top }) => top));
         const bottom = Math.max(...struts.map(({ bottom }) => bottom));
+        // How far the label reaches below its baseline, as KaTeX sets each strut as far below the
+        // baseline as the box goes, which amscd sets a label above an arrow by.
+        const elements = Array.from(katex.element.querySelectorAll(".katex-html .strut"));
+        const em = parseFloat(getComputedStyle(elements[0]).fontSize);
+        const descent = Math.max(0, ...elements.map((strut) =>
+            -(parseFloat(strut.style.verticalAlign) || 0) * em));
+        const height = (bottom - top) / zoom;
         return {
             width,
-            height: (bottom - top) / zoom,
+            height,
+            ascent: height - descent,
+            descent,
             shift: new Point(0, ((top + bottom) / 2 - (outer.top + outer.bottom) / 2) / zoom),
         };
     }
@@ -501,14 +597,12 @@ class UI {
         }
         const edge_sizes = edges.map((edge) => UI.tex_box(edge));
 
-        // tikz-cd's padding round a label, which with the label's box makes its node.
-        const padding = CONSTANTS.TEX.LABEL_PADDING * Edge.PX_PER_PT;
         for (const [i, edge] of edges.entries()) {
-            const { width, height, shift } = edge_sizes[i];
-            edge.arrow.label.size = new Dimensions(
-                width + (width > 0 ? padding * 2 : 0),
-                height + (height > 0 ? padding * 2 : 0),
-            );
+            const { width, shift } = edge_sizes[i];
+            // The label's box, which the edge sets its node round as its format does (see
+            // `Edge.size_label`).
+            edge.tex = edge_sizes[i];
+            edge.size_label(this);
             edge.arrow.label.shift = shift;
             // An edge's label sits in a `foreignObject`, which the edge replaces as it redraws. A
             // browser may not lay out one inserted in the frame the label is measured in, as
@@ -532,8 +626,10 @@ class UI {
             vertex.element.class_list.toggle("empty", vertex.label.trim() === "");
         }
         this.buffer_updates = buffered;
+        // amscd's columns are as wide as the arrows between them, labels and all.
         const moved = buffered ? new Set()
-            : this.update_col_row_size(...vertices.map((vertex) => vertex.position));
+            : this.update_col_row_size(...vertices.map((vertex) => vertex.position),
+                ...(this.format === "amscd" && edges.length > 0 ? [Position.zero()] : []));
         // Edges are drawn around their labels, and snugly against their source and target vertices'
         // labels, so everything depending on a resized label is redrawn.
         for (const cell of this.quiver.transitive_dependencies([...vertices, ...edges])) {
@@ -653,8 +749,12 @@ class UI {
         this.carried = null;
         this.update_mark_region();
 
-        // Clear the quiver and update associated UI elements.
+        // Clear the quiver and update associated UI elements. A new diagram is in tikz-cd until
+        // its file says otherwise.
         this.clear_quiver();
+        this._format = "tikz-cd";
+        this.grid.fixed = null;
+        this.amscd_ends = new Map();
         this.update_extent();
     }
 
@@ -941,6 +1041,21 @@ class UI {
     /// Returns the cells rerendered, because a resize moved them, so that the caller need not
     /// render them again.
     update_col_row_size(...positions) {
+        // amscd's layout is worked out whole: if it changed, everything is drawn again.
+        if (this.format === "amscd") {
+            const before = this.grid.fixed;
+            const ends = this.amscd_ends;
+            this.fit_all();
+            const same = (a, b) => JSON.stringify(a, (_, value) => value instanceof Map
+                ? Array.from(value).map(([key, entry]) => [`${key}`, entry]) : value)
+                === JSON.stringify(b, (_, value) => value instanceof Map
+                    ? Array.from(value).map(([key, entry]) => [`${key}`, entry]) : value);
+            if (same(before, this.grid.fixed) && same(ends, this.amscd_ends)) {
+                return new Set();
+            }
+            this.draw_layout();
+            return new Set(this.quiver.all_cells());
+        }
         // The columns and rows whose sizes changed. Only the vertices at or beyond them (counting
         // outwards from 0, from which offsets are measured) move, and the edges depending on those.
         const columns = [];
@@ -1439,7 +1554,8 @@ class UI {
         this.fit_all();
         const still = typeof matchMedia === "function"
             && matchMedia("(prefers-reduced-motion: reduce)").matches;
-        if (before !== null && this.quiver.all_cells().length <= UI.ANIMATED_CELLS && !still) {
+        if (before !== null && this.quiver.all_cells().length <= UI.ANIMATED_CELLS && !still
+            && this.format !== "amscd") {
             this.animate_layout(before, this.layout_sizes(before.range));
             return;
         }
@@ -1451,6 +1567,14 @@ class UI {
         cancelAnimationFrame(this.layout_frame);
         this.grid.widths.clear();
         this.grid.heights.clear();
+        if (this.format === "amscd") {
+            const layout = AmsCD.layout(this);
+            this.grid.fixed = layout === null ? null : { x: layout.columns, y: layout.rows };
+            this.amscd_ends = layout?.ends ?? new Map();
+            return;
+        }
+        this.grid.fixed = null;
+        this.amscd_ends = new Map();
         for (const cell of this.quiver.all_cells()) {
             if (cell.is_vertex()) {
                 this.grid.fit(cell.position);

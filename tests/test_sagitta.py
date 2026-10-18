@@ -1120,6 +1120,127 @@ def test_separations_survive_a_save(sagitta, home):
     assert "\\begin{tikzcd}[column sep=large,row sep=2.50em]" in diagram.read_text()
 
 
+# ── amscd ─────────────────────────────────────────────────────────────────────
+
+AMSCD_SQUARE = """\\[\\begin{CD}
+\tA @>f>> B \\\\
+\t@VgVV @VVhV \\\\
+\tC @>>k> D
+\\end{CD}\\]
+"""
+
+
+def test_an_amscd_file_opens_and_saves_unchanged(sagitta, home):
+    diagram = _diagram(home / "paper", AMSCD_SQUARE, "square.cd.tex")
+    opened = sagitta("open", diagram)
+    assert opened["counts"] == {"vertices": 4, "edges": 4, "selected": 0}
+    assert "square.cd.tex [amscd]" in opened["mode_line"]
+    sagitta("save", diagram)
+    assert diagram.read_text() == AMSCD_SQUARE
+
+
+def test_amscd_is_laid_out_as_amscd_sets_it(sagitta, home):
+    """The rows are amscd's two baselines apart, a horizontal arrow is `\\minCDarrowwidth` long,
+    and a vertical one `\\Big\\downarrow` tall, at the scale the canvas draws pt at."""
+    diagram = _diagram(home / "paper", AMSCD_SQUARE, "square.cd.tex")
+    script = """(() => {
+        const pt = (px) => Math.round(px / Edge.PX_PER_PT * 100) / 100;
+        const at = (label) => ui.quiver.all_cells().find((cell) => cell.label === label);
+        const ends = (label) => ui.amscd_ends.get(at(label));
+        const length = (label) => pt(ends(label).end.sub(ends(label).start).length());
+        return {
+            rows: pt(at("C").shape.origin.y - at("A").shape.origin.y),
+            horizontal: length("f"),
+            vertical: length("g"),
+            fixed: ui.grid.fixed !== null,
+        };
+    })()"""
+    assert sagitta("evaluate", diagram, script) == {
+        "rows": 40, "horizontal": 30, "vertical": 18, "fixed": True}
+
+
+def test_switching_to_amscd_asks_then_converts_in_one_undoable_step(sagitta, home):
+    diagram = _diagram(home / "paper", TRIANGLE.replace("\\arrow[d]", "\\arrow[d] \\arrow[dl, bend left]"))
+    script = """(async () => {
+        let asked = null;
+        ui.ask = async (message) => { asked = message; return true; };
+        const edges = () => ui.quiver.all_cells().filter((cell) => cell.is_edge()).length;
+        const before = edges();
+        await ui.switch_format("amscd");
+        const after = { format: ui.format, edges: edges(), text: ui.file.text() };
+        ui.history.undo(ui);
+        return { before, asked, after, undone: [ui.format, edges()] };
+    })()"""
+    result = sagitta("evaluate", diagram, script)
+    assert result["asked"].startswith("amscd cannot draw arrows that are not between neighbours (1)")
+    assert result["after"] == {"format": "amscd", "edges": 2,
+                               "text": "\\[\\begin{CD}\n\tX @>>> Y \\\\\n\t@. @VVV \\\\\n\t@. Z\n\\end{CD}\\]\n"}
+    assert result["undone"] == ["tikz-cd", 3] and result["before"] == 3
+
+
+def test_amscd_takes_back_what_it_cannot_draw(sagitta, home):
+    diagram = _diagram(home / "paper", AMSCD_SQUARE, "square.cd.tex")
+    script = """(async () => {
+        const f = ui.quiver.all_cells().find((cell) => cell.label === "f");
+        ui.select(f);
+        ui.commands.run("curve 2");
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return { curve: f.options.curve, redo: ui.history.present === ui.history.actions.length };
+    })()"""
+    assert sagitta("evaluate", diagram, script, expected_error="amscd has no curves") == {
+        "curve": 0, "redo": True}
+
+
+def test_amscd_draws_new_arrows_plainly_and_only_to_neighbours(sagitta, home):
+    """`SPC` from B to the empty cell on its right draws a plain arrow, whatever the preset, and
+    from A to D, which is no neighbour, is undone."""
+    diagram = _diagram(home / "paper", AMSCD_SQUARE, "square.cd.tex")
+    script = """(async () => {
+        ui.change_setting("diagram.arrow_preset", "inclusion");
+        const space = async (from, x, y) => {
+            ui.deselect();
+            ui.select(ui.quiver.all_cells().find((cell) => cell.label === from));
+            ui.reposition_focus_point(new Position(x, y));
+            (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown",
+                { key: " ", code: "Space", bubbles: true }));
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            return ui.quiver.all_cells().filter((cell) => cell.is_edge()).length;
+        };
+        return [await space("B", 2, 0), ui.file.text().includes("B @>>> \\\\bullet"),
+            await space("A", 1, 1)];
+    })()"""
+    assert sagitta("evaluate", diagram, script,
+                   expected_error="amscd has no arrows that are not between neighbours") == [
+        5, True, 5]
+
+
+def test_pasting_amscd_switches_to_it(sagitta, home):
+    script = """(async () => {
+        ui.keymap.layers.import.paste(%s);
+        const pasted = [ui.format, ui.quiver.all_cells().length];
+        ui.history.undo(ui);
+        return { pasted, undone: [ui.format, ui.quiver.all_cells().length] };
+    })()""" % json.dumps(AMSCD_SQUARE)
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == {
+        "pasted": ["amscd", 8], "undone": ["tikz-cd", 8]}
+
+
+def test_the_export_layer_copies_a_row_as_maths(sagitta, home):
+    row = "\\begin{tikzcd}\n\t0 \\arrow[r] & A \\arrow[r, \"f\", hook] & B\n\\end{tikzcd}\n"
+    script = """(async () => {
+        await ui.keymap.layers.export.copy_formula(false);
+        const inline = await host.read_clipboard();
+        await ui.keymap.layers.export.copy_formula(true);
+        return [inline, await host.read_clipboard()];
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper", row, "row.cd.tex"), script) == [
+        "0 \\to A \\xhookrightarrow{f} B", "\\[0 \\to A \\xhookrightarrow{f} B\\]"]
+
+
+def test_a_new_diagram_is_saved_as_cd_tex(sagitta, home):
+    assert sagitta("evaluate", home / "new.cd.tex", "DiagramFile.UNTITLED") == "diagram.cd.tex"
+
+
 # ── Saving ────────────────────────────────────────────────────────────────────
 
 

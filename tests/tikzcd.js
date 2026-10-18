@@ -1,9 +1,9 @@
-/// What the tikz-cd layer has to get right, checked without Electron and without a display: the
-/// `.tikzcd` round trip a paper depends on, the encoded first line and when it is trusted, the
-/// forms quiver writes, and the settings the command line parses. Run it with
-/// `node tests/tikzcd.js`.
+/// What reading and writing diagrams has to get right, checked without Electron and without a
+/// display: the round trip of a diagram's file a paper depends on, in tikz-cd and in amscd, the
+/// encoded first line of older files and when it is trusted, the forms quiver writes, inline
+/// maths, and the settings the command line parses. Run it with `node tests/tikzcd.js`.
 ///
-/// `tests/test_sagitta.py` drives the real app, which takes minutes; this takes about a second, so
+/// `tests/test_sagitta.py` drives the real app, which takes minutes; this takes seconds, so
 /// a parser or export regression shows before the slow suite starts. It loads the sources that
 /// touch the diagram itself (nothing of the keymap, the mode line, or KaTeX) into a `vm` context,
 /// over a stub DOM (`stub.js`) and a stub `UI` that holds only what the parse and export paths
@@ -25,6 +25,7 @@ const SOURCES = [
     "src/constants.js",
     "src/parser.js",
     "src/quiver.js",
+    "src/formats.js",
     "src/settings.js",
     "src/schema.js",
     "src/delimiters.js",

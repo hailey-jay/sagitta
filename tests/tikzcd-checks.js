@@ -1153,3 +1153,180 @@ const pending = [];
             failed.length, 0);
     })());
 }
+
+// amscd: a diagram in a `CD` environment is written and read as amscd writes it, and what amscd
+// cannot draw is listed, so that switching to it can say what would be lost.
+{
+    const amscd = (code) => {
+        const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+        const { diagnostics } = DiagramFile.read(ui, code);
+        return { ui, diagnostics };
+    };
+    const five = amscd(example("five-lemma.cd.tex"));
+    check("the five lemma example is amscd", [five.ui.format, counts(five.ui),
+        five.diagnostics.length], ["amscd", [10, 13], 0]);
+    check("and saving it writes the same bytes", five.ui.text(), example("five-lemma.cd.tex"));
+
+    const square = "\\[\\begin{CD}\n\tA @>f>> B \\\\\n\t@VgVV @VVhV \\\\\n\tC @>>k> D\n\\end{CD}\\]\n";
+    const { ui, diagnostics } = amscd(square);
+    check("a CD environment is amscd", ui.format, "amscd");
+    check("a square reads", [counts(ui), diagnostics.length], [[4, 4], 0]);
+    const sides = ui.quiver.all_cells().filter((cell) => cell.is_edge())
+        .map((edge) => `${edge.label} ${edge.options.label_alignment}`).sort();
+    // f above a rightward arrow is on its left; k below one, on its right; g left of a downward
+    // arrow is on its right, and h right of it, on its left.
+    check("with each label on its side", sides, ["f left", "g right", "h left", "k right"]);
+    check("and writing it gives the same text", ui.text(), square);
+
+    const others = amscd("\\begin{CD}\n\tA @<<< B @= C \\\\\n\t@AaAA @. @|\n\\\\ X @)u)) Y @. Z\n"
+        + "\\end{CD}\n");
+    check("leftward, upward, equals, and empty arrows read",
+        [counts(others.ui), others.diagnostics.length], [[6, 5], 0]);
+    const edge = (ui, from) => ui.quiver.all_cells().find((cell) => cell.is_edge()
+        && cell.source.label === from);
+    check("an arrow going left goes from the right", edge(others.ui, "B").target.label, "A");
+    check("one going up goes from below", edge(others.ui, "X").target.label, "A");
+    check("an equals has no head", [edge(others.ui, "B").options.level,
+        others.ui.quiver.all_cells().filter((cell) => cell.is_edge() && cell.options.level === 2)
+            .map((edge) => edge.options.style.head.name)], [1, ["none", "none"]]);
+    check("and is written as amscd writes it", others.ui.text(),
+        "\\[\\begin{CD}\n\tA @<<< B @= C \\\\\n\t@AaAA @. @| \\\\\n\tX @>u>> Y @. Z\n\\end{CD}\\]\n");
+
+    // Empty cells, braced labels, and a label holding its arrow's delimiter.
+    const sparse = amscd("\\begin{CD}\n\t@>{x>y}>> {B'} \\\\\n\t@. @V{V_1}VV \\\\\n\t@. C\n"
+        + "\\end{CD}\n");
+    check("an arrow from an empty cell keeps it", counts(sparse.ui)[0] >= 3, true);
+    check("braced labels are read as typed",
+        labels(sparse.ui).filter((label) => label !== "").sort(), ["B'", "C", "V_1", "x>y"]);
+    const coloured = amscd("\\begin{CD}\n\t\\textcolor{blue}{{X \\times Y}} @>>> B\n\\end{CD}\n");
+    check("a coloured object is read as typed", [labels(coloured.ui)[0],
+        coloured.ui.quiver.all_cells()[0].label_colour.hsla()], ["X \\times Y", [240, 100, 50, 1]]);
+    const written = sparse.ui.text();
+    check("and written braced", [written.includes("@>{x>y}>>"), written.includes("@V{V_1}VV")],
+        [true, true]);
+
+    // What amscd cannot draw, from a tikz-cd diagram.
+    const tikz = parse("\\begin{tikzcd}\n\tA \\arrow[r, \"f\", bend left] \\arrow[dr] & B "
+        + "\\arrow[d, dashed] \\\\\n\t& C \\arrow[loop, in=60, out=120, distance=5mm]\n"
+        + "\\end{tikzcd}\n");
+    check("its problems are listed", Formats.problems("amscd", tikz.ui.quiver)
+        .map(([description, cells]) => `${description} ${cells.length}`).sort(),
+    ["arrows that are not between neighbours 1", "curves 1", "loops 1",
+        "styles other than plain and equals 1"]);
+    check("and tikz-cd has none", Formats.problems("tikz-cd", tikz.ui.quiver), []);
+
+    // Converting resets what amscd cannot draw of the arrows it keeps, once the arrow has been
+    // shortened as reading it does, a moment after the parse.
+    const kept = parse("\\begin{tikzcd}\n\tA \\arrow[r, \"f\"{pos=0.3, description}, "
+        + "shift left=2, between={0.2}{0.7}, crossing over, "
+        + "draw={rgb,255:red,214;green,92;blue,92}] & B\n\\end{tikzcd}\n");
+    pending.push(new Promise((resolve) => setTimeout(resolve, 0)).then(() => {
+        const before = Formats.problems("amscd", kept.ui.quiver)
+            .map(([description]) => description);
+        kept.ui.history.add(kept.ui, AmsCD.convert(kept.ui));
+        const [arrow] = kept.ui.quiver.all_cells().filter((cell) => cell.is_edge());
+        const options = () => [arrow.options.offset, arrow.options.shorten,
+            arrow.options.label_position, arrow.options.label_alignment,
+            arrow.options.crossing_over, arrow.options.colour.is_not_black(), arrow.label];
+        check("converting resets an arrow amscd can draw",
+            [before.sort(), Formats.problems("amscd", kept.ui.quiver), options()],
+            [["arrow colours", "crossing over", "label positions", "labels centred on the arrow",
+                "offsets", "shortening"], [], [0, { source: 0, target: 0 }, 50, "left", 0, false,
+                "f"]]);
+        kept.ui.history.undo(kept.ui);
+        check("and undoing it gives it all back", options(),
+            [-2, { source: 20, target: 30 }, 30, "centre", 1, true, "f"]);
+    }));
+
+    // Converting drops what amscd cannot draw and draws the rest plainly, as one undoable step.
+    tikz.ui.unqueue_selected = () => {};
+    const since = tikz.ui.history.present;
+    const actions = AmsCD.convert(tikz.ui);
+    tikz.ui.history.add(tikz.ui, actions);
+    check("converting leaves what amscd can draw", [counts(tikz.ui),
+        Formats.problems("amscd", tikz.ui.quiver)], [[3, 1], []]);
+    tikz.ui.history.undo(tikz.ui);
+    check("and undoing it brings back the rest", counts(tikz.ui), [3, 4]);
+    check("as they were", Formats.problems("amscd", tikz.ui.quiver).length, 4);
+    check("in one step", tikz.ui.history.present, since);
+}
+
+// amscd's round trip, over generated grids of objects with arrows between neighbours.
+{
+    let seed = 4242;
+    const random = () => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return seed / 2147483648;
+    };
+    const pick = (values) => values[Math.floor(random() * values.length)];
+    const names = ["A", "B'", "X \\times Y", "\\mathbb{Z}", "0", "{a}{b}", "V", "x>y"];
+    const failed = [];
+    for (let round = 0; round < 300; ++round) {
+        const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+        ui.format = "amscd";
+        const [w, h] = [1 + Math.floor(random() * 4), 1 + Math.floor(random() * 3)];
+        const grid = new Map();
+        for (let y = 0; y < h; ++y) {
+            for (let x = 0; x < w; ++x) {
+                if (random() < 0.8 || (x === 0 && y === 0)) {
+                    grid.set(`${x},${y}`, new Vertex(ui, pick(names), new Position(x, y),
+                        random() < 0.2 ? new Colour(240, 60, 60) : Colour.black()));
+                }
+            }
+        }
+        for (const [key, vertex] of grid) {
+            const [x, y] = key.split(",").map(Number);
+            for (const [dx, dy] of [[1, 0], [0, 1]]) {
+                const other = grid.get(`${x + dx},${y + dy}`);
+                if (other === undefined || random() < 0.4) {
+                    continue;
+                }
+                const equals = random() < 0.2;
+                const [source, target] = random() < 0.5 ? [vertex, other] : [other, vertex];
+                new Edge(ui, equals ? "" : pick(["", "f", "g'", "\\alpha", "{u}{v}", "V", "x>y"]),
+                    source, target, Edge.default_options({
+                        level: equals ? 2 : 1,
+                        label_alignment: pick(["left", "right"]),
+                    }, equals ? { head: { name: "none" } } : null));
+            }
+        }
+        const first = ui.text();
+        const { ui: reread } = (() => {
+            const again = make_ui(
+                { DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+            DiagramFile.read(again, first);
+            return { ui: again };
+        })();
+        if (reread.text() !== first) {
+            failed.push([first, reread.text()]);
+        }
+    }
+    if (failed.length > 0) {
+        console.log(`${failed[0][0]}\n-----\n${failed[0][1]}`);
+    }
+    check("300 generated amscd diagrams write the same text after reading it back",
+        failed.length, 0);
+}
+
+// Inline maths: a row of objects and arrows, as a formula for the clipboard.
+{
+    const inline = (code, display = false) => {
+        const { ui } = parse(code);
+        return InlineMaths.export(ui.quiver, display);
+    };
+    const ses = inline("\\begin{tikzcd}\n\t0 \\arrow[r] & A \\arrow[r, \"f\", hook] "
+        + "& B \\arrow[r, two heads] & C \\arrow[r] & 0\n\\end{tikzcd}\n");
+    check("a short exact sequence is a formula", ses.text,
+        "0 \\to A \\xhookrightarrow{f} B \\twoheadrightarrow C \\to 0");
+    check("which needs mathtools and amssymb", ses.needs.sort(), ["amssymb", "mathtools"]);
+    check("and shows in display", inline("\\begin{tikzcd}\n\tA \\arrow[r, \"f\"'] & B\n"
+        + "\\end{tikzcd}\n", true).text, "\\[A \\xrightarrow[f]{} B\\]");
+    check("an arrow going left is a left arrow", inline("\\begin{tikzcd}\n\tA & B "
+        + "\\arrow[l, \"u\"]\n\\end{tikzcd}\n").text, "A \\xleftarrow[u]{} B");
+    check("a square is not a formula", inline(example("pullback.cd.tex")),
+        "a formula is one row: the objects are on several");
+    check("nor a row with a gap", inline("\\begin{tikzcd}\n\tA && B\n\\end{tikzcd}\n"),
+        "a formula has no gaps: the objects are not side by side");
+    check("nor a labelled epi", inline("\\begin{tikzcd}\n\tA \\arrow[r, \"p\", two heads] "
+        + "& B\n\\end{tikzcd}\n").startsWith("amsmath and mathtools stretch no"), true);
+}

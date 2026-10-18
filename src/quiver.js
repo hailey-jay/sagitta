@@ -280,6 +280,8 @@ class Quiver {
         switch (format) {
             case "tikz-cd":
                 return QuiverImportExport.tikz_cd.export(this, settings, options, definitions);
+            case "amscd":
+                return QuiverImportExport.amscd.export(this, settings, options, definitions);
             case "base64":
                 return QuiverImportExport.base64.export(this, settings, options, definitions);
             default:
@@ -295,6 +297,8 @@ class Quiver {
         switch (format) {
             case "tikz-cd":
                 return QuiverImportExport.tikz_cd.import(ui, data, settings);
+            case "amscd":
+                return QuiverImportExport.amscd.import(ui, data, settings);
             default:
                 throw new Error(`unknown export format \`${format}\``);
         }

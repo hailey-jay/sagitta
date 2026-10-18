@@ -408,11 +408,12 @@ class Vertex extends Cell {
 
         // Resize the content according to the grid cell. This is just the default size: it will be
         // updated by `render_maths`.
+        const centre = ui.grid.cell_centre_at_position(this.position);
         this.content_element.set_style({
             width: `${ui.grid.content_minimum()}px`,
             height: `${ui.grid.content_minimum()}px`,
-            left: `${cell_width / 2}px`,
-            top: `${cell_height / 2}px`,
+            left: `${centre.x}px`,
+            top: `${centre.y}px`,
         });
 
         if (construct) {
@@ -895,8 +896,14 @@ class Edge extends Cell {
         options.label_alignment = ui.arrow_options.label_alignment(ui) ?? "left";
 
         // The preset of the settings gives the tail, body, and head, and the number of lines,
-        // unless the edge's level asks for more.
-        const preset = Commands.PRESETS[ui.settings.get("diagram.arrow_preset")];
+        // unless the edge's level asks for more. amscd draws only plain arrows and equals, so in
+        // amscd, a new arrow is plain unless the preset is equals, and its label is to one side.
+        const amscd = ui.format === "amscd";
+        const chosen = ui.settings.get("diagram.arrow_preset");
+        const preset = Commands.PRESETS[amscd && chosen !== "equals" ? "plain" : chosen];
+        if (amscd && ["centre", "over"].includes(options.label_alignment)) {
+            options.label_alignment = "left";
+        }
         options.style = {};
         for (const component of ["tail", "body", "head"]) {
             if (preset[component] !== undefined) {
@@ -912,6 +919,11 @@ class Edge extends Cell {
         // cell (rather than the pointer).
         if (target instanceof Cell && source !== target) {
             Edge.suggest_from_neighbours(ui, source, target, options);
+            // amscd keeps the side the neighbours suggest, but draws every arrow straight.
+            if (amscd) {
+                options.offset = 0;
+                options.curve = 0;
+            }
         }
         if (source === target) {
             Edge.suggest_loop_angle(ui, source, options);
@@ -1142,7 +1154,17 @@ class Edge extends Cell {
                 this.arrow[end] = this.options.edge_alignment[end] ?
                     this[end].shape : this[end].phantom_shape
             }
+            // amscd draws an arrow between points of its own, rather than from node to node:
+            // across the middle of the column of arrows between its ends, or down the middle of
+            // the row (see `AmsCD.layout`).
+            const ends = ui.format === "amscd" ? ui.amscd_ends?.get(this) : undefined;
+            if (ends !== undefined) {
+                const origin = this.source.shape.origin;
+                this.arrow.source = new Shape.Endpoint(origin.add(ends.start));
+                this.arrow.target = new Shape.Endpoint(origin.add(ends.end));
+            }
         }
+        this.size_label(ui);
 
         this.arrow.route = this.options.route
             .map(([x, y]) => ui.grid.centre_offset_from_position(new Position(x, y)));
@@ -1198,6 +1220,30 @@ class Edge extends Cell {
         // We override the source and target whilst drawing, so we need to reset them.
         this.arrow.source = this.source.shape;
         this.arrow.target = this.target.shape;
+    }
+
+    /// Size the label's node round its box (`tex`, see `UI.size_labels`), as the diagram's format
+    /// sets it against the line: tikz-cd's padding all round, or amscd's gap between the label
+    /// and its arrow (see `AmsCD.layout`).
+    size_label(ui) {
+        if (this.tex === undefined) {
+            return;
+        }
+        const { width, height } = this.tex;
+        const ends = ui.format === "amscd" ? ui.amscd_ends?.get(this) : undefined;
+        if (ends !== undefined) {
+            this.arrow.label.size = new Dimensions(
+                width + (width > 0 ? ends.gap.x * 2 : 0),
+                height + (height > 0 ? ends.gap.y * 2 : 0),
+            );
+            return;
+        }
+        // tikz-cd's padding round a label, which with the label's box makes its node.
+        const padding = CONSTANTS.TEX.LABEL_PADDING * Edge.PX_PER_PT;
+        this.arrow.label.size = new Dimensions(
+            width + (width > 0 ? padding * 2 : 0),
+            height + (height > 0 ? padding * 2 : 0),
+        );
     }
 
     /// Returns the angle of this edge.

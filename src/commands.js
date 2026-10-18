@@ -422,6 +422,25 @@ for (const [name, axis, after] of [
     };
 }
 
+/// `format amscd` switches the diagram to another format (see `UI.switch_format`), asking first if
+/// that format cannot draw all of it; `format` alone says which it is in.
+Commands.TABLE["format"] = {
+    arguments: true,
+    completions: Formats.NAMES,
+    run: (commands, [format]) => {
+        const ui = commands.ui;
+        if (format === undefined) {
+            ui.mode_line.flash(`the diagram is in ${ui.format}`);
+            return;
+        }
+        if (!Formats.NAMES.includes(format.toLowerCase())) {
+            throw new Error(`"${format}" is not a format: format takes ${
+                Formats.NAMES.join(" or ")}.`);
+        }
+        ui.switch_format(format.toLowerCase());
+    },
+};
+
 /// `route x` and `route y` bend the selected arrows round one corner, going along a row or a column
 /// first, and `route none` straightens them. With nothing, it steps through those three.
 Commands.TABLE["route"] = {

@@ -62,6 +62,8 @@ class History {
         ui.update_extent?.();
         // Update the mode line (e.g. enabling Redo).
         ui.mode_line.update(ui);
+        // A format that cannot draw what was just done takes it back (see `UI.check_format`).
+        ui.check_format?.();
         return true;
     }
 
@@ -89,6 +91,7 @@ class History {
             case "edge_alignment":
                 return (action.cells.size ?? action.cells.length) > 0;
             case "connect":
+            case "format":
                 return action.from !== action.to;
             case "move":
                 return action.displacements.some(({ from, to }) => !same(from, to))
@@ -147,6 +150,7 @@ class History {
             if (unchanged) {
                 this.pop(ui);
             }
+            ui.check_format?.();
         } else {
             // If this is the start of our property modification, we need to add a new history
             // event.
@@ -418,6 +422,10 @@ class History {
                         cells.add(cell);
                     }
                     update_selection = true;
+                    break;
+                case "format":
+                    // The format lays the grid out afresh (see `UI.format`).
+                    ui.format = action[to];
                     break;
             }
             for (const cell of ui.quiver.transitive_dependencies(cells)) {

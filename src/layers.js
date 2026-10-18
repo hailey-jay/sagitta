@@ -67,15 +67,15 @@ Layer.Import = class extends Layer {
     }
 
     describe() {
-        return ["IMPORT", "tikz-cd"];
+        return ["IMPORT", "tikz-cd or amscd"];
     }
 
     entered() {
         this.result = null;
     }
 
-    /// Replace the diagram with the tikz-cd `text`, as one undo step. Leaves the layer if the
-    /// import had no problems, and otherwise lists them.
+    /// Replace the diagram with the tikz-cd or amscd `text`, as one undo step, switching to the
+    /// format it is in. Leaves the layer if the import had no problems, and otherwise lists them.
     paste(text) {
         const ui = this.ui;
         if (text.trim() === "") {
@@ -88,8 +88,12 @@ Layer.Import = class extends Layer {
         if (existing.length > 0) {
             ui.history.add(ui, [{ kind: "delete", cells: new Set(existing) }], true);
         }
+        const format = Formats.detect(text);
+        if (format !== ui.format) {
+            ui.history.add(ui, [{ kind: "format", from: ui.format, to: format }], true);
+        }
         // Parse errors do not throw: they are reported in `diagnostics`.
-        const { diagnostics } = ui.quiver.import(ui, "tikz-cd", text, ui.settings);
+        const { diagnostics } = ui.quiver.import(ui, format, text, ui.settings);
         const cells = new Set(ui.quiver.all_cells());
         if (cells.size > 0) {
             ui.history.add(ui, [{ kind: "create", cells }]);
@@ -135,7 +139,7 @@ Layer.Import = class extends Layer {
     /// The layer's bindings, and the last import's problems, each with its line and column.
     groups() {
         const { result } = this;
-        const groups = [["Import tikz-cd", [
+        const groups = [["Import tikz-cd or amscd", [
             ["C-v", "paste"],
             ...(result !== null && this.keymap.combinations("undo").length > 0
                 ? [[this.keymap.describe_name("undo"), "undo the import"]] : []),
@@ -421,7 +425,7 @@ Layer.Export = class extends Layer {
     }
 
     describe() {
-        return ["EXPORT", this.saving ? "save as" : "tikz-cd"];
+        return ["EXPORT", this.saving ? "save as" : this.ui.format];
     }
 
     entered() {
@@ -439,20 +443,32 @@ Layer.Export = class extends Layer {
     /// The export options that differ from their defaults, briefly, for the mode line: what saving
     /// writes besides the plain diagram.
     static differences(ui) {
-        const toggles = Layer.Export.TOGGLES
+        const toggles = Layer.Export.toggles(ui)
             .filter(([, , setting]) => ui.settings.get(setting) !== SETTINGS.defaults[setting])
             .map(([, description, setting]) => SETTINGS.defaults[setting]
                 ? `no ${description.replace(/ diagram$/, "")}` : description);
-        const seps = Layer.Export.SEPS
+        const seps = Layer.Export.seps(ui)
             .filter(([, axis]) => ui.sep[axis] !== DiagramFile.SEPS.normal)
             .map(([, axis]) => `${axis} sep ${Layer.Export.describe_sep(ui.sep[axis])}`);
-        return [...toggles, ...seps];
+        return [...(ui.format === "tikz-cd" ? [] : [ui.format]), ...toggles, ...seps];
     }
 
-    /// The diagram's tikz-cd encoding under the current export options: `{ data, metadata }`.
+    /// The toggles that mean something in the diagram's format: amscd has no ampersand
+    /// replacement, nor cramped, which are tikz-cd's.
+    static toggles(ui) {
+        return Layer.Export.TOGGLES.filter(([, , setting]) => ui.format === "tikz-cd"
+            || !["export.ampersand_replacement", "export.cramped"].includes(setting));
+    }
+
+    /// The separations, which only tikz-cd has: amscd's are its own.
+    static seps(ui) {
+        return ui.format === "tikz-cd" ? Layer.Export.SEPS : [];
+    }
+
+    /// The diagram in its format under the current export options: `{ data, metadata }`.
     export() {
         const ui = this.ui;
-        return ui.quiver.export("tikz-cd", ui.settings, ui.options(), ui.definitions());
+        return ui.quiver.export(ui.format, ui.settings, ui.options(), ui.definitions());
     }
 
     /// The layer's bindings, with the options' values, and notes on what the output needs
@@ -461,17 +477,27 @@ Layer.Export = class extends Layer {
         const ui = this.ui;
         const { data, metadata } = this.export();
         const lines = data.split("\n").length;
+        const next = Layer.Export.next_format(ui);
+        const formula = InlineMaths.export(ui.quiver);
         const groups = [
-            ["Toggles", Layer.Export.TOGGLES.map(([key, description, setting]) => [
+            ["Format", [
+                ["f", `switch to ${next}`, false, ui.format],
+            ]],
+            ["Toggles", Layer.Export.toggles(ui).map(([key, description, setting]) => [
                 key, description, false, ui.settings.get(setting) ? "on" : "off",
             ])],
-            ["Sep (shift: less)", Layer.Export.SEPS.map(([key, axis]) => [
-                key, `${axis} sep`, false, Layer.Export.describe_sep(ui.sep[axis]),
-            ])],
+            ...(Layer.Export.seps(ui).length > 0 ? [["Sep (shift: less)", Layer.Export.seps(ui)
+                .map(([key, axis]) => [
+                    key, `${axis} sep`, false, Layer.Export.describe_sep(ui.sep[axis]),
+                ])]] : []),
             ["Result", [
                 ...(this.saving ? [["RET", "save as, with these options"]] : []),
                 [this.saving ? "y" : "y RET", "copy to clipboard", false,
                     `${lines} line${lines === 1 ? "" : "s"}`],
+                ["m", "copy as inline maths", false,
+                    typeof formula === "string" ? "not a row" : "$ $"],
+                ["M", "copy as display maths", false,
+                    typeof formula === "string" ? "not a row" : "\\[ \\]"],
                 ["q", "copy the #q= hash"],
                 ["v", "save as SVG"],
                 [Keymap.describe(this.keymap.combinations("save").slice(0, 1)),
@@ -501,8 +527,8 @@ Layer.Export = class extends Layer {
     intercept(event) {
         const ui = this.ui;
         const key = event.key;
-        const toggle = Layer.Export.TOGGLES.find(([k]) => k === key);
-        const sep = Layer.Export.SEPS.find(([k]) => k === key.toLowerCase());
+        const toggle = Layer.Export.toggles(ui).find(([k]) => k === key);
+        const sep = Layer.Export.seps(ui).find(([k]) => k === key.toLowerCase());
         if (toggle !== undefined) {
             const setting = toggle[2];
             ui.settings.set(setting, !ui.settings.get(setting));
@@ -531,6 +557,14 @@ Layer.Export = class extends Layer {
                     break;
                 case "q":
                     this.copy_hash();
+                    break;
+                case "f":
+                    this.ui.switch_format(Layer.Export.next_format(this.ui))
+                        .then(() => this.keymap.render());
+                    break;
+                case "m":
+                case "M":
+                    this.copy_formula(key === "M");
                     break;
                 case "v":
                     this.leave();
@@ -572,7 +606,32 @@ Layer.Export = class extends Layer {
         const lines = data.split("\n").length;
         await host.write_clipboard(data);
         this.leave();
-        this.ui.mode_line.flash(`copied ${lines} line${lines === 1 ? "" : "s"} of tikz-cd`);
+        this.ui.mode_line.flash(`copied ${lines} line${lines === 1 ? "" : "s"} of ${
+            this.ui.format}`);
+    }
+
+    /// Copy the diagram as a formula (see `InlineMaths`), in `\[ \]` if `display`, leaving the
+    /// layer; or say why it is not one, staying.
+    async copy_formula(display) {
+        const ui = this.ui;
+        const formula = InlineMaths.export(ui.quiver, display);
+        if (typeof formula === "string") {
+            UI.display_error(`Not copied: ${formula}.`);
+            return;
+        }
+        await host.write_clipboard(formula.text);
+        this.leave();
+        const notes = [
+            ...(formula.needs.length > 0 ? [`needs ${formula.needs.join(", ")}`] : []),
+            ...(formula.dropped.length > 0 ? [`without ${formula.dropped.join(", ")}`] : []),
+        ];
+        ui.mode_line.flash(`copied ${display ? "display" : "inline"} maths${
+            notes.length > 0 ? ` (${notes.join("; ")})` : ""}`);
+    }
+
+    /// The format the export layer's `f` switches to: the next of `Formats.NAMES`.
+    static next_format(ui) {
+        return Formats.NAMES[(Formats.NAMES.indexOf(ui.format) + 1) % Formats.NAMES.length];
     }
 };
 
