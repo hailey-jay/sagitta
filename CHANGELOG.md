@@ -16,7 +16,7 @@
 - Switching to amscd first selects what it cannot draw (diagonal arrows, loops, arrows on arrows, curves, offsets, styles other than plain and equals, colours on arrows, and the like) and asks before converting, which deletes the arrows it cannot draw at all and draws the rest plainly.
 - In amscd, the command layer's list dims what amscd cannot draw, and a step that would draw it is undone at once, with an error saying why. A move that would leave an arrow diagonal, or between cells that are not neighbours, is refused before it is made, from the keyboard or by inserting a row or column, and a dragged object only goes where amscd can still draw its arrows.
 - `S` in the export layer saves, as `C-s` does.
-- `m` and `M` in the export layer copy a row of objects and arrows as inline maths, as in `0 \to A \xhookrightarrow{f} B`, or display maths in `\[ \]`, saying which packages it needs (`amsmath`, `amssymb`, or `mathtools`) and what it leaves out. Anything but a row is refused, with why, and the export layer greys `m` and `M` out.
+- `m` and `M` in the export layer copy a row of objects and arrows as inline maths, as in `0 \to A \xhookrightarrow{f} B`, or display maths in `\[ \]`, saying which packages it needs (`amsmath`, `amssymb`, `mathtools`, or `extpfeil`, for labelled two-headed and equals arrows) and what it leaves out. Anything but a row is refused, with why, and the export layer greys `m` and `M` out.
 
 ### Reading tikz-cd
 

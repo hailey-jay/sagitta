@@ -871,20 +871,21 @@ class InlineMaths {
         const right = edge.target.position.x > edge.source.position.x;
         const name = `${level} ${tail.name} ${body.name} ${head.name}`;
         // `[symbol right, symbol left, package, labelled right, labelled left, package]`, where
-        // a symbol is `null` if neither package has one.
+        // a symbol is `null` if no package has one. `extpfeil` has the labelled arrows
+        // `mathtools` lacks.
         const symbols = {
             "1 none cell arrowhead": ["\\to", "\\leftarrow", null,
                 "\\xrightarrow", "\\xleftarrow", "amsmath"],
             "1 hook cell arrowhead": ["\\hookrightarrow", "\\hookleftarrow", null,
                 "\\xhookrightarrow", "\\xhookleftarrow", "mathtools"],
             "1 none cell epi": ["\\twoheadrightarrow", "\\twoheadleftarrow", "amssymb",
-                null, null, null],
+                "\\xtwoheadrightarrow", "\\xtwoheadleftarrow", "extpfeil"],
             "1 mono cell arrowhead": ["\\rightarrowtail", "\\leftarrowtail", "amssymb",
                 null, null, null],
             "1 maps to cell arrowhead": ["\\mapsto", null, null, "\\xmapsto", null, "mathtools"],
             "2 none cell arrowhead": ["\\Rightarrow", "\\Leftarrow", null,
                 "\\xRightarrow", "\\xLeftarrow", "mathtools"],
-            "2 none cell none": ["=", "=", null, null, null, null],
+            "2 none cell none": ["=", "=", null, "\\xlongequal", "\\xlongequal", "extpfeil"],
         }[name];
         if (symbols === undefined) {
             return { reason: "a formula has plain, hooked, two-headed, tailed, maps-to, double,"
@@ -911,8 +912,8 @@ class InlineMaths {
         }
         const symbol = right ? labelled_right : labelled_left;
         if (symbol === null) {
-            return { reason: "amsmath and mathtools stretch no two-headed, tailed, or equals"
-                + " arrow over a label, nor a maps-to arrow going left" };
+            return { reason: "amsmath, mathtools, and extpfeil stretch no tailed arrow over a"
+                + " label, nor a maps-to arrow going left" };
         }
         needs.add(labelled_package);
         if (["centre", "over"].includes(edge.options.label_alignment)) {

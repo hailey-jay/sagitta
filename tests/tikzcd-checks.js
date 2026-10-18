@@ -1327,6 +1327,14 @@ const pending = [];
         "a formula is one row: the objects are on several");
     check("nor a row with a gap", inline("\\begin{tikzcd}\n\tA && B\n\\end{tikzcd}\n"),
         "a formula has no gaps: the objects are not side by side");
-    check("nor a labelled epi", inline("\\begin{tikzcd}\n\tA \\arrow[r, \"p\", two heads] "
-        + "& B\n\\end{tikzcd}\n").startsWith("amsmath and mathtools stretch no"), true);
+    const labelled = inline("\\begin{tikzcd}\n\tA \\arrow[r, \"p\", two heads] & B "
+        + "\\arrow[r, \"e\"', equals] & C\n\\end{tikzcd}\n");
+    check("a labelled epi and equals stretch, from extpfeil", labelled.text,
+        "A \\xtwoheadrightarrow{p} B \\xlongequal[e]{} C");
+    check("which needs extpfeil alone", labelled.needs, ["extpfeil"]);
+    check("as does an epi going left", inline("\\begin{tikzcd}\n\tA & B "
+        + "\\arrow[l, \"q\"', two heads]\n\\end{tikzcd}\n").text, "A \\xtwoheadleftarrow{q} B");
+    check("but a labelled tailed arrow is not a formula", inline("\\begin{tikzcd}\n\tA "
+        + "\\arrow[r, \"m\", tail] & B\n\\end{tikzcd}\n")
+        .startsWith("amsmath, mathtools, and extpfeil stretch no tailed arrow"), true);
 }

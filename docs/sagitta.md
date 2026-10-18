@@ -57,7 +57,7 @@ A paper that inputs an amscd diagram needs `\usepackage{amscd}`, and `xcolor` fo
 
 `m` in the export layer copies the diagram as inline maths, as in `0 \to A \xhookrightarrow{f} B \to C \to 0`, for `$ $`, and `M` as display maths, in `\[ \]`.
 Only a row of objects side by side, with one arrow between each two neighbours, is a formula; anything else is refused, with why, and `m` and `M` are greyed out.
-Labelled arrows stretch over their labels, which `amsmath` does for plain arrows, and `mathtools` for hooked, maps-to, and double ones; the mode line says which packages the formula needs, and anything it leaves out, such as colours.
+Labelled arrows stretch over their labels, which `amsmath` does for plain arrows, `mathtools` for hooked, maps-to, and double ones, and `extpfeil` for two-headed and equals ones (`\xtwoheadrightarrow`, `\xlongequal`); a paper that loads `stmaryrd` must load it after `extpfeil`, which loads part of it; the mode line says which packages the formula needs, and anything it leaves out, such as colours.
 Formulas are only copied: a diagram's file stays in its format.
 
 ## Macros
