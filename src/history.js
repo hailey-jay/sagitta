@@ -262,10 +262,12 @@ class History {
                     update_selection = true;
                     break;
                 case "create":
-                    for (const cell of action.cells) {
-                        ui.quiver.add(cell);
-                        ui.add_cell(cell);
-                    }
+                    ui.add_cells(() => {
+                        for (const cell of action.cells) {
+                            ui.quiver.add(cell);
+                            ui.add_cell(cell);
+                        }
+                    });
                     update_selection = true;
                     break;
                 case "delete":

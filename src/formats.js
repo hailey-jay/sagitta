@@ -559,7 +559,7 @@ QuiverImportExport.amscd = new class extends QuiverImportExport {
 
     import(ui, data) {
         this.begin_import(ui);
-        const diagnostics = AmsCD.parse(ui, data);
+        const diagnostics = ui.add_cells(() => AmsCD.parse(ui, data), false);
         this.end_import(ui, ui.quiver.all_cells());
         return { diagnostics };
     }

@@ -120,6 +120,11 @@ class UI {
         this._format = "tikz-cd";
         this.amscd_ends = new Map();
 
+        // How many batches of cells are being added together, and the edges among them not yet
+        // drawn (see `add_cells`).
+        this.adding = 0;
+        this.unrendered = new Set();
+
         // Whether the diagram has been laid out since it was opened or emptied, after which a
         // change of extent is animated, and the frame of that animation (see `animate_layout`).
         this.layout_settled = false;
@@ -1332,11 +1337,52 @@ class UI {
         if (cell.is_vertex()) {
             this.positions.set(`${cell.position}`, cell);
             cell.recalculate_size(this);
-        } else {
+        }
+        // Cells added together, as a file is read, are stacked, coded, and their colours taken
+        // once they all are (see `added_cells`), as each of those looks at every cell.
+        if (this.adding > 0) {
+            return;
+        }
+        if (cell.is_edge()) {
             this.restack();
         }
         this.recode();
         this.colour_picker.update_diagram_colours(this);
+    }
+
+    /// Add cells together, as `add` does, stacking and coding them once they all are, rather
+    /// than as each is added, which makes reading a large diagram quadratic in its size. The edges
+    /// added are drawn at the end too, unless `draw` is false, as when an import lays the whole
+    /// diagram out after (see `QuiverImportExport.end_import`), which would draw them again.
+    add_cells(add, draw = true) {
+        ++this.adding;
+        try {
+            return add();
+        } finally {
+            if (--this.adding === 0) {
+                this.restack();
+                this.recode();
+                this.colour_picker.update_diagram_colours(this);
+                if (draw) {
+                    this.draw_unrendered();
+                }
+            }
+        }
+    }
+
+    /// Draw the edges added together that are not yet drawn (see `add_cells`), each after the
+    /// cells it is drawn from.
+    draw_unrendered() {
+        if (this.unrendered.size === 0) {
+            return;
+        }
+        const edges = this.unrendered;
+        this.unrendered = new Set();
+        for (const cell of this.quiver.transitive_dependencies(Array.from(edges))) {
+            if (this.quiver.contains_cell(cell)) {
+                cell.render(this);
+            }
+        }
     }
 
     /// Raise the edges that cross over others, and those attached to them, above the rest, and
@@ -1584,6 +1630,8 @@ class UI {
 
     /// Draw every cell, the grid, and the focus point where the grid now puts them.
     draw_layout() {
+        // Every edge is drawn here, those not yet drawn among them (see `add_cells`).
+        this.unrendered.clear();
         // The layout has sized the columns and rows, so drawing the vertices into it does not fit
         // them again, which, between an animation's sizes, would snap them and pan the view.
         const buffered = this.buffer_updates;

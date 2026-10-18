@@ -325,7 +325,10 @@ class QuiverImportExport extends QuiverExport {
 
     end_import(ui, imported_cells, centre_view = true) {
         // The extent sizes the empty columns and rows, so it comes before the view is centred.
+        // Laying the diagram out draws every edge; if the extent stays as it was, as for a paste
+        // within it, the edges imported are drawn now (see `UI.add_cells`).
         ui.update_extent?.();
+        ui.draw_unrendered?.();
         if (centre_view) {
             // Centre the view on the quiver.
             ui.centre_view();
@@ -1196,7 +1199,7 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
         this.begin_import(ui);
 
         const parser = new Parser(ui, data);
-        parser.parse_diagram();
+        ui.add_cells(() => parser.parse_diagram(), false);
 
         this.end_import(ui, ui.quiver.all_cells());
 
@@ -1500,170 +1503,176 @@ QuiverImportExport.base64 = new class extends QuiverImportExport {
         this.begin_import(ui);
 
         const indices = [];
-        for (const cell of cells) {
-            try {
-                assert_kind(cell, "array");
+        // The cells are drawn as `end_import` lays them out.
+        ui.add_cells(() => {
+            for (const cell of cells) {
+                try {
+                    assert_kind(cell, "array");
 
-                if (indices.length < vertices) {
-                    // This cell is a vertex.
+                    if (indices.length < vertices) {
+                        // This cell is a vertex.
 
-                    assert(cell.length >= 2 && cell.length <= 4, "invalid vertex format");
-                    const [x, y, label = "", label_colour = Colour.black().hsla()] = cell;
-                    assert_kind(x, "natural");
-                    assert_kind(y, "natural");
-                    assert_kind(label, "string");
-                    assert_kind(label_colour, "colour");
+                        assert(cell.length >= 2 && cell.length <= 4, "invalid vertex format");
+                        const [x, y, label = "", label_colour = Colour.black().hsla()] = cell;
+                        assert_kind(x, "natural");
+                        assert_kind(y, "natural");
+                        assert_kind(label, "string");
+                        assert_kind(label_colour, "colour");
 
-                    const position = origin.add(new Position(x, y));
-                    if (ui.positions.has(`${position}`)) {
-                        // If we cannot place every cell, we would prefer to add no cells, so we
-                        // must remove any we have added so far.
-                        indices.forEach((cell) => ui.remove_cell(cell, ui.history.present));
-                        unrecoverable = true;
-                        throw new Error("position already occupied");
-                    }
-                    const vertex = new Vertex(
-                        ui,
-                        label,
-                        position,
-                        new Colour(...label_colour),
-                    );
-                    indices.push(vertex);
-                } else {
-                    // This cell is an edge.
-
-                    assert(cell.length >= 2 && cell.length <= 6, "invalid edge format");
-                    const [
-                        source, target, label = "", alignment = 0, options = {},
-                        label_colour = Colour.black().hsla()
-                    ] = cell;
-                    for (const [endpoint, name] of [[source, "source"], [target, "target"]]) {
-                        assert_kind(endpoint, "natural");
-                        assert(endpoint < indices.length, `invalid ${name} index`);
-                    }
-                    assert_kind(label, "string");
-                    assert_kind(alignment, "natural");
-                    assert(alignment <= 3, "invalid label alignment");
-                    assert_kind(options, "object");
-                    assert_kind(label_colour, "colour");
-
-                    // We don't restrict the keys on `options`, because it is likely that `options`
-                    // will be extended in the future, and this permits a limited form of backwards
-                    // compatibility. We never access prototype properties on `options`, so this
-                    // should not be amenable to injection. However, for those properties we do
-                    // expect to exist, we do check they have the correct type (and in some cases,
-                    // range), below.
-
-                    let level = Math.max(indices[source].level, indices[target].level) + 1;
-                    const { style = {} } = options;
-                    delete options.style;
-
-                    // Validate `options`.
-                    if (options.hasOwnProperty("label_position")) {
-                        assert_kind(options.label_position, "natural");
-                        assert(options.label_position <= 100, "invalid label position");
-                    }
-                    if (options.hasOwnProperty("offset")) {
-                        assert_kind(options.offset, "integer");
-                    }
-                    if (options.hasOwnProperty("curve")) {
-                        assert_kind(options.curve, "integer");
-                    }
-                    if (options.hasOwnProperty("radius")) {
-                        assert_kind(options.radius, "integer");
-                    }
-                    if (options.hasOwnProperty("angle")) {
-                        assert_kind(options.angle, "integer");
-                    }
-                    if (options.hasOwnProperty("shorten")) {
-                        let shorten = { source: 0, target: 0 };
-                        if (options.shorten.hasOwnProperty("source")) {
-                            assert_kind(options.shorten.source, "natural");
-                            shorten.source = options.shorten.source;
+                        const position = origin.add(new Position(x, y));
+                        if (ui.positions.has(`${position}`)) {
+                            // If we cannot place every cell, we would prefer to add no cells, so we
+                            // must remove any we have added so far.
+                            indices.forEach((cell) => ui.remove_cell(cell, ui.history.present));
+                            unrecoverable = true;
+                            throw new Error("position already occupied");
                         }
-                        if (options.shorten.hasOwnProperty("target")) {
-                            assert_kind(options.shorten.target, "natural");
-                            shorten.target = options.shorten.target;
-                        }
-                        assert(shorten.source + shorten.target <= 100, "invalid shorten");
-                    }
-                    if (options.hasOwnProperty("colour")) {
-                        assert_kind(options.colour, "colour");
-                        // Colour is encoded as an array, so we have to convert it to a `Colour`.
-                        options.colour = new Colour(...options.colour);
-                    }
-                    if (options.hasOwnProperty("crossing_over")) {
-                        assert_kind(options.crossing_over, "natural");
-                        if (options.crossing_over > 0) {
-                            options.crossing_over += base_rank;
-                        }
-                    }
-                    if (options.hasOwnProperty("route")) {
-                        assert_kind(options.route, "array");
-                        options.route = options.route.map((cell) => {
-                            assert_kind(cell, "array");
-                            assert(cell.length === 2, "invalid route");
-                            cell.forEach((coordinate) => assert_kind(coordinate, "integer"));
-                            return [cell[0] + origin.x, cell[1] + origin.y];
-                        });
-                    }
-                    if (options.hasOwnProperty("rounding")) {
-                        assert_kind(options.rounding, "natural");
-                    }
-                    if (options.hasOwnProperty("edge_alignment")) {
-                        if (options.edge_alignment.hasOwnProperty("source")) {
-                            assert_kind(options.edge_alignment.source, "boolean");
-                        }
-                        if (options.edge_alignment.hasOwnProperty("target")) {
-                            assert_kind(options.edge_alignment.target, "boolean");
-                        }
-                    }
+                        const vertex = new Vertex(
+                            ui,
+                            label,
+                            position,
+                            new Colour(...label_colour),
+                        );
+                        indices.push(vertex);
+                    } else {
+                        // This cell is an edge.
 
-                    // In previous versions of quiver, there was a single `length` parameter, rather
-                    // than two `shorten` parameters. We convert from `length` into `shorten` here.
-                    if (options.hasOwnProperty("length")) {
-                        assert_kind(options.length, "natural");
-                        assert(options.length >= 0 && options.length <= 100, "invalid length");
-                        // If both `length` and `shorten` are present (which should not happen for
-                        // diagrams exported by quiver), `shorten` takes priority.
-                        if (!options.hasOwnProperty("shorten")) {
-                            const shorten = 100 - options.length;
-                            options.shorten = { source: shorten / 2, target: shorten / 2 };
+                        assert(cell.length >= 2 && cell.length <= 6, "invalid edge format");
+                        const [
+                            source, target, label = "", alignment = 0, options = {},
+                            label_colour = Colour.black().hsla()
+                        ] = cell;
+                        for (const [endpoint, name] of [[source, "source"], [target, "target"]]) {
+                            assert_kind(endpoint, "natural");
+                            assert(endpoint < indices.length, `invalid ${name} index`);
                         }
-                        delete options.length;
-                    }
+                        assert_kind(label, "string");
+                        assert_kind(alignment, "natural");
+                        assert(alignment <= 3, "invalid label alignment");
+                        assert_kind(options, "object");
+                        assert_kind(label_colour, "colour");
 
-                    // In previous versions of quiver, `level` was only valid for some arrows, and
-                    // was recorded in the body style, rather than as a property of the edge itself.
-                    // For backwards-compatibility, we check for this case manually here.
-                    if (style.hasOwnProperty("body") && style.body.hasOwnProperty("level")) {
-                        assert_kind(style.body.level, "natural");
-                        assert(style.body.level >= 1, "invalid level");
-                        level = style.body.level;
-                        delete style.body.level;
-                    }
+                        // We don't restrict the keys on `options`, because it is likely that
+                        // `options` will be extended in the future, and this permits a limited form
+                        // of backwards compatibility. We never access prototype properties on
+                        // `options`, so this should not be amenable to injection. However, for
+                        // those properties we do expect to exist, we do check they have the correct
+                        // type (and in some cases, range), below.
 
-                    const edge = new Edge(
-                        ui,
-                        label,
-                        indices[source],
-                        indices[target],
-                        Edge.default_options({
-                            level,
-                            label_alignment: ["left", "centre", "right", "over"][alignment],
-                            ...options,
-                        }, style),
-                        new Colour(...label_colour),
-                    );
-                    indices.push(edge);
-                }
-            } catch (error) {
-                errors.push(error);
-                if (unrecoverable) {
-                    break;
+                        let level = Math.max(indices[source].level, indices[target].level) + 1;
+                        const { style = {} } = options;
+                        delete options.style;
+
+                        // Validate `options`.
+                        if (options.hasOwnProperty("label_position")) {
+                            assert_kind(options.label_position, "natural");
+                            assert(options.label_position <= 100, "invalid label position");
+                        }
+                        if (options.hasOwnProperty("offset")) {
+                            assert_kind(options.offset, "integer");
+                        }
+                        if (options.hasOwnProperty("curve")) {
+                            assert_kind(options.curve, "integer");
+                        }
+                        if (options.hasOwnProperty("radius")) {
+                            assert_kind(options.radius, "integer");
+                        }
+                        if (options.hasOwnProperty("angle")) {
+                            assert_kind(options.angle, "integer");
+                        }
+                        if (options.hasOwnProperty("shorten")) {
+                            let shorten = { source: 0, target: 0 };
+                            if (options.shorten.hasOwnProperty("source")) {
+                                assert_kind(options.shorten.source, "natural");
+                                shorten.source = options.shorten.source;
+                            }
+                            if (options.shorten.hasOwnProperty("target")) {
+                                assert_kind(options.shorten.target, "natural");
+                                shorten.target = options.shorten.target;
+                            }
+                            assert(shorten.source + shorten.target <= 100, "invalid shorten");
+                        }
+                        if (options.hasOwnProperty("colour")) {
+                            assert_kind(options.colour, "colour");
+                            // Colour is encoded as an array, so we have to convert it to a
+                            // `Colour`.
+                            options.colour = new Colour(...options.colour);
+                        }
+                        if (options.hasOwnProperty("crossing_over")) {
+                            assert_kind(options.crossing_over, "natural");
+                            if (options.crossing_over > 0) {
+                                options.crossing_over += base_rank;
+                            }
+                        }
+                        if (options.hasOwnProperty("route")) {
+                            assert_kind(options.route, "array");
+                            options.route = options.route.map((cell) => {
+                                assert_kind(cell, "array");
+                                assert(cell.length === 2, "invalid route");
+                                cell.forEach((coordinate) => assert_kind(coordinate, "integer"));
+                                return [cell[0] + origin.x, cell[1] + origin.y];
+                            });
+                        }
+                        if (options.hasOwnProperty("rounding")) {
+                            assert_kind(options.rounding, "natural");
+                        }
+                        if (options.hasOwnProperty("edge_alignment")) {
+                            if (options.edge_alignment.hasOwnProperty("source")) {
+                                assert_kind(options.edge_alignment.source, "boolean");
+                            }
+                            if (options.edge_alignment.hasOwnProperty("target")) {
+                                assert_kind(options.edge_alignment.target, "boolean");
+                            }
+                        }
+
+                        // In previous versions of quiver, there was a single `length` parameter,
+                        // rather than two `shorten` parameters. We convert from `length` into
+                        // `shorten` here.
+                        if (options.hasOwnProperty("length")) {
+                            assert_kind(options.length, "natural");
+                            assert(options.length >= 0 && options.length <= 100, "invalid length");
+                            // If both `length` and `shorten` are present (which should not happen
+                            // for diagrams exported by quiver), `shorten` takes priority.
+                            if (!options.hasOwnProperty("shorten")) {
+                                const shorten = 100 - options.length;
+                                options.shorten = { source: shorten / 2, target: shorten / 2 };
+                            }
+                            delete options.length;
+                        }
+
+                        // In previous versions of quiver, `level` was only valid for some arrows,
+                        // and was recorded in the body style, rather than as a property of the edge
+                        // itself. For backwards-compatibility, we check for this case manually
+                        // here.
+                        if (style.hasOwnProperty("body") && style.body.hasOwnProperty("level")) {
+                            assert_kind(style.body.level, "natural");
+                            assert(style.body.level >= 1, "invalid level");
+                            level = style.body.level;
+                            delete style.body.level;
+                        }
+
+                        const edge = new Edge(
+                            ui,
+                            label,
+                            indices[source],
+                            indices[target],
+                            Edge.default_options({
+                                level,
+                                label_alignment: ["left", "centre", "right", "over"][alignment],
+                                ...options,
+                            }, style),
+                            new Colour(...label_colour),
+                        );
+                        indices.push(edge);
+                    }
+                } catch (error) {
+                    errors.push(error);
+                    if (unrecoverable) {
+                        break;
+                    }
                 }
             }
-        }
+        }, false);
 
         this.end_import(ui, indices, centre_view);
 

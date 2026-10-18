@@ -1263,11 +1263,16 @@ class Edge extends Cell {
                 this.options.edge_alignment[end] = true;
             }
         }
-        for (const cell of ui.quiver.transitive_dependencies([this])) {
-            cell.render(ui);
+        // Cells added together are drawn, and coded, once they all are (see `UI.add_cells`).
+        if (ui.adding > 0) {
+            ui.unrendered.add(this);
+        } else {
+            for (const cell of ui.quiver.transitive_dependencies([this])) {
+                cell.render(ui);
+            }
+            // The codes of edges name their ends.
+            ui.recode();
         }
-        // The codes of edges name their ends.
-        ui.recode();
         ui.update_selection();
     }
 

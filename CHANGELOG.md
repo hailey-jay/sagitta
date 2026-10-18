@@ -7,6 +7,7 @@
 - A diagram's file holds its export alone: the `%#q=...` line that encoded the diagram is gone, and opening a file reads the tikz-cd itself, so hand edits are read as any others. A file written earlier, or by quiver, still opens from its line while that reproduces the picture, and saving leaves the line out. `q` in the export layer still copies the `#q=` hash, which opens the diagram in quiver.
 - New diagrams are saved as `.cd.tex`, which a paper inputs as `\input{diagram.cd}`, and which editors highlight as TeX; `.tikzcd` files open and save as before, under their own names. On Linux, `install.sh` registers both, while other `.tex` files keep opening in the TeX editor; on Windows, Explorer opens only `.tikzcd` files in Sagitta, as it goes by the last extension alone. A dropped `.cd.tex` file opens as a diagram, where any other `.tex` file gives macros.
 - The examples are `.cd.tex` files, and `examples/five-lemma.cd.tex` is an amscd diagram, which `examples/paper.tex` inputs too.
+- Opening a diagram, pasting, and undoing a deletion add their cells together: the codes, the stacking of arrows crossing over, and the palette of the diagram's colours are worked out once, rather than once for each cell added, and opening or pasting draws each arrow once fewer. A grid of 400 objects and 760 arrows opens in about 1.2s, where it took 4.9s, and a 6 by 6 one in 0.1s, where it took 0.3s.
 
 ### Formats
 

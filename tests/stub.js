@@ -298,6 +298,10 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
             }
         },
 
+        /// As `UI.add_cells`, which has nothing to stack or code here.
+        add_cells: (add) => add(),
+        draw_unrendered: () => {},
+
         /// As `UI.change_setting`, without what it shows: nothing here is drawn.
         change_setting: (setting, value) => ui.settings.set(setting, value),
 
