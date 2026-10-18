@@ -27,7 +27,7 @@ Opening such a file trusts the line while it still reproduces the `tikzcd` envir
 Saving leaves the line out.
 
 Since the file is the export, saving writes it with the export layer's options (`C-e`).
-Saving a new file, or saving as, opens that layer first, so the options can be checked: RET goes on to save, and `C-s` there saves too.
+Saving a new file, or saving as, opens that layer first, so the options can be checked: RET goes on to save, and `S` or `C-s` there saves too; `S` in the export layer saves at any time.
 In the export layer, `q` copies the diagram's `#q=...` hash, which opens it after `https://q.uiver.app/` or the address of Sagitta's page, and `v` saves it as an SVG image, beside the diagram by default.
 The SVG is drawn as the canvas draws it in light mode, with KaTeX's styles and the fonts its labels use inside it, so it shows the same anywhere a browser draws it; editors that ignore `foreignObject` show its arrows without their labels.
 The mode line follows the file's name with its format, if it is not tikz-cd, and any option that differs from its default, as in `square.cd.tex [amscd, no centre]`.
@@ -56,7 +56,7 @@ A paper that inputs an amscd diagram needs `\usepackage{amscd}`, and `xcolor` fo
   The canvas lays the diagram out by the same rules, so the separations (`w` and `h` in the export layer), ampersand replacement, and cramped, which are tikz-cd's, are not offered.
 
 `m` in the export layer copies the diagram as inline maths, as in `0 \to A \xhookrightarrow{f} B \to C \to 0`, for `$ $`, and `M` as display maths, in `\[ \]`.
-Only a row of objects side by side, with one arrow between each two neighbours, is a formula; anything else is refused, with why.
+Only a row of objects side by side, with one arrow between each two neighbours, is a formula; anything else is refused, with why, and `m` and `M` are greyed out.
 Labelled arrows stretch over their labels, which `amsmath` does for plain arrows, and `mathtools` for hooked, maps-to, and double ones; the mode line says which packages the formula needs, and anything it leaves out, such as colours.
 Formulas are only copied: a diagram's file stays in its format.
 

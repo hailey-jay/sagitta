@@ -1287,6 +1287,24 @@ def test_the_export_layer_copies_a_row_as_maths(sagitta, home):
         "0 \\to A \\xhookrightarrow{f} B", "\\[0 \\to A \\xhookrightarrow{f} B\\]"]
 
 
+def test_the_export_layer_greys_out_maths_and_saves_with_s(sagitta, home):
+    """The square is no row, so `m` and `M` are greyed out; `S` saves with the layer's options."""
+    diagram = _diagram(home / "paper")
+    script = """(async () => {
+        const layer = ui.keymap.layers.export;
+        layer.enter();
+        const greyed = Array.from(document.querySelectorAll(".which-key .entry.disabled kbd"),
+            (kbd) => kbd.textContent);
+        layer.intercept({ key: "c" });
+        layer.intercept({ key: "S" });
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        ui.change_setting("export.centre_diagram", true);
+        return { greyed, active: layer.active };
+    })()"""
+    assert sagitta("evaluate", diagram, script) == {"greyed": ["m", "M"], "active": False}
+    assert diagram.read_text().startswith("\\begin{tikzcd}")
+
+
 def test_a_new_diagram_is_saved_as_cd_tex(sagitta, home):
     assert sagitta("evaluate", home / "new.cd.tex", "DiagramFile.UNTITLED") == "diagram.cd.tex"
 

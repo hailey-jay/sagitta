@@ -495,12 +495,15 @@ Layer.Export = class extends Layer {
                 [this.saving ? "y" : "y RET", "copy to clipboard", false,
                     `${lines} line${lines === 1 ? "" : "s"}`],
                 ["m", "copy as inline maths", false,
-                    typeof formula === "string" ? "not a row" : "$ $"],
+                    typeof formula === "string" ? "not a row" : "$ $", null, null,
+                    typeof formula === "string"],
                 ["M", "copy as display maths", false,
-                    typeof formula === "string" ? "not a row" : "\\[ \\]"],
+                    typeof formula === "string" ? "not a row" : "\\[ \\]", null, null,
+                    typeof formula === "string"],
                 ["q", "copy the #q= hash"],
                 ["v", "save as SVG"],
-                [Keymap.describe(this.keymap.combinations("save").slice(0, 1)),
+                [["S", Keymap.describe(this.keymap.combinations("save").slice(0, 1))]
+                    .filter((key) => key !== "").join(" "),
                     "save, with these options"],
                 ["; ESC", "leave"],
             ]],
@@ -558,6 +561,10 @@ Layer.Export = class extends Layer {
                 case "q":
                     this.copy_hash();
                     break;
+                case "S":
+                    this.leave();
+                    this.ui.file.save();
+                    return true;
                 case "f":
                     this.ui.switch_format(Layer.Export.next_format(this.ui))
                         .then(() => this.keymap.render());

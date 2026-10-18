@@ -653,8 +653,9 @@ class Keymap {
         }
 
         // Groups of bindings replacing the main list: `[[title, [key, description, current,
-        // value, swatch, steps]]]`, or `null`, where `swatch` is a colour to show, and `steps`
-        // what the line's `−` and `+` buttons step (see `step`).
+        // value, swatch, steps, disabled]]]`, or `null`, where `swatch` is a colour to show,
+        // `steps` what the line's `−` and `+` buttons step (see `step`), and `disabled` whether
+        // the line is greyed out, as one that would do nothing now.
         let submenu_groups = null;
         // Whether clicking a line presses its key.
         const clickable = layer === null || layer.clickable;
@@ -675,10 +676,10 @@ class Keymap {
             const group = new DOM.Div({ class: "group" })
                 .add(new DOM.Element("h3").add(title))
                 .add_to(submenu);
-            for (const [key, description, current = false, value = "", swatch = null, steps = null]
-                of entries) {
+            for (const [key, description, current = false, value = "", swatch = null, steps = null,
+                disabled = false] of entries) {
                 const entry = new DOM.Div({ class: `entry${current ? " current" : ""}${
-                    clickable && key !== "" ? " clickable" : ""}` })
+                    clickable && key !== "" ? " clickable" : ""}${disabled ? " disabled" : ""}` })
                     .add(new DOM.Element("kbd").add(key))
                     .add_to(group);
                 if (swatch !== null) {
