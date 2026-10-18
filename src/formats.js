@@ -456,26 +456,34 @@ AmsCD.layout = (ui) => {
     }
 
     // The grid's columns and rows run halfway between the centres of the objects', so that a
-    // click lands on the nearest, and those at the ends reach as far beyond as the next is.
-    const bounds = (indices, centres) => {
+    // click lands on the nearest, and those at the ends reach as far beyond as the next is. A
+    // lone column or row reaches as far as a neighbour like it would be: `lone`, in pt, apart.
+    const bounds = (indices, centres, lone) => {
         const result = new Map();
         for (const [i, index] of indices.entries()) {
             const c = centres.get(index);
             const before = i > 0 ? (centres.get(indices[i - 1]) + c) / 2 : null;
             const after = i < indices.length - 1 ? (centres.get(indices[i + 1]) + c) / 2 : null;
-            const reach = before === null && after === null ? null
+            const reach = before === null && after === null ? lone(index) / 2
                 : before === null ? after - c : c - before;
-            const low = before ?? c - (reach ?? 0);
-            const high = after ?? c + (reach ?? 0);
+            const low = before ?? c - reach;
+            const high = after ?? c + reach;
             result.set(index, { size: (high - low) * px, centre: (c - low) * px });
         }
         return result;
     };
     const range = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
     const axes = new Map(range(y0, y1).map((y) => [y, baseline.get(y) - T.AXIS]));
+    // A neighbour like a lone column is beyond the shortest arrow; like a lone row, a baseline
+    // below it, or its depth, its height, and the line skip.
+    const lone_column = (x) => width.get(x) + T.ARROW + 2 * T.ENSKIP;
+    const lone_row = (y) => {
+        const { height, depth } = row(y);
+        return Math.max(T.BASELINE, height + depth + T.LINESKIP);
+    };
     return {
-        columns: bounds(range(x0, x1), centre),
-        rows: bounds(range(y0, y1), axes),
+        columns: bounds(range(x0, x1), centre, lone_column),
+        rows: bounds(range(y0, y1), axes, lone_row),
         ends,
     };
 };

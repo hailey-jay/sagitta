@@ -1159,6 +1159,32 @@ def test_amscd_is_laid_out_as_amscd_sets_it(sagitta, home):
         "rows": 40, "horizontal": 30, "vertical": 18, "fixed": True}
 
 
+def test_a_lone_amscd_row_has_a_height(sagitta, home):
+    """A row with no other row beside it is as tall as the distance to a neighbour would be (two
+    baselines apart, here), and its objects sit in its middle, rather than on its edge; likewise
+    a lone column, as wide as an object and the shortest arrow."""
+    row = "\\begin{tikzcd}\n\t0 \\arrow[r] & A \\arrow[r] & B\n\\end{tikzcd}\n"
+    script = """(async () => {
+        await ui.switch_format("amscd");
+        const pt = (px) => Math.round(px / Edge.PX_PER_PT * 100) / 100;
+        const a = ui.quiver.all_cells().find((cell) => cell.label === "A");
+        return { height: pt(ui.grid.row_height(0)),
+            middle: pt(ui.grid.cell_centre_at_position(a.position).y) };
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper", row, "row.cd.tex"), script) == {
+        "height": 20, "middle": 10}
+    column = "\\begin{tikzcd}\n\tA \\arrow[d] \\\\\n\tB\n\\end{tikzcd}\n"
+    script = """(async () => {
+        await ui.switch_format("amscd");
+        const a = ui.quiver.all_cells().find((cell) => cell.label === "A");
+        const width = ui.grid.column_width(0) / Edge.PX_PER_PT;
+        return [width > 30 + 10, Math.abs(ui.grid.cell_centre_at_position(a.position).x
+            - ui.grid.column_width(0) / 2) < 0.01];
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "column", column, "column.cd.tex"), script) == [
+        True, True]
+
+
 def test_switching_to_amscd_asks_then_converts_in_one_undoable_step(sagitta, home):
     diagram = _diagram(home / "paper", TRIANGLE.replace("\\arrow[d]", "\\arrow[d] \\arrow[dl, bend left]"))
     script = """(async () => {
