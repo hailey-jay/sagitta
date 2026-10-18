@@ -532,11 +532,10 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
             if (settings.get("export.standalone")) {
                 tikzcd = `\\documentclass[tikz]{standalone}\n\\usepackage{quiver}\n\\begin{document}\n${tikzcd}\n\\end{document}`;
             }
-            // The encoding, which `DiagramFile.load` reads back (see `src/file.js`). Prefixed
-            // with `https://q.uiver.app/`, the line is the URL that opens the diagram in quiver.
-            return `%#q=${
-                QuiverImportExport.base64.export(quiver, settings, options, definitions).data
-            }\n${tikzcd}`;
+            // The tikz-cd alone: the file holds no encoding of the diagram, which the export
+            // layer copies on its own instead (`q`), and reading the tikz-cd gives back the
+            // diagram it was written from (see `Parser`).
+            return tikzcd;
         };
 
         // Early exit for empty quivers.

@@ -1,31 +1,20 @@
 /// The checks `tests/tikzcd.js` runs, in the context it builds: the sources are already loaded,
 /// and `check`, `example`, and `make_ui` are in scope.
 
-/// A diagram loaded from the contents of a `.tikzcd` file, as `DiagramFile.load` does it: the
-/// encoded first line is trusted while it still reproduces the file's `tikzcd` environment, and
-/// otherwise the tikz-cd is parsed, so that a hand edit wins.
+/// A diagram loaded from the contents of its file, as opening it does (see `DiagramFile.read`):
+/// parsed, unless it has an encoded line, as older files do, that still reproduces its picture.
 function load(text) {
     const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
     DiagramFile.restore_sep(ui, text);
-    const encoding = text.match(/^%(?:.*#q=|\s*)([A-Za-z0-9+/=]{8,})\s*$/m);
-    let trusted = false;
-    if (encoding !== null) {
-        try {
-            QuiverImportExport.base64.import(ui, encoding[1]);
-            trusted = DiagramFile.body(ui.text()) === DiagramFile.body(text);
-        } catch (_) {
-            // Fall back on the tikz-cd, below.
-        }
-        if (!trusted) {
-            ui.reset();
-        }
-    }
-    let diagnostics = [];
-    if (!trusted) {
-        ({ diagnostics } = ui.quiver.import(ui, "tikz-cd", text, ui.settings));
-    }
-    return { ui, trusted, diagnostics };
+    return { ui, ...DiagramFile.read(ui, text) };
 }
+
+/// A file as Sagitta wrote it before 0.6.0: the encoded line, then the picture.
+const legacy = (text) => {
+    const { ui } = load(text);
+    return `%#q=${QuiverImportExport.base64.export(
+        ui.quiver, ui.settings, ui.options(), ui.definitions()).data}\n${text}`;
+};
 
 /// A diagram parsed from tikz-cd alone, with no encoded line, under `settings` if given, and with
 /// the separations the code's options give, as opening a file reads them.
@@ -53,43 +42,43 @@ const labels = (ui) => ui.quiver.all_cells().map((cell) => cell.label);
 const pending = [];
 
 {
-    // The round trip a paper depends on: the example opens from its own encoded line, and saving
-    // it writes the file back byte for byte.
+    // The round trip a paper depends on: the example is read from its picture, and saving it
+    // writes the file back byte for byte.
     const text = example("pullback.tikzcd");
-    const { ui, trusted, diagnostics } = load(text);
-    check("the example's own line is trusted", trusted, true);
+    const { ui, legacy: encoded, diagnostics } = load(text);
+    check("the example holds no encoded line", encoded, false);
     check("it has no diagnostics", diagnostics.length, 0);
     check("it reads as a square with five arrows", counts(ui), [4, 5]);
     check("and saving it writes the same bytes", ui.text(), text);
-
-    // The same diagram from its tikz-cd alone, with the line taken away.
-    const bare = text.replace(/^%.*\n/, "");
-    const parsed = parse(bare);
-    check("the picture alone reads back", counts(parsed.ui), [4, 5]);
-    check("with no diagnostics", parsed.diagnostics.length, 0);
+    check("with no encoded line", ui.text().includes("#q="), false);
     // The braces the export writes round a label that is not a single word are taken off again,
     // or every reading would add another pair.
-    check("and the same labels", labels(parsed.ui), labels(ui));
-    check("so it writes the same picture",
-        parsed.ui.text().replace(/^%.*\n/, ""), bare);
+    check("the labels come back as typed", labels(ui),
+        ["X \\times_Z Y", "Y", "X", "Z", "\\pr_2", "\\pr_1", "", "g", "f"]);
     check("but braces that close before the end are the label's own",
         ["{a}{b}", "{f'}", "{\\}}", "\\{x\\}"].map(Parser.unbrace),
         ["{a}{b}", "f'", "\\}", "\\{x\\}"]);
     check("the corner survives the parse",
-        parsed.ui.quiver.all_cells().filter((cell) => cell.is_edge())
+        ui.quiver.all_cells().filter((cell) => cell.is_edge())
             .map((edge) => edge.options.style.name).sort(),
         ["arrow", "arrow", "arrow", "arrow", "corner"]);
 
+    // An older file begins with the diagram's encoding, which is trusted while it still
+    // reproduces the picture, and saving leaves it out.
+    const old = legacy(text);
+    const reopened = load(old);
+    check("an older file's encoded line is trusted", reopened.trusted, true);
+    check("and saving it leaves the line out", reopened.ui.text(), text);
+
     // A hand edit to the picture beats the encoded line: the line still parses, but it no longer
     // reproduces the environment, so the tikz-cd is what is read.
-    const edited = text.replace('"g"', '"g\'"');
-    const hand = load(edited);
+    const hand = load(old.replace('"g"', '"g\'"'));
     check("a hand edit is not trusted", hand.trusted, false);
     check("and the edited label is the one read", labels(hand.ui).includes("g'"), true);
 
     // A line that decodes to a different diagram is also distrusted, rather than believed over
     // the picture.
-    const swapped = text.replace(/^%#q=\S+$/m, `%#q=${
+    const swapped = old.replace(/^%#q=\S+$/m, `%#q=${
         QuiverImportExport.base64.export(parse("\\begin{tikzcd}\n\tA \\\\\n\tB\n\\end{tikzcd}\n")
             .ui.quiver, new Settings(SETTINGS), {}).data}`);
     check("a line for another diagram is distrusted", load(swapped).trusted, false);
@@ -101,28 +90,28 @@ const pending = [];
     // empty cells, a dashed arrow routed round the outside, and labels that need the
     // `\coker` of `examples/macros.tex`.
     const text = example("snake-lemma.tikzcd");
-    const { ui, trusted, diagnostics } = load(text);
-    check("the snake lemma opens from its own line", trusted, true);
+    const { ui, diagnostics } = load(text);
     check("with no diagnostics", diagnostics.length, 0);
     check("as four rows of terms and the arrows between them", counts(ui), [17, 23]);
     check("and saving it writes the same bytes", ui.text(), text);
 
     // The empty cells of the figure are empty cells, not absent ones: the first row has no fifth
-    // term, and the first and last rows have no first term.
+    // term, and the first and last rows have no first term. The file starts with the empty row and
+    // column the route runs through, so the terms are a row and a column in from the corner.
     check("the corners of the figure are left out",
         ui.quiver.all_cells().filter((cell) => cell.is_vertex())
             .map((cell) => `${cell.position.x}${cell.position.y}`).sort().join(" "),
-        "01 02 10 11 12 13 20 21 22 23 30 31 32 33 41 42 43");
+        "12 13 21 22 23 24 31 32 33 34 41 42 43 44 52 53 54");
 
     // The connecting morphism is one arrow round the whole figure, dashed: up from ker c, along
     // above the kernels, down the left, and in to coker a.
     const [delta] = ui.quiver.all_cells().filter((cell) => cell.label === "\\delta");
     check("the connecting morphism runs from ker c to coker a",
         [`${delta.source.position.x}${delta.source.position.y}`,
-            `${delta.target.position.x}${delta.target.position.y}`], ["30", "13"]);
+            `${delta.target.position.x}${delta.target.position.y}`], ["41", "24"]);
     check("and is routed round the figure and dashed",
         [delta.options.route, delta.options.style.body.name],
-        [[[3, -1], [-1, -1], [-1, 3]], "dashed"]);
+        [[[4, 0], [0, 0], [0, 4]], "dashed"]);
 
     // Its tikz-cd says so too, which is what LaTeX reads.
     check("the export says as much",
@@ -151,7 +140,7 @@ const pending = [];
 {
     // The forms quiver writes, which Sagitta reads the same as its own: the full URL comment, and
     // the bare line.
-    const encoded = example("pullback.tikzcd").match(/^%#q=(\S+)$/m)[1];
+    const encoded = legacy(example("pullback.tikzcd")).match(/^%#q=(\S+)$/m)[1];
     for (const [name, line] of [
         ["quiver's URL comment", `% https://q.uiver.app/#q=${encoded}`],
         ["a bare line", `% ${encoded}`],
@@ -218,11 +207,8 @@ const pending = [];
         true);
     check("as crossing over", text.includes("\\arrow[crossing over, from=1-1, to=2-2]"), true);
     const reloaded = load(text);
-    check("its own line is trusted", reloaded.trusted, true);
-    check("and keeps it", crossing(reloaded.ui), ["AD 1", "BC 0"]);
+    check("and reading it back keeps it", crossing(reloaded.ui), ["AD 1", "BC 0"]);
     check("so saving writes the same bytes", reloaded.ui.text(), text);
-    check("and the picture alone keeps it too",
-        crossing(parse(text.replace(/^%.*\n/, "")).ui), ["AD 1", "BC 0"]);
 
     // An arrow alone at the front is brought to the front by staying there, which is no step to
     // undo, but another arrow brought forward goes above it.
@@ -259,7 +245,8 @@ const pending = [];
         + "\tA \\arrow[ddrr, crossing over] & B \\arrow[dd] & C \\arrow[ddll, crossing over] \\\\\n"
         + "\t&& \\\\\n\tD & E & F\n\\end{tikzcd}\n");
     const ranks = (ui) => Object.fromEntries(ui.quiver.all_cells().filter((cell) => cell.is_edge())
-        .map((edge) => [`${edge.source.label}${edge.target.label}`, edge.options.crossing_over]));
+        .map((edge) => [`${edge.source.label}${edge.target.label}`, edge.options.crossing_over])
+        .sort(([a], [b]) => a < b ? -1 : 1));
     check("crossing arrows rank in the order they are written", ranks(stacked.ui),
         { AF: 1, BE: 0, CD: 2 });
     const order = (ui) => (ui.text().match(/from=\d-\d, to=\d-\d/g) ?? []).join(" ");
@@ -291,10 +278,10 @@ const pending = [];
     // Exporting what the settings ask for.
     const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
     QuiverImportExport.base64.import(ui,
-        example("pullback.tikzcd").match(/^%#q=(\S+)$/m)[1]);
+        legacy(example("pullback.tikzcd")).match(/^%#q=(\S+)$/m)[1]);
     const text = () => ui.text();
 
-    check("the export is centred by default", text().startsWith("%#q="), true);
+    check("the export holds no encoded line", text().includes("#q="), false);
     check("and wrapped in \\[ \\]", text().includes("\\[\\begin{tikzcd}"), true);
 
     ui.settings.set("export.centre_diagram", false);
@@ -581,13 +568,10 @@ const pending = [];
 
     // The file keeps the route, and the picture alone gives it back.
     let text = ui.text();
-    let reloaded = load(text);
-    check("a routed arrow's own line is trusted", reloaded.trusted, true);
-    check("and keeps the route", route(reloaded.ui), "[[0,1]]");
-    check("so saving writes the same bytes", reloaded.ui.text(), text);
-    const pictured = parse(text.replace(/^%.*\n/, ""));
-    check("the picture alone reads the route back",
+    const pictured = load(text);
+    check("reading it back keeps the route",
         [route(pictured.ui), pictured.diagnostics.length], ["[[0,1]]", 0]);
+    check("so saving writes the same bytes", pictured.ui.text(), text);
     check("with the label where it was", pictured.ui.quiver.all_cells()
         .filter((cell) => cell.is_edge()).map((edge) => edge.options.label_position), [50]);
 
@@ -686,9 +670,11 @@ const pending = [];
     text = ui.text();
     check("a cell above the diagram adds a row", text.includes("\t& \\\\\n\tA & B & \\\\\n"), true);
     check("so the arrow's ends are a row lower", text.includes("from=2-1, to=3-2"), true);
+    // The file has no cells above its top row, so the diagram reads back a row lower, with the
+    // route where it was among its cells.
     check("and it reads back where it was", load(text).ui.quiver.all_cells()
         .filter((cell) => cell.is_edge()).map((edge) => edge.options.route),
-    [[[1, 0], [2, 0], [1, -1]]]);
+    [[[1, 1], [2, 1], [1, 0]]]);
 
     ui.focus_position = new Position(2, 0);
     commands.checkpoint();

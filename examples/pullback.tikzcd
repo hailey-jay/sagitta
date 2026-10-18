@@ -1,4 +1,3 @@
-%#q=WzAsNCxbMCwwLCJYIFxcdGltZXNfWiBZIl0sWzEsMCwiWSJdLFswLDEsIlgiXSxbMSwxLCJaIl0sWzAsMSwiXFxwcl8yIl0sWzAsMiwiXFxwcl8xIiwyXSxbMCwzLCIiLDAseyJzdHlsZSI6eyJuYW1lIjoiY29ybmVyIiwiYm9keSI6eyJuYW1lIjoibm9uZSJ9LCJoZWFkIjp7Im5hbWUiOiJub25lIn19fV0sWzEsMywiZyJdLFsyLDMsImYiLDJdXQ==
 \[\begin{tikzcd}
 	{X \times_Z Y} & Y \\
 	X & Z

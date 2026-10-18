@@ -5,8 +5,9 @@ Sagitta's own `electron/main.js`, opens a diagram under `tmp_path`, runs one sce
 `tests/sagitta/scenarios.js` with trusted key and mouse events, and prints the result as JSON.
 Every run also fails on any console error the page logged.
 
-The promise most worth keeping is the `.tikzcd` round trip: a paper `\\input`s these files, so
-opening and saving must not change them, and hand edits must win over the encoded first line.
+The promise most worth keeping is the round trip of a diagram's file: a paper `\\input`s these files,
+so opening and saving must not change them, and hand edits must win over the encoded first line of
+older files.
 
 HOME and XDG_CONFIG_HOME point into `tmp_path` for every run, so Sagitta's settings and its
 `macros.tex` search never see the real home directory. The headless clipboard is Chromium's
@@ -434,7 +435,9 @@ def test_the_export_layer_copies_the_hash_and_draws_an_svg(sagitta, home):
         const hash = await host.read_clipboard();
         const svg = await DiagramSVG.build(ui);
         const count = (text) => svg.split(text).length - 1;
-        return { hash: hash.startsWith("#q=") && ui.file.text().includes(`%${hash}`),
+        return { hash: hash.startsWith("#q=") && !ui.file.text().includes("#q=")
+                && hash === `#q=${QuiverImportExport.base64.export(
+                    ui.quiver, ui.settings, ui.options()).data}`,
             svg: svg.startsWith("<svg"), labels: count("<foreignObject"),
             arrows: count("<g transform="), fonts: count("@font-face") > 0 };
     })()"""
@@ -1046,55 +1049,64 @@ def test_the_manual_lists_every_named_binding(sagitta, home):
     assert [name for name in names if f"`{name}`" not in text] == []
 
 
-# ── The .tikzcd round trip ────────────────────────────────────────────────────
+# ── The round trip ────────────────────────────────────────────────────────────
 
 
 def test_hand_written_diagram_is_parsed(sagitta, home):
     diagram = _diagram(home / "paper")
     opened = sagitta("open", diagram)
     assert opened["counts"] == {"vertices": 4, "edges": 4, "selected": 0}
-    assert "(parsed)" in opened["mode_line"]
+    assert "opened square.tikzcd" in opened["mode_line"]
     assert opened["title"] == "square.tikzcd - Sagitta"
 
 
-def test_save_writes_the_encoding_and_the_tikzcd(sagitta, home):
+def test_save_writes_the_tikzcd_alone(sagitta, home):
     diagram = _diagram(home / "paper")
     sagitta("save", diagram)
     text = diagram.read_text()
-    assert text.startswith("%#q=")
+    assert text.startswith("\\[\\begin{tikzcd}")
+    assert "#q=" not in text
     assert '\\arrow["\\alpha"\', from=2-1, to=2-2]' in text
 
 
+# The encoded line older files, and quiver's, begin with.
+ENCODING = "QuiverImportExport.base64.export(ui.quiver, ui.settings, ui.options()).data"
+
+
 @pytest.mark.parametrize("marker", [
-    # quiver's own first line, and the bare form.
+    # Sagitta's own older first line, quiver's, and the bare form.
+    "%#q={}",
     "% https://q.uiver.app/#q={}",
     "% {}",
 ])
-def test_the_encoding_is_read_in_either_form(sagitta, home, marker):
+def test_an_older_encoded_line_is_read_in_any_form(sagitta, home, marker):
     diagram = _diagram(home / "paper")
     sagitta("save", diagram)
-    first, rest = diagram.read_text().split("\n", 1)
-    diagram.write_text(f"{marker.format(first[len('%#q='):])}\n{rest}")
+    encoding = sagitta("evaluate", diagram, ENCODING)
+    diagram.write_text(f"{marker.format(encoding)}\n{diagram.read_text()}")
     opened = sagitta("open", diagram)
     # The encoding was trusted: the tikz-cd was not parsed instead.
     assert "parsed" not in opened["mode_line"]
     assert opened["counts"] == {"vertices": 4, "edges": 4, "selected": 0}
+    sagitta("save", diagram)
+    assert "#q=" not in diagram.read_text() and "% " not in diagram.read_text()
 
 
 def test_opening_and_saving_changes_nothing(sagitta, home):
     diagram = _diagram(home / "paper")
     sagitta("save", diagram)
     first = diagram.read_bytes()
-    opened = sagitta("open", diagram)
-    assert "parsed" not in opened["mode_line"]
+    sagitta("open", diagram)
     sagitta("save", diagram)
     assert diagram.read_bytes() == first
 
 
-def test_hand_edits_win_over_the_encoding(sagitta, home):
+def test_hand_edits_win_over_an_older_encoding(sagitta, home):
     diagram = _diagram(home / "paper")
     sagitta("save", diagram)
-    diagram.write_text(diagram.read_text().replace('\\arrow["f", ', '\\arrow["k", '))
+    encoding = sagitta("evaluate", diagram, ENCODING)
+    diagram.write_text(f"%#q={encoding}\n" + diagram.read_text()
+                       .replace('\\arrow["f", ', '\\arrow["k", '))
     opened = sagitta("open", diagram)
     assert "edited by hand, so parsed" in opened["mode_line"]
     sagitta("save", diagram)
@@ -1126,7 +1138,7 @@ def test_save_through_a_symlink_replaces_its_target(sagitta, home):
     link.symlink_to(target)
     sagitta("save", link)
     assert link.is_symlink()
-    assert target.read_text().startswith("%#q=")
+    assert target.read_text().startswith("\\[\\begin{tikzcd}")
 
 
 # ── Layers and keys ───────────────────────────────────────────────────────────
@@ -1147,7 +1159,7 @@ def test_macros_layer_pastes_definitions(sagitta, home):
 def test_export_layer_copies_what_a_save_would_write(sagitta, home):
     diagram = _diagram(home / "paper")
     result = sagitta("export_copy", diagram)
-    assert "copied 9 lines of tikz-cd" in result["mode_line"]
+    assert "copied 8 lines of tikz-cd" in result["mode_line"]
     sagitta("save", diagram)
     assert diagram.read_text() == result["clipboard"] + "\n"
 
@@ -2164,10 +2176,10 @@ def test_the_page_keeps_its_files_to_open_offline(browser):
 
 
 def _square_link(browser):
-    """The square's encoding, as its file's `%#q=` line has it."""
+    """The square's encoding, as `q` in the export layer copies it after `#q=`."""
     return browser("""(async () => {
         await ui.file.open(host.path_of(new File([%s], "square.tikzcd")), true);
-        return ui.file.text().match(/^%%#q=(\\S+)$/m)[1];
+        return QuiverImportExport.base64.export(ui.quiver, ui.settings, ui.options()).data;
     })()""" % json.dumps(SQUARE))
 
 
