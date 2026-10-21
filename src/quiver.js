@@ -1218,8 +1218,8 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
         ui.frame = parser.frame ?? null;
         // Sagitta's axes are drawn from the frame's comment: without it, they go.
         if (parser.axes !== undefined && ui.frame === null && !parser.unread_frame) {
-            parser.log(parser.warn("Sagitta's axes are drawn from its spectral-sequence comment,"
-                + " which is not here, so they are left out.", parser.axes));
+            parser.log(parser.warn("Axes dropped: their spectral-sequence comment is missing.",
+                parser.axes));
         }
 
         this.end_import(ui, ui.quiver.all_cells());

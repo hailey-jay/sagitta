@@ -1660,18 +1660,14 @@ const pending = [];
         directive("grading=coh page=two origin=3-2 p=0..2 q=0..1"),
         directive("grading=coh page=2 origin=3-2 p=2..0 q=0..1"),
         directive("grading=coh page=2 origin=3-2 p=0..2 q=0..1 lines=1,x")], [
-        [true, ["The spectral sequence's comment is not read: page=two should be a whole number,"
-            + " as page=2."]],
-        [true, ["The spectral sequence's comment is not read: p=2..0 should be a range from low"
-            + " to high, as p=0..4."]],
-        [true, ["The spectral sequence's comment is not read: lines=1,x should be total degrees,"
-            + " as lines=2,3."]]]);
+        [true, ["Spectral sequence ignored: page=two should be a whole number."]],
+        [true, ["Spectral sequence ignored: p=2..0 should be low..high."]],
+        [true, ["Spectral sequence ignored: lines=1,x should be numbers."]]]);
     check("and its lines are kept once each, in order", parse(text.replace(/q=0\.\.1$/m,
         "q=0..1 lines=3,1,3")).ui.frame.lines, [1, 3]);
     check("axes without their comment are said to go", parse(text.split("\n")
         .filter((line) => !line.includes("% sagitta")).join("\n")).diagnostics
-        .map(({ message }) => message), ["Sagitta's axes are drawn from its spectral-sequence"
-        + " comment, which is not here, so they are left out."]);
+        .map(({ message }) => message), ["Axes dropped: their spectral-sequence comment is missing."]);
 }
 
 // The frame changes: its range grows and shrinks by its ticks, and its page and grading.

@@ -281,16 +281,16 @@ class SpectralSequence {
             throw wrong("grading", "coh, hom, or adams");
         }
         if (values.page !== undefined && !/^\d+$/.test(values.page)) {
-            throw wrong("page", "a whole number, as page=2");
+            throw wrong("page", "a whole number");
         }
         const origin = values.origin?.match(/^(-?\d+)-(-?\d+)$/);
         if (origin === null || origin === undefined) {
-            throw wrong("origin", "a row and a column, as origin=4-2");
+            throw wrong("origin", "row-column");
         }
         const range = (axis) => {
             const parts = values[axis]?.match(/^(-?\d+)\.\.(-?\d+)$/);
             if (parts === null || parts === undefined || Number(parts[1]) > Number(parts[2])) {
-                throw wrong(axis, `a range from low to high, as ${axis}=0..4`);
+                throw wrong(axis, "low..high");
             }
             return [Number(parts[1]), Number(parts[2])];
         };
@@ -299,7 +299,7 @@ class SpectralSequence {
             throw wrong("axes", "edge or none");
         }
         if (values.lines !== undefined && !/^-?\d+(,-?\d+)*$/.test(values.lines)) {
-            throw wrong("lines", "total degrees, as lines=2,3");
+            throw wrong("lines", "numbers");
         }
         return {
             grading: values.grading,

@@ -430,7 +430,7 @@ class Parser {
                 this.frame = SpectralSequence.read(comment) ?? this.frame ?? null;
             } catch (error) {
                 this.unread_frame = true;
-                this.log(this.warn(`The spectral sequence's comment is not read: ${error.message}`,
+                this.log(this.warn(`Spectral sequence ignored: ${error.message}`,
                     this.range_from(start)));
             }
             return comment;
