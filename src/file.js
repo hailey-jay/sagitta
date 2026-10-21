@@ -29,6 +29,13 @@ class DiagramFile {
         // Whether the diagram has unsaved changes, as last reported to the shell.
         this.dirty = false;
 
+        // Whether reading the file met errors, so that part of it may not be in the diagram, and
+        // writing the diagram over it would drop that part (see `save`).
+        this.unread = false;
+
+        // The line ending the file was written with, which saving keeps.
+        this.eol = "\n";
+
         // The macros file's path, or `null` if there is none.
         this.macros = null;
 
@@ -90,7 +97,8 @@ class DiagramFile {
     /// The diagram as it would be saved.
     text() {
         const ui = this.ui;
-        return `${ui.quiver.export(ui.format, ui.settings, ui.options(), ui.definitions()).data}\n`;
+        const text = `${ui.quiver.export(ui.format, ui.settings, ui.options(), ui.definitions()).data}\n`;
+        return this.eol === "\n" ? text : text.replace(/\n/g, this.eol);
     }
 
     mark_saved(text = this.text()) {
@@ -102,6 +110,10 @@ class DiagramFile {
     /// Recompute whether there are unsaved changes, telling the shell (which asks before closing)
     /// and the window title.
     update() {
+        // A preset's ghost is not part of the diagram (see `Layer.Preset`).
+        if (this.ui.keymap?.layers.preset.active) {
+            return;
+        }
         const dirty = this.text() !== this.saved;
         if (dirty !== this.dirty) {
             this.dirty = dirty;
@@ -131,6 +143,8 @@ class DiagramFile {
                     false);
             }
             this.ui.reset();
+            this.unread = false;
+            this.eol = /\r\n/.test(text ?? "") ? "\r\n" : "\n";
             DiagramFile.restore_sep(this.ui, text ?? "");
             this.mark_saved();
             if (text === null) {
@@ -152,6 +166,8 @@ class DiagramFile {
         }
         this.path = null;
         ui.reset();
+        this.unread = false;
+        this.eol = "\n";
         DiagramFile.restore_sep(ui, "");
         this.mark_saved();
         try {
@@ -171,6 +187,8 @@ class DiagramFile {
         }
         this.path = null;
         this.ui.reset();
+        this.unread = false;
+        this.eol = "\n";
         DiagramFile.restore_sep(this.ui, "");
         this.mark_saved();
         this.ui.mode_line.flash("new diagram");
@@ -181,6 +199,9 @@ class DiagramFile {
     load(text) {
         const ui = this.ui;
         const { legacy, trusted, diagnostics } = DiagramFile.read(ui, text);
+        // An empty file has nothing to lose.
+        this.unread = text.trim() !== ""
+            && diagnostics.some((diagnostic) => diagnostic instanceof Parser.Error);
         this.mark_saved();
         if (trusted) {
             ui.mode_line.flash(`opened ${this.name()}${this.describe_macros()}`);
@@ -228,11 +249,26 @@ class DiagramFile {
     /// Save the diagram to `path`, or to its own path, asking for one if it has none. Returns
     /// whether the diagram was saved.
     async save(path = this.path, review = false) {
+        // A preset's ghost is not part of the diagram (see `Layer.Preset`).
+        const preset = this.ui.keymap?.layers.preset;
+        if (preset?.active) {
+            preset.leave();
+        }
         // A new file is the export, so the options it is written with are shown first (see
         // `Layer.Export.review`), unless they are being shown already.
         const exporting = this.ui.keymap.layers.export;
         if (review && path === null && !exporting.active) {
             exporting.review();
+            return false;
+        }
+        // A label whose braces do not balance stops TeX, and the file could not be read back.
+        const ui = this.ui;
+        const unbalanced = ui.quiver.all_cells().filter((cell) => !Delimiters.balanced(cell.label));
+        if (unbalanced.length > 0) {
+            ui.deselect();
+            ui.select(...unbalanced);
+            UI.display_error(`Not saved: unbalanced braces in ${
+                unbalanced.map((cell) => cell.label).join(", ")}.`);
             return false;
         }
         try {
@@ -244,8 +280,14 @@ class DiagramFile {
             if (path === null) {
                 return false;
             }
+            // Writing over a file that could not all be read drops what was not.
+            if (this.unread && path === this.path && !await host.confirm(`Part of ${this.name()
+            } could not be read (see the problems listed when it opened), and saving would leave it out of the file. Save anyway?`)) {
+                return false;
+            }
             const text = this.text();
             await host.write(path, text);
+            this.unread = false;
             const moved = DiagramFile.dirname(path) !== this.directory();
             this.path = path;
             this.base = this.directory();

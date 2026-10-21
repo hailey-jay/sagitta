@@ -267,6 +267,7 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
         // The format the diagram is written in, which nothing here lays out (see `UI.format`).
         format: "tikz-cd",
         amscd_ends: new Map(),
+        frame: null,
         // The separations `DiagramFile.SEPS` calls normal, which a diagram keeps unless its file
         // says otherwise.
         present: 0,
@@ -286,7 +287,7 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
         // The element every cell is added to, which stands in for the canvas.
         canvas: new DOM.Div({ class: "canvas" }),
 
-        options: () => ({ dimensions: [0, 0], sep: ui.sep }),
+        options: () => ({ dimensions: [0, 0], sep: ui.sep, frame: ui.frame }),
         definitions: () => ({ macros: ui.macros, colours: ui.colours }),
 
         /// As `UI.add_cell`, without the colour picker or the codes.
@@ -359,6 +360,11 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
                 removed.element.remove();
             }
         },
+        remove_cells: (cells, when) => {
+            for (const cell of cells) {
+                ui.remove_cell(cell, when);
+            }
+        },
 
         /// The text the diagram would be saved as, as `DiagramFile.text` writes it.
         text: () => `${
@@ -371,6 +377,7 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
             ui.positions.clear();
             ui.selection.clear();
             ui.format = "tikz-cd";
+            ui.frame = null;
         },
     };
     return ui;

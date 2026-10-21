@@ -421,8 +421,18 @@ class Parser {
 
     parse_comment() {
         if (/^%/.test(this.code)) {
+            const start = this.position;
             const comment = this.code.match(/^%(.*)/)[1];
             this.code = this.code.replace(/^%(.*)/, "");
+            // A spectral sequence's frame, which Sagitta keeps in a comment (see
+            // `SpectralSequence`). One that cannot be read is said so, and left out.
+            try {
+                this.frame = SpectralSequence.read(comment) ?? this.frame ?? null;
+            } catch (error) {
+                this.unread_frame = true;
+                this.log(this.warn(`The spectral sequence's comment is not read: ${error.message}`,
+                    this.range_from(start)));
+            }
             return comment;
         }
         return null;
@@ -504,6 +514,26 @@ class Parser {
         }
         if (this.eat("cramped")) {
             // We simply ignore this option.
+            return;
+        }
+        // The axes of a spectral sequence, which the export writes afresh from the frame kept
+        // in a comment (see `SpectralSequence`). Its braces hold commas, so it is read whole.
+        if (/^execute at end picture\s*=\s*\{/.test(this.code)) {
+            const start = this.position;
+            const open = this.code.indexOf("{");
+            const close = Index.closing(this.code, open);
+            if (close === -1) {
+                throw this.error("Unexpected end of diagram options.");
+            }
+            const body = this.code.slice(open + 1, close);
+            this.code = this.code.slice(close + 1);
+            if (!body.startsWith("\\coordinate (sagitta-corner)")) {
+                throw this.warn(["Unknown diagram option: ", new DOM.Code("execute at end picture"),
+                    "; only Sagitta's axes are read."], this.range_from(start));
+            }
+            // Drawn afresh from the frame, so an edit here is not kept, and without the frame's
+            // comment, they are not drawn at all (see `parse_diagram`).
+            this.axes = this.range_from(start);
             return;
         }
 
@@ -768,7 +798,23 @@ class Parser {
         }
         // Parse label.
         if (this.eat("\"")) {
-            const label = this.eat(/[^"]*/);
+            // The label runs to the next quote outside braces: as TikZ's quotes read it, braces
+            // hold a quote, as in `"{\text{"}}"`.
+            let end = 0;
+            for (let depth = 0; end < this.code.length; ++end) {
+                const c = this.code[end];
+                if (c === "\\") {
+                    ++end;
+                } else if (c === "{") {
+                    ++depth;
+                } else if (c === "}") {
+                    --depth;
+                } else if (c === "\"" && depth <= 0) {
+                    break;
+                }
+            }
+            const label = this.code.slice(0, end);
+            this.code = this.code.slice(end);
             this.eat("\"", true);
             edge.label = Parser.unarray(Parser.unbrace(label));
             while (this.eat("'")) {

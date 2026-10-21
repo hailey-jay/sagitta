@@ -20,7 +20,10 @@ A diagram's file is its export verbatim, so LaTeX can `\input` it, and opening i
 A new diagram is saved as `diagram.cd.tex`, which a paper inputs as `\input{diagram.cd}` or `\input{diagram.cd.tex}`.
 Files named `.tikzcd`, as earlier versions saved them, open and save as before, under their own names.
 
-Opening and saving an unchanged file leaves it byte-for-byte the same.
+Opening and saving an unchanged file leaves it byte-for-byte the same, Windows line endings (CRLF) included.
+Where part of a file could not be read, the problems are listed on opening, and saving over it asks first, since what was not read would be left out.
+A label whose braces do not balance stops TeX, so saving refuses while there is one, and selects it.
+A `%` in a label is the sign, `\%`: typing `%` types `\%`, and a bare one is drawn and written so.
 
 Files written before 0.6.0, and quiver's, begin with a line encoding the diagram: `%#q=...`, or quiver's `% https://q.uiver.app/#q=...`.
 Opening such a file trusts the line while it still reproduces the `tikzcd` environment; otherwise, the tikz-cd is read, so hand edits win.
@@ -162,7 +165,7 @@ The names and their defaults:
 | `reverse`, `flip`, `flip-labels` | `; r` `C-r`, `; f`, none |
 | `search` | `C-f` (and `/`, which cannot be rebound) |
 | `flip-hor`, `flip-ver`, `rotate` | none |
-| `centre-view`, `hide-grid` | `; z`, `; #` |
+| `centre-view`, `go-home`, `hide-grid` | `; z`, `; g`, `; #` |
 | `zoom-out`, `zoom-in`, `reset-zoom` | `C--`, `C-=`, `C-0` |
 | `dark-mode`, `hide-mode-line`, `shortcuts`, `settings` | none, `C-\`, `C-/` `<f1>`, `C-,` |
 | `level`, `curve`, `offset`, `radius`, `length`, `position` | `; n`, `; b` (on loops alone, the radius; on routes alone, the rounding), `; o`, none, `; l`, `; P` |
@@ -170,6 +173,7 @@ The names and their defaults:
 | `arrow`, `adjunction`, `corner` | `; a`, `; j`, `; p` |
 | `align`, then `l`, `r`, `c`, or `o` for left, right, centre, or over | `; A` |
 | `insert`, then `↑`, `↓`, `←`, or `→` for a row above or below, or a column left or right | `; i` |
+| `differential`, of a spectral sequence's page (see Spectral sequences) | `; D` |
 | `align-left`, `align-centre`, `align-over` | none |
 | `plain`, `equals`, `inclusion`, `mono`, `epi` | `; !`, `; =`, `; (`, `; <`, `; >` |
 | `maps-to`, `dashed`, `dotted`, `squiggly` | `; \|`, `; -`, none, `; ~` |
@@ -180,6 +184,8 @@ The names and their defaults:
 | `colour`, `label-colour` | `; c`, `; C` |
 | `select-at-focus`, `toggle-selection`, `create-arrows` | none (`S-SPC` does it), `; s`, `; e` |
 | `change-source`, `change-target` | `; ,`, `; .` |
+
+`go-home` (`:home`) moves the focus point to the diagram's first object, the top row's leftmost, or to `(0,0)` in an empty diagram, and centres the view there.
 
 A browser keeps `C-n` for a new window, so there `:new` starts a new diagram.
 
@@ -245,6 +251,69 @@ One undo closes the gap.
 A gap with nothing at or beyond it is refused, rather than doing nothing quietly.
 
 A connecting morphism is one arrow: curved (`; b`, and `; -` for dashed), or routed round the diagram (see Routes), as `examples/snake-lemma.cd.tex` draws $\delta$.
+
+## Presets
+
+A preset stamps a ready-made diagram at the focus point: a chain complex, or an exact sequence.
+What it stamps is ordinary cells, selected, as one step to undo; nothing remembers the preset afterwards.
+Its cells are queued for labelling, as cells just drawn are: Tab goes to the first of them, and on through the rest in the order the diagram reads, each object followed by the arrows from it, each leaving the queue once labelled.
+
+| Command | Stamps |
+|---|---|
+| `:chain-complex N` (`:cc`) | `\cdots → C_2 → C_1 → C_0 → \cdots`, with `\partial_n` on the arrows |
+| `:exact-sequence N` (`:es`) | `0 → A_1 → A_2 → A_3 → 0` |
+| `:short-exact-sequence` (`:ses`) | `0 → A ↪ B ↠ C → 0` |
+| `:long-exact-sequence N` (`:les`) | `H_n(A) → H_n(B) → H_n(C)`, a row for each `n`, `\delta` routed from each row to the next |
+| `:triangle` (`:tri`) | `X → Y → Z`, with `Z → X` marked `+1`; `row` for `X → Y → Z → X[1]` |
+| `:spectral-sequence` (`:ss`) | a page of a spectral sequence, with ticks and axes (see Spectral sequences) |
+
+Each opens its setup layer, which draws a ghost of what it would stamp, laid out as the diagram's format lays it out.
+The arrow keys move the focus point, and the ghost with it; RET stamps it; ESC or `;` leaves without stamping.
+Each option is on a key, listed in the layer: a number steps up with its key and down with the capital, a choice steps through its values, and a flag turns on and off.
+`:` opens the command line on the options so far, for those that are text, and RET there opens the layer again.
+Where the ghost would land on cells already there, or the format cannot draw it (in amscd, a routed or stretched arrow), there is no ghost, the cells in the way are outlined in red, and the layer says why, naming the options amscd can draw (as `wrap=0`). In amscd, an option already at the one value amscd can draw, whose keys could only step away from it, is dimmed.
+Tab after an option's `=` offers its values, and some likely ones for text, as `obj=\bullet`.
+
+The options, as `key=value` after the command, quoted (`obj="H_#(X; Y)"`) where they hold a space or `;`:
+
+- `N`, first: how many terms, not counting the `0` or `\cdots` at the ends.
+- `dir`: which way the arrows point, `r`, `d`, `l`, or `u`.
+- `type`: `chain`, whose indices fall along it (`C_n → C_{n-1}`, with `\partial_n`), or `cochain`, whose indices rise (`C^n → C^{n+1}`, with `d^n`).
+- `from`: where the indices end (chain) or start (cochain); `at=n` centres them on a symbol instead, as `C_{n+1}, C_n, C_{n-1}`, and `at=n+1` or `at=2k` on a symbol with a number or a multiple.
+- `bounded`: `none`, `start`, `end`, or `both`: `0` at a bounded end, `\cdots` at the other (`\vdots` going up or down).
+- `obj` and `d` (`maps` for `:ses`): the labels, as templates. `#` is the index, `#{#-1}` arithmetic on it (`+`, `-`, `*`, brackets), and after `_` or `^` an index longer than a character is braced. A comma list cycles, keeping one index for each cycle through it, as the long exact sequence does; commas inside brackets do not split. `\#` is TeX's own `#`. `d=none` leaves the arrows unlabelled.
+- `aug`: an augmentation `\varepsilon` onto `aug` and then `0` where the indices start, as `:cc obj=P_# aug=M` gives `\cdots → P_1 → P_0 → M → 0`; a cochain complex starts `0 → M → I^0`.
+- `step`: cells between terms. `wrap`: terms a row, the next row two cells on, with the arrow between rows routed through the row between.
+- `:ses` takes `plain` for plain arrows, and `split` for a dashed section `s` back from `C` to `B`, curving over the epi, or under it with `under`; `:les` takes `cohom` for `H^n`, with the indices rising.
+
+Two commands carry on from what is there:
+
+- `:continue` (`:cont`) adds the next term after each selected cell at the end of a sequence (a cell with one arrow), along that arrow, with the indices stepped as they step along it: from `C_2 → C_1`, it adds `C_1 → C_0`, the arrow drawn and labelled as the last, `\partial_2` stepping to `\partial_1`. Where the labels do not step so, the new cell is empty, for Tab. Where two selected ends would go on to the same cell, it refuses.
+- `:reindex K` moves every index of the selected labels by `K`: `C_{n+1}` to `C_{n+2}` for `K = 1`. An index is a subscript or superscript that is a number, a lower-case letter, or a multiple of one plus a number; anything else, as `X_\alpha` or `\Omega^n_X`, is left alone, as is one inside brackets (the `2` of `H^n(X;\mathbb{Z}_2)`, the `0` of `\pi_n(X,x_0)`) or a letter a script binds (the `i` of `\sum_{i=1}^n x_i`).
+
+## Spectral sequences
+
+`:spectral-sequence` (`:ss`) stamps a page at the focus point, which takes its top-left entry: a column of ticks for `q` on its left, a row of ticks for `p` below it, and axes between the ticks and the entries.
+Its options, after the command, or on keys in its setup layer:
+
+- `quadrant`: `1`, `2`, `3`, `4`, `half` (`p ≥ 0`), or `plane`, which give the ranges unless `p` and `q` do.
+- `p` and `q`: the ranges, as `p=0..4`; in the layer, `p` and `q` reach a step further, and `P` and `Q` a step less.
+- `page`: the page `r`, written as `#` in the entries.
+- `grading`: `coh` (`E_r^{p,q}`), `hom` (`E^r_{p,q}`), or `adams` (`t-s` across, `s` up).
+- `obj`: the entries, as a template with `#p` and `#q` for the bidegree, as `obj="E_#^{#p,#q}"`; without it, there are none, and the cells are made as they are typed or reached.
+- `axes`: `edge`, or `none`.
+
+The page leaves a frame behind, which the file keeps in a comment inside the environment, as `% sagitta: spectral-sequence grading=coh page=2 origin=4-2 p=0..4 q=0..3`:
+
+- The mode line follows the file's name with the page and grading, as `[E_2 coh]`, and reads a cell's bidegree beside its position, as `(p,q)=(2,1)`, inside the ranges; with nothing selected, it reads the focus point's there, as `focus  (p,q)=(2,1)`.
+- `; D`, or `:differential` (`:d`), draws the page's differential from each selected entry (inside the ranges: not the ticks), as Space draws an arrow: to the entry it reaches, made as `\bullet` if there is none, in the arrow preset, the targets selected with the arrows and queued for labels, and the focus point on the target, so that `D` again goes on from there. `:d r` draws `d_r` for another page, `label` writes `d_r` on the arrows, and `all` draws every `d_r` between entries already in the ranges, whatever is selected, making none and drawing none twice. `d_r` goes right `r` and down `r-1` cohomologically, left `r` and up `r-1` homologically, and left 1 and up `r` in an Adams chart. The key list shows `D` only while there is a spectral sequence. Clear takes the frame and axes with the cells, in one undo step.
+- `:frame` shows the frame in a layer, with keys that change it, each a step to undo: `g` the grading, `r` and `R` the page, `a` the axes, `p`, `P`, `q`, and `Q` how far each range reaches, adding or taking away its last tick and moving the axis's name, and `x`, `X`, `y`, and `Y` where each range starts, the other axis's ticks moving with it (onto the lowest entries only where those are empty); the entries are left as they are.
+- The axes run from the corner between the ticks and the entries to a little past the last tick on each, drawn from the tick nodes in TikZ (`execute at end picture`, with `calc`, which `quiver.sty` loads) and by the same rule on the canvas; deleting a tick at either end of a range drops them.
+- `:diagonal n` (`:diag n`) selects the entries of total degree `n`, those with `p+q = n` in the ranges; `:diagonal n line` also draws that diagonal dashed through them, a little past each end (or takes it away, if it is drawn), kept in the frame as `lines=n` and drawn in TikZ beside the axes.
+- The frame moves with its ticks, by the arrow keys, by dragging, or by opening a column or row before the page; opening one inside the page (or between its ticks and its entries) is refused, as are flipping and rotating it. Deleting the last cells takes the frame, as Clear does.
+- A diagram keeps one spectral sequence, so a second `:ss` in it is refused: put the next page in a diagram of its own.
+- A comment Sagitta cannot read (as `page=two`) is listed among the problems on opening, and left out; so are the axes, without their comment. An edit by hand inside Sagitta's `execute at end picture` is not kept: the axes are written afresh from the frame.
+- amscd has no axes: switching to it drops the frame, after asking, and leaves the entries and ticks.
 
 ## The canvas
 

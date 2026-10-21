@@ -125,13 +125,19 @@ class Keys {
     /// The queued cell Tab goes to next (going backwards when `sign` is -1): the first in the queue
     /// after any selected cell (queued or not), or `null` if no other cell is queued. Of the cell
     /// and arrows Space leaves selected, the cell is the one Tab goes on from, as RET labels it
-    /// (see `Keymap.drawn_to`).
+    /// (see `Keymap.drawn_to`). A selection of several cells, all queued, as a preset leaves (see
+    /// `Presets.stamp`), is where Tab goes, rather than what it goes on from.
     next_queued(sign = 1) {
         const ui = this.ui;
-        const drawn = Keymap.drawn_to(ui.selection);
-        const current = drawn !== null ? new Set([drawn]) : ui.selection;
         const queued = (cell) => cell.element.query_selector("kbd.queue") !== null;
+        const drawn = Keymap.drawn_to(ui.selection);
         const cells = Array.from(ui.codes.values());
+        // A selection all queued, as a stamp leaves, starts with its own first cell (or last).
+        if (drawn === null && ui.selection.size > 1 && Array.from(ui.selection).every(queued)) {
+            const selected = cells.filter((cell) => ui.selection.has(cell));
+            return sign > 0 ? selected[0] : selected[selected.length - 1];
+        }
+        const current = drawn !== null ? new Set([drawn]) : ui.selection;
         const waiting = cells.filter((cell) => !current.has(cell) && queued(cell));
         if (waiting.length === 0) {
             return null;
@@ -744,11 +750,11 @@ class Keys {
     cut() {
         const ui = this.ui;
         if (ui.in_mode(UIMode.Default, UIMode.Pan) && !ui.input_is_active()) {
-            // The binding copies first (see `Bindings.HANDLERS`).
-            ui.history.add(ui, [{
-                kind: "delete",
-                cells: ui.quiver.transitive_dependencies(ui.selection),
-            }], true);
+            // The binding copies first (see `Bindings.HANDLERS`). Cutting the last cells takes a
+            // spectral sequence's frame too, as Clear does.
+            const cells = ui.quiver.transitive_dependencies(ui.selection);
+            ui.history.add(ui, [{ kind: "delete", cells },
+                ...SpectralSequence.deleting(ui, cells)], true);
             ui.update_selection();
         }
     }

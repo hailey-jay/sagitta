@@ -93,6 +93,8 @@ class History {
             case "connect":
             case "format":
                 return action.from !== action.to;
+            case "frame":
+                return !same(action.from, action.to);
             case "move":
                 return action.displacements.some(({ from, to }) => !same(from, to))
                     || (action.routes ?? []).length > 0;
@@ -271,9 +273,7 @@ class History {
                     update_selection = true;
                     break;
                 case "delete":
-                    for (const cell of action.cells) {
-                        ui.remove_cell(cell, this.present);
-                    }
+                    ui.remove_cells(action.cells, this.present);
                     update_selection = true;
                     break;
                 case "label":
@@ -429,6 +429,10 @@ class History {
                     // The format lays the grid out afresh (see `UI.format`).
                     ui.format = action[to];
                     break;
+                case "frame":
+                    // A spectral sequence's frame (see `SpectralSequence`).
+                    ui.frame = action[to];
+                    break;
             }
             for (const cell of ui.quiver.transitive_dependencies(cells)) {
                 cell.render(ui);
@@ -445,6 +449,10 @@ class History {
         }
         if (update_colours) {
             ui.colour_picker.update_diagram_colours(ui);
+        }
+        // A spectral sequence's axes go with its frame and its ticks, which any step may change.
+        if (typeof SpectralSequence !== "undefined") {
+            SpectralSequence.draw(ui);
         }
         // Though we have already brought the selection in sync if `update_selection`, `undo`
         // and `redo` may want to do so again, if they change which cells are

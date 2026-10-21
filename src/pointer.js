@@ -103,12 +103,15 @@ class Pointer {
             // The routes have already moved with the drag, so the move back says where they were.
             const back = displacements
                 .map(({ vertex, from, to }) => ({ vertex, from: to, to: from }));
+            // A spectral sequence's frame moves with its ticks (see `SpectralSequence.follow`).
+            const frame = SpectralSequence.follow(ui, displacements) ?? [];
+            ui.history.effect(ui, frame, false);
             ui.history.add(ui, [{
                 kind: "move",
                 displacements,
                 routes: ui.quiver.moved_routes(back)
                     .map(({ edge, from, to }) => ({ edge, from: to, to: from })),
-            }]);
+            }, ...frame]);
         }
     }
 

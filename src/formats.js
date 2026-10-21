@@ -49,7 +49,9 @@ class Formats {
 /// `problems` (see `Formats.problems`) briefly, each with how many cells it holds, as
 /// `curves (2) and loops (1)`.
 Formats.describe = (problems) => {
-    const parts = problems.map(([description, cells]) => `${description} (${cells.length})`);
+    // What is not a cell, as a spectral sequence's axes, is not counted.
+    const parts = problems.map(([description, cells]) => cells.length === 0 ? description
+        : `${description} (${cells.length})`);
     return parts.length < 3 ? parts.join(" and ")
         : `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
 };
@@ -232,6 +234,7 @@ class AmsCD {
     /// The label `label` as an argument of an amscd arrow ending at `delimiter`, braced unless it
     /// is a single word that holds no delimiter.
     static argument(label, delimiter) {
+        label = Delimiters.percent(label);
         return /^[a-zA-Z0-9]*$/.test(label) && !label.includes(delimiter) ? label : `{${label}}`;
     }
 }
@@ -594,6 +597,8 @@ QuiverImportExport.amscd = new class extends QuiverImportExport {
 /// An object's label as a cell of a `CD` environment: braced unless it is a single word, and set
 /// in a table if it has several lines, as tikz-cd's are.
 AmsCD.object = (label) => {
+    // A bare `%` would comment out the rest of the line (see `Delimiters.percent`).
+    label = Delimiters.percent(label);
     if (label.includes("\\\\")) {
         return `{\\begin{array}{c} ${label} \\end{array}}`;
     }
@@ -851,7 +856,7 @@ class InlineMaths {
             if (vertex.label_colour.is_not_black()) {
                 dropped.add("colours");
             }
-            parts.push(vertex.label);
+            parts.push(Delimiters.percent(vertex.label));
             if (i === vertices.length - 1) {
                 break;
             }
@@ -933,6 +938,7 @@ class InlineMaths {
         // Left of an arrow going right is above it; going left, below it.
         const above = (edge.options.label_alignment === "right") !== right
             || ["centre", "over"].includes(edge.options.label_alignment);
-        return above ? `${symbol}{${edge.label}}` : `${symbol}[${edge.label}]{}`;
+        const label = Delimiters.percent(edge.label);
+        return above ? `${symbol}{${label}}` : `${symbol}[${label}]{}`;
     }
 }

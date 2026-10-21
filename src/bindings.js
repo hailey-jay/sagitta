@@ -266,6 +266,8 @@ Bindings.DEFAULTS = {
     "flip-ver": [],
     "rotate": [],
     "centre-view": ["; z"],
+    // The focus point to the diagram's first object, and the view to it.
+    "go-home": ["; g"],
     "zoom-out": ["C--"],
     "zoom-in": ["C-="],
     "reset-zoom": ["C-0"],
@@ -307,6 +309,9 @@ Bindings.DEFAULTS = {
 
     // A gap for a row or a column at the focus point, chosen from a list as the styles are.
     "insert": ["; i"],
+    // The differential of a spectral sequence's page from the selected entries (see
+    // `SpectralSequence.differential`).
+    "differential": ["; D"],
 
     // Presets (see `Commands.PRESETS`).
     "plain": ["; !"],
