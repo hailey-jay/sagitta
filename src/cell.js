@@ -32,9 +32,10 @@ class Cell {
 
         const content_element = this.content_element;
 
-        // Set the label colour.
+        // Set the label colour. An edge added among others has no label until it is drawn,
+        // which sets it then (see `Edge.render`).
         if (this.label_colour.is_not_black()) {
-            this.element.query_selector(".label").set_style({
+            this.element.query_selector(".label")?.set_style({
                 color: this.label_colour.css(),
             });
         }
@@ -1220,6 +1221,11 @@ class Edge extends Cell {
         // We override the source and target whilst drawing, so we need to reset them.
         this.arrow.source = this.source.shape;
         this.arrow.target = this.target.shape;
+
+        // The label may have been made just now, as for an edge added among others.
+        if (this.label_colour.is_not_black()) {
+            this.element.query_selector(".label")?.set_style({ color: this.label_colour.css() });
+        }
     }
 
     /// Size the label's node round its box (`tex`, see `UI.size_labels`), as the diagram's format

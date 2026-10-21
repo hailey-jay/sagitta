@@ -43,6 +43,9 @@
 
     /* The height of the mode line along the bottom of the window (0 when it is hidden). */
     --mode-line-height: 24px;
+    /* The height of the error on its line above the mode line (0 while there is none), which
+       what opens above the mode line sits above (see `ModeLine.place_message`). */
+    --message-height: 0px;
 }
 
 /* Dark mode (`:dark-mode`): a grey canvas, with the default colour drawn in white. It changes only how
@@ -247,9 +250,8 @@ line. It is only visible while focused. */
 .label-input-container {
     position: fixed;
     left: 0; right: 0;
-    bottom: var(--mode-line-height);
+    bottom: calc(var(--mode-line-height) + var(--message-height));
     height: 32px;
-    /* Above the mode line's error, so the completions cover it rather than it them. */
     z-index: 151;
 
     background: var(--ui-black);
@@ -785,11 +787,8 @@ button.flash {
     cursor: pointer;
 }
 
-/* The minibuffer (the label input, and the prompts) takes the line above the mode line while it is
-   open, so an error moves up above it, under the list of completions. */
-body:has(.label-input-container:focus-within:not(.hidden)) .mode-line .message.error {
-    bottom: calc(100% + 32px);
-}
+/* What opens above the mode line (the key list, the minibuffer and its completions) sits above an
+   error, which pushes it up, rather than either covering the other (see `ModeLine.place_message`). */
 
 .mode-line .message:empty {
     display: none;
@@ -876,7 +875,7 @@ body:has(.label-input-container:focus-within:not(.hidden)) .mode-line .message.e
 .which-key {
     position: fixed;
     left: 0; right: 0;
-    bottom: var(--mode-line-height);
+    bottom: calc(var(--mode-line-height) + var(--message-height));
     z-index: 140;
     padding: 12px 16px;
 
@@ -978,6 +977,19 @@ body:has(.label-input-container:focus-within:not(.hidden)) .mode-line .message.e
     display: none;
 }
 
+/* A line said at length, as a problem, across the group, wrapping rather than cut short. */
+.which-key .entry.wide {
+    grid-column: 1 / -1;
+}
+.which-key .entry.wide span {
+    overflow: visible;
+
+    white-space: normal;
+}
+.which-key .entry.wide .value {
+    flex: 1;
+}
+
 /* The current value of what a binding changes, or the current option. */
 .which-key .entry .value {
     flex: none;
@@ -1047,6 +1059,10 @@ body:has(.label-input-container:focus-within:not(.hidden)) .mode-line .message.e
     display: none;
 }
 
+.which-key.no-frame .needs-frame {
+    display: none;
+}
+
 .which-key.no-selection .needs-selection {
     opacity: var(--ui-disabled);
 }
@@ -1054,6 +1070,38 @@ body:has(.label-input-container:focus-within:not(.hidden)) .mode-line .message.e
 /* What amscd cannot draw, while the diagram is in amscd. */
 .which-key.amscd .not-amscd {
     opacity: var(--ui-disabled);
+}
+
+/* The axes of a spectral sequence (see `SpectralSequence.draw`). */
+svg.frame-axes {
+    position: absolute;
+    overflow: visible;
+
+    pointer-events: none;
+}
+svg.frame-axes polyline,
+svg.frame-axes line {
+    stroke: var(--ink);
+}
+/* What is pressed on, in place of the thin line it lies under. */
+svg.frame-axes .hit {
+    stroke: transparent;
+
+    pointer-events: stroke;
+}
+
+/* The cells a preset's stamp would land on, which keep it from landing (see `Layer.Preset`). */
+.vertex.in-the-way .content {
+    outline: 2px solid var(--ui-error);
+
+    color: var(--ui-error);
+}
+
+/* A preset's ghost: what RET in its setup layer would stamp (see `Layer.Preset`). */
+.cell.ghost {
+    opacity: 0.4;
+
+    pointer-events: none;
 }
 
 /* A layer's line that would do nothing now (e.g. copying maths when the diagram is not a row). */
@@ -1071,7 +1119,8 @@ body:has(.label-input-container:focus-within:not(.hidden)) .mode-line .message.e
 }
 
 /* After the layout above, which would otherwise override it. */
-.which-key.compact.no-edge .main .needs-edge {
+.which-key.compact.no-edge .main .needs-edge,
+.which-key.compact.no-frame .main .needs-frame {
     display: none;
 }
 

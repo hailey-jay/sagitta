@@ -120,9 +120,19 @@ class UI {
         this._format = "tikz-cd";
         this.amscd_ends = new Map();
 
+        // The frame of a spectral sequence, if the diagram has one (see `SpectralSequence`).
+        this.frame = null;
+
+        // Whether the view stays where it is as columns and rows resize, rather than moving to
+        // keep what is in it centred: while a preset's ghost is redrawn on every key press (see
+        // `Layer.Preset`), those moves would not cancel out, and would carry the view away.
+        this.pinned_view = false;
+
         // How many batches of cells are being added together, and the edges among them not yet
         // drawn (see `add_cells`).
         this.adding = 0;
+        // The vertices added while `adding`, to be measured once they all are.
+        this.added_vertices = [];
         this.unrendered = new Set();
 
         // Whether the diagram has been laid out since it was opened or emptied, after which a
@@ -167,6 +177,11 @@ class UI {
             return false;
         }
         const problems = Formats.problems(format, this.quiver);
+        // Only tikz-cd draws a spectral sequence's axes; its entries and ticks stay.
+        const frame = format !== "tikz-cd" && this.frame !== null;
+        if (frame) {
+            problems.push(["the axes of a spectral sequence", []]);
+        }
         if (problems.length > 0) {
             const selection = Array.from(this.selection);
             this.deselect();
@@ -181,6 +196,11 @@ class UI {
         }
         const since = this.history.present;
         const actions = format === "amscd" ? AmsCD.convert(this) : [];
+        if (frame) {
+            const dropped = { kind: "frame", from: this.frame, to: null };
+            this.history.effect(this, [dropped], false);
+            actions.push(dropped);
+        }
         const switched = { kind: "format", from: this.format, to: format };
         this.format = format;
         this.history.add(this, [...actions, switched]);
@@ -325,6 +345,17 @@ class UI {
             }[event.inputType];
             if (ui.in_mode(UIMode.Command) || data === undefined) {
                 return;
+            }
+            // A `%` is typed as the sign, `\%`, since a comment means nothing in a label (see
+            // `Delimiters.percent`), unless it finishes `\%`.
+            if (data === "%") {
+                const before = input.value.slice(0, input.selectionStart);
+                if ((before.match(/\\*$/)[0].length % 2) === 0) {
+                    event.preventDefault();
+                    input.setRangeText("\\%", input.selectionStart, input.selectionEnd, "end");
+                    input.dispatchEvent(new Event("input"));
+                    return;
+                }
             }
             const typed = Delimiters.type(
                 input.value, input.selectionStart, input.selectionEnd, data);
@@ -476,7 +507,7 @@ class UI {
             }
             // Currently all errors are disabled, so we don't wrap this in a try-catch block.
             katex.render(
-                cell.label.replace(/\$/g, "\\$"),
+                Delimiters.percent(cell.label).replace(/\$/g, "\\$"),
                 label.element,
                 {
                     throwOnError: false,
@@ -768,6 +799,7 @@ class UI {
         this._format = "tikz-cd";
         this.grid.fixed = null;
         this.amscd_ends = new Map();
+        this.frame = null;
         this.update_extent();
     }
 
@@ -783,6 +815,7 @@ class UI {
         return {
             dimensions: this.diagram_size(),
             sep: this.sep,
+            frame: this.frame,
         };
     }
 
@@ -1130,7 +1163,7 @@ class UI {
         }));
 
         // First, we reposition the grid and redraw it.
-        this.pan_view(view_offset);
+        this.pan_view(this.pinned_view ? Offset.zero() : view_offset);
         // Then, we rerender the cells that have moved, which `transitive_dependencies` orders so
         // that the cells on which others depend are rendered first.
         for (const cell of moved) {
@@ -1190,11 +1223,12 @@ class UI {
                     UI.display_error(`${this.format} has no ${refused}.`);
                     return 0;
                 }
+                // A spectral sequence's frame moves with its ticks (see `SpectralSequence.follow`).
                 this.history.add(this, [{
                     kind: "move",
                     displacements,
                     routes: this.quiver.moved_routes(displacements),
-                }], true);
+                }, ...(SpectralSequence.follow(this, displacements) ?? [])], true);
                 return distance;
             }
         }
@@ -1347,12 +1381,17 @@ class UI {
     /// Adds a cell to the canvas.
     add_cell(cell) {
         this.canvas.add(cell.element);
+        // Cells added together, as a file is read, are measured, stacked, coded, and their colours
+        // taken once they all are (see `add_cells`), as each of those looks at every cell, and
+        // measuring one after another is laid out lays the page out again each time.
         if (cell.is_vertex()) {
             this.positions.set(`${cell.position}`, cell);
-            cell.recalculate_size(this);
+            if (this.adding > 0) {
+                this.added_vertices.push(cell);
+            } else {
+                cell.recalculate_size(this);
+            }
         }
-        // Cells added together, as a file is read, are stacked, coded, and their colours taken
-        // once they all are (see `added_cells`), as each of those looks at every cell.
         if (this.adding > 0) {
             return;
         }
@@ -1373,6 +1412,17 @@ class UI {
             return add();
         } finally {
             if (--this.adding === 0) {
+                // Every label is measured before any cell is resized, so that the page is laid
+                // out once for them all.
+                const vertices = this.added_vertices
+                    .filter((vertex) => this.quiver.contains_cell(vertex));
+                this.added_vertices = [];
+                for (const vertex of vertices) {
+                    vertex.label_size ?? vertex.measure_label();
+                }
+                for (const vertex of vertices) {
+                    vertex.recalculate_size(this);
+                }
                 this.restack();
                 this.recode();
                 this.colour_picker.update_diagram_colours(this);
@@ -1421,17 +1471,31 @@ class UI {
 
     /// Removes a cell.
     remove_cell(cell, when) {
-        // Remove this cell and its dependents from the quiver and then from the HTML.
-        const update_positions = new Set();
-        for (const removed of this.quiver.remove(cell, when)) {
-            if (removed.is_vertex()) {
-                this.positions.delete(`${removed.position}`);
-                this.grid.unconstrain(cell);
-                update_positions.add(removed.position);
+        this.remove_cells([cell], when);
+    }
+
+    /// Remove `cells` and their dependents from the quiver and then from the HTML, laying the
+    /// grid out, recoding, and gathering the diagram's colours once for them all, rather than
+    /// once for each, which made deleting many cells take time growing with their square.
+    remove_cells(cells, when) {
+        const update_positions = [];
+        // Deselected together, as deselecting each updates the mode line, which reads the file.
+        this.selection = new Set(this.selection);
+        for (const cell of cells) {
+            for (const removed of this.quiver.remove(cell, when)) {
+                if (removed.is_vertex()) {
+                    this.positions.delete(`${removed.position}`);
+                    this.grid.unconstrain(removed);
+                    update_positions.push(removed.position);
+                }
+                if (this.selection.delete(removed)) {
+                    removed.deselect();
+                }
+                removed.element.remove();
             }
-            this.deselect(removed);
-            removed.element.remove();
         }
+        this.update_selection();
+        this.mode_line.update(this);
         this.update_col_row_size(...update_positions);
         this.recode();
         this.colour_picker.update_diagram_colours(this);
@@ -1486,6 +1550,8 @@ class UI {
             transform: `translate(${-view.x}px, ${-view.y}px) scale(${2 ** this.scale})`,
         });
         this.update_grid();
+        // The axes of a spectral sequence follow its ticks wherever the layout puts them.
+        SpectralSequence.draw(this);
     }
 
     /// Repositions the view by a relative offset.

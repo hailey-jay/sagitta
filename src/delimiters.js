@@ -118,3 +118,34 @@ Delimiters.type = (value, start, end, data) => {
     }
     return null;
 };
+
+/// `label` with each bare `%` escaped, as `\%`: in a label, which is a line of its own, a comment
+/// would only swallow what follows, in the export as on the canvas, so a `%` is the sign.
+Delimiters.percent = (label) => {
+    let text = "";
+    for (let i = 0; i < label.length; ++i) {
+        if (label[i] === "\\") {
+            // A control symbol, as `\%` or `\\`, is taken whole.
+            text += label.slice(i, i + 2);
+            ++i;
+        } else {
+            text += label[i] === "%" ? "\\%" : label[i];
+        }
+    }
+    return text;
+};
+
+/// Whether the braces of `label` balance, as TeX needs them to: escaped ones, as `\{`, aside.
+Delimiters.balanced = (label) => {
+    let depth = 0;
+    for (let i = 0; i < label.length; ++i) {
+        if (label[i] === "\\") {
+            ++i;
+        } else if (label[i] === "{") {
+            ++depth;
+        } else if (label[i] === "}" && --depth < 0) {
+            return false;
+        }
+    }
+    return depth === 0;
+};

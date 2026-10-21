@@ -54,6 +54,12 @@ class ModeLine {
                 .listen("click", () => this.dismiss_error()))
             .add(new DOM.Element("span", { class: "fill" }));
 
+        // An error that wraps afresh, as the window is resized, makes room again.
+        if (typeof ResizeObserver === "function") {
+            new ResizeObserver(() => this.place_message())
+                .observe(this.element.query_selector(".message").element);
+        }
+
         // The command layer, for the pointer as much as the keys.
         this.element.add(button({ class: "hint layer", title: "Commands (;)" }, "", () => {
             if (ui.keymap.entered) {
@@ -128,6 +134,11 @@ class ModeLine {
         const action = this.actions.get(name);
         if (action === undefined || !action.enabled()) {
             return false;
+        }
+        // A preset's ghost is not part of the diagram, so it goes before anything acts on it.
+        const preset = ui.keymap?.layers.preset;
+        if (preset?.active) {
+            preset.leave();
         }
         action.run();
         this.update(ui);
@@ -205,15 +216,19 @@ class ModeLine {
             }, edges);
         }
 
-        // Clearing keeps the file, and undoes like any deletion.
+        // Clearing keeps the file, and undoes like any deletion. It takes a spectral sequence's
+        // frame with the cells, in the same step.
         this.add_action(ui, "clear", "Clear",
             () => {
                 ui.deselect();
-                ui.history.add(ui, [{ kind: "delete", cells: new Set(ui.quiver.all_cells()) }],
-                    true);
+                const actions = [{ kind: "delete", cells: new Set(ui.quiver.all_cells()) }];
+                if (ui.frame !== null) {
+                    actions.push({ kind: "frame", from: ui.frame, to: null });
+                }
+                ui.history.add(ui, actions, true);
                 ui.update_selection();
             },
-            () => ui.in_mode(...default_pan) && any_cells(),
+            () => ui.in_mode(...default_pan) && (any_cells() || ui.frame !== null),
         );
         // Deleting takes the selection, or, with nothing selected, the cell under the focus point,
         // so a lone cell needs no selecting first.
@@ -225,10 +240,10 @@ class ModeLine {
             return new Set(focused === null ? [] : [focused]);
         };
         this.add_action(ui, "delete", "Delete", () => {
-            ui.history.add(ui, [{
-                kind: "delete",
-                cells: ui.quiver.transitive_dependencies(doomed()),
-            }], true);
+            const cells = ui.quiver.transitive_dependencies(doomed());
+            // Deleting the last cells takes a spectral sequence's frame too, as Clear does.
+            ui.history.add(ui, [{ kind: "delete", cells },
+                ...SpectralSequence.deleting(ui, cells)], true);
             ui.update_selection();
         }, () => ui.in_mode(...default_pan) && doomed().size > 0);
 
@@ -247,6 +262,11 @@ class ModeLine {
                     from: vertex.position,
                     to: move(bounding_rect, vertex.position),
                 }));
+                // A spectral sequence's page has its axes one way round.
+                if (SpectralSequence.follow(ui, displacements) === null) {
+                    UI.display_error(`${label} would scramble the spectral sequence's bidegrees.`);
+                    return;
+                }
                 ui.history.add(ui, [{
                     kind: "move",
                     displacements,
@@ -310,6 +330,21 @@ class ModeLine {
             }
         }, () => ui.element.query_selector(".focus-point.focused") !== null
             || ui.selection.size > 0 || any_cells());
+
+        // Home: the focus point to the diagram's first object, the top row's leftmost, (0, 0)
+        // without one, and the view centred there, for finding one's way back on a large canvas.
+        this.add_action(ui, "go-home", "Go home", () => {
+            const vertices = ui.quiver.all_cells().filter((cell) => cell.is_vertex());
+            const first = vertices.reduce((best, cell) => best === null
+                || cell.position.y < best.position.y
+                || (cell.position.y === best.position.y && cell.position.x < best.position.x)
+                ? cell : best, null);
+            const home = first === null ? Position.zero() : first.position;
+            ui.focus_point.class_list.remove("revealed", "pending", "active");
+            ui.focus_point.class_list.add("focused");
+            ui.reposition_focus_point(home);
+            ui.pan_to(ui.grid.centre_offset_from_position(home));
+        });
 
         this.add_action(ui, "zoom-out", "Zoom out",
             () => ui.pan_view(Offset.zero(), -0.25),
@@ -376,6 +411,19 @@ class ModeLine {
         // Long messages are cut short, so the whole of each is also its tooltip.
         message.set_attributes({ title: text });
         message.class_list.toggle("error", error && text !== "");
+        this.place_message();
+    }
+
+    /// Make room for the error shown above the mode line: what opens above the mode line (the key
+    /// list, the minibuffer, and its completions) sits above it (see `--message-height`), so that
+    /// neither covers the other, however the error wraps.
+    place_message() {
+        const message = this.element?.query_selector(".message");
+        if (message === null || message === undefined) {
+            return;
+        }
+        const height = message.class_list.contains("error") ? message.element.offsetHeight : 0;
+        document.documentElement.style.setProperty("--message-height", `${height}px`);
     }
 
     /// Update the mode line on the next animation frame. This is cheap to call often.
@@ -566,9 +614,15 @@ class ModeLine {
 
     /// A description of what typing would edit (mirroring `Keymap.edit_target`).
     target(ui) {
+        // Within a spectral sequence, a cell's bidegree too (see `SpectralSequence`), but for the
+        // ticks and the axes' names, which have none.
+        const page = (position) => ui.frame !== null
+            && !SpectralSequence.on_ticks(ui.frame, position);
+        const where = (position) => `(${position.x},${position.y})${!page(position)
+            ? "" : `  ${SpectralSequence.describe(ui.frame, position)}`}`;
         const describe = (cell) => {
             const label = cell.label.trim() === "" ? "∅" : cell.label;
-            return cell.is_vertex() ? `${label}  (${cell.position.x},${cell.position.y})` : label;
+            return cell.is_vertex() ? `${label}  ${where(cell.position)}` : label;
         };
         if (ui.focus_point.class_list.contains("focused")) {
             const cell = ui.cell_under_focus_point();
@@ -576,12 +630,15 @@ class ModeLine {
                 return describe(cell);
             }
             if (cell === null) {
-                return `new vertex  (${ui.focus_position.x},${ui.focus_position.y})`;
+                return `new vertex  ${where(ui.focus_position)}`;
             }
         }
         switch (ui.selection.size) {
             case 0:
-                return "";
+                // In a spectral sequence, where the focus point is, by bidegree, even while it is
+                // hidden.
+                return !page(ui.focus_position) ? ""
+                    : `focus  ${SpectralSequence.describe(ui.frame, ui.focus_position)}`;
             case 1:
                 return describe(ui.selection.values().next().value);
             default:

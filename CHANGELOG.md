@@ -1,5 +1,72 @@
 # Changelog
 
+## 0.7.0
+
+### Presets
+
+- `:chain-complex` (`:cc`), `:exact-sequence` (`:es`), `:short-exact-sequence` (`:ses`), and `:long-exact-sequence` (`:les`) stamp a chain complex, or an exact sequence, at the focus point, as one step to undo, selected and queued for labelling, so that Tab walks its cells. Options set the number of terms, the direction, chain or cochain, the indices (from a number, or about a symbol, as `C_{n+1}, C_n, C_{n-1}`), the ends (`0` or `\cdots`), the labels (templates such as `C_#` and `\partial_#{#-1}`), the spacing, and, for a long exact sequence, the rows, with the connecting map routed between them.
+- Each opens a setup layer, with a ghost of what it would stamp at the focus point, laid out as the diagram's format lays it out: the keys change the options, the arrow keys move it, and RET stamps it. Where it would land on cells, or amscd cannot draw it, the layer says why instead.
+- `:triangle` (`:tri`) stamps a distinguished triangle, its third arrow marked `+1`, or in a row with `row`.
+- `:continue` (`:cont`) adds the next term at the end of a sequence, its indices stepped as they step along the last arrow, and `:reindex K` moves the indices of the selected labels by `K`.
+- On the command line, double quotes hold spaces and `;` in an argument, and Tab offers the presets' short names and options, and the values of each.
+- `:cc aug=M` ends a resolution with `\varepsilon` onto `M`, then `0`.
+- Tab walks a stamp in the order it reads: each object, then the arrows from it.
+- A complex going up or down ends in `\vdots` where it is unbounded.
+- `:ses split` curves the section over the epi, or under it with `under`.
+- Where a stamp would land on cells, they are outlined in red.
+- In amscd, the setup layer says which options to change (as `wrap=0`), and dims those whose keys could only step away from what amscd draws.
+- While the ghost shows, a press on the mode line (save, undo, the command line) leaves the setup layer first, so nothing acts on the ghost. On a command line, a preset goes last, since it opens its layer.
+- `:continue` with several ends refuses where two would go on to the same cell, and draws each new arrow in the last one's colour and curve.
+- `:reindex` moves only indices: not a subscript inside brackets (the `2` of `H^n(X;\mathbb{Z}_2)`), a capital (the `X` of `\Omega^n_X`), or a letter a script binds (the `i` of `\sum_{i=1}^n x_i`). It takes `+1` as well as `1`.
+- `at=` takes a symbol with a number or a multiple, as `at=n+1` or `at=2k`, and refuses what is neither. `\#` in a template is TeX's `#`.
+- With `wrap=1`, each arrow runs straight to the next row, rather than through a doubled route.
+- Tab starts on the stamp just made, rather than on an older one still queued.
+
+### Spectral sequences
+
+- `:spectral-sequence` (`:ss`) stamps a page: entries by bidegree (from a template such as `E_#^{#p,#q}`, or none), ticks, and axes, by quadrant or by ranges, graded cohomologically, homologically, or as an Adams chart. The axes are drawn in TikZ from the tick nodes, and on the canvas by the same rule.
+- The page's frame is kept in the file as a comment, `% sagitta: spectral-sequence ...`, and read back: the mode line shows the page and grading and reads bidegrees, and opening a column or row before the origin moves it.
+- `; D` draws the page's differential from the selected entries, as Space draws arrows, to the entries it reaches (made as `\bullet` where there are none), and `:differential r` (`:d r`) draws `d_r` for any page. The key list shows `D` only while there is a spectral sequence.
+- Clear takes a spectral sequence's frame and axes with its cells.
+- `:frame` shows the frame and changes it: its grading, its page, its axes, and both ends of its ranges.
+- `:d r all` draws every `d_r` between the entries in the ranges.
+- `:diagonal n` selects the entries of total degree `n`, and `line` draws the diagonal dashed, on the canvas and in TikZ.
+- With nothing selected, the mode line reads the focus point's bidegree.
+- The axes are redrawn only when they change, rather than on every pan, and at once when a tick goes.
+- The frame moves with its ticks: by the arrow keys, by dragging, or by opening a column or row before the page. A gap inside the page is refused, as are flipping and rotating it. Deleting the last cells takes the frame, as Clear does, and undoing a paste over a page brings its frame back.
+- A diagram keeps one spectral sequence: a second `:ss` is refused, rather than taking over the first's axes.
+- A spectral-sequence comment that cannot be read (as `page=two`, or `p=2..0`) is listed among the problems on opening, and left out, rather than read as nonsense. Axes left without their comment are listed too.
+- `; D` draws only from entries in the page, not from ticks or the axes' names, and the mode line gives bidegrees only inside the page.
+- The ticks and the axes' names are not queued for Tab.
+- `:diagonal n line` takes a drawn diagonal away even once the ranges no longer reach it.
+- After undo takes the frame away under `:frame`, its keys say so.
+- The axes lie under the cells, so a press at the edge of an entry reaches the entry.
+
+### Speed
+
+- Deleting many cells together (a selection, Clear, or undoing a paste or a stamp) lays the grid out, recodes the diagram, and deselects them once, rather than once for each cell: on a 13 by 11 spectral sequence page, each key press in the setup layer takes about 170ms, where it took 500ms, and deleting a 41 by 41 page takes 0.1s, where it took 8s.
+- Cells added together (a stamp, a paste, a file) are measured together, so that the page is laid out once: each key press on a 41 by 41 page takes under 2s, where it took 6.6s.
+- A very large stamp (`:cc 1000`) no longer fails with "Maximum call stack size exceeded".
+
+### Files
+
+- An arrow label holding a quote, as `\text{"}`, is read back, as TikZ reads it; the arrow was lost.
+- A `%` in a label is typed, drawn, and written as the sign, `\%`, rather than as a comment, which stopped TeX.
+- A label whose braces do not balance is selected and named, and the diagram is not saved, rather than written as a file neither TeX nor Sagitta could read.
+- Saving over a file that could not all be read asks first, since what was not read would be left out.
+- A file with Windows line endings (CRLF) is saved with them.
+- A file whose arrow has a coloured label opens; since 0.6.0, opening it failed.
+
+### Errors
+
+- An error sits just above the mode line, and whatever opens there (a layer's list of keys, or the command line and its completions) sits above the error, pushed up, rather than either covering the other.
+- A problem in a key list (a preset that cannot land, an import's errors and warnings) runs across the list and wraps, rather than being cut short.
+- Pressing on a spectral sequence's axes does nothing, rather than starting a new object and arrow in the cell under them.
+
+### Moving around
+
+- `; g`, or `:home`, moves the focus point to the diagram's first object (the top row's leftmost) and centres the view on it, for finding the way back on a large canvas.
+
 ## 0.6.0
 
 ### Files

@@ -1338,3 +1338,452 @@ const pending = [];
         + "\\arrow[r, \"m\", tail] & B\n\\end{tikzcd}\n")
         .startsWith("amsmath, mathtools, and extpfeil stretch no tailed arrow"), true);
 }
+
+// The command line: quotes hold spaces and semicolons.
+{
+    check("commands split at semicolons, words at spaces",
+        Commands.split("cc 3 dir=d; select-all"), [["cc", "3", "dir=d"], ["select-all"]]);
+    check("quotes hold both, and are dropped",
+        Commands.split("cc obj=\"H_#(A; B)\",C"), [["cc", "obj=H_#(A; B),C"]]);
+    check("and a quote within them is escaped", Commands.split("x \"a \\\"b\\\" c\""),
+        [["x", "a \"b\" c"]]);
+    let open = "";
+    try {
+        Commands.split("cc obj=\"C_#");
+    } catch (error) {
+        open = error.message;
+    }
+    check("a quote left open is refused", open.startsWith("A quote is left open"), true);
+}
+
+// Label templates.
+{
+    const fill = (template, offset, base = null, more = []) => Template.expand(template,
+        new Map([["#", { base, offset }], ...more]));
+    check("# is the index", fill("C_#", 2), "C_2");
+    check("arithmetic on it", fill("C_#{#-1}", 2), "C_1");
+    check("a negative index is braced", fill("C_#", -1), "C_{-1}");
+    check("as is a symbolic one with an offset", fill("C_#", 1, "n"), "C_{n+1}");
+    check("but not the symbol alone", fill("C^#", 0, "n"), "C^n");
+    check("nor one already in braces", fill("\\partial_{#}", -2, "n"), "\\partial_{n-2}");
+    check("arithmetic on a symbol", fill("H^#{2*#+1}", 0, "k"), "H^{2k+1}");
+    check("#p and #q are the bidegree where there is one",
+        fill("E_2^{#p,#q}", 0, null, [["#p", { offset: 2 }], ["#q", { offset: 1 }]]), "E_2^{2,1}");
+    check("and arithmetic on them", fill("E^{#{#p+2},#{#q-1}}", 0, null,
+        [["#p", { offset: 0 }], ["#q", { offset: 3 }]]), "E^{2,2}");
+    check("#p is # and p where there is no bidegree", fill("C_#p", 3), "C_3p");
+    check("a list splits at commas outside brackets", Template.list("A,\\hom(X,Y),{B,C}"),
+        ["A", "\\hom(X,Y)", "{B,C}"]);
+}
+
+// Presets: what each stamps, at the focus point.
+{
+    const stamp = (line, setup = null) => {
+        const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+        ui.focus_position = Position.zero();
+        setup?.(ui);
+        const [[name, ...words]] = Commands.split(line);
+        Commands.TABLE[Commands.canonical(name)].run(new Commands(ui), words);
+        return ui;
+    };
+    const body = (ui) => ui.text().replace(/^\\\[\\begin\{tikzcd\}\n|\\end\{tikzcd\}\\\]\n$/g, "");
+    check("a chain complex runs down its indices, unbounded", body(stamp("cc 3")),
+        "\t\\cdots & {C_2} & {C_1} & {C_0} & \\cdots\n"
+        + "\t\\arrow[from=1-1, to=1-2]\n"
+        + "\t\\arrow[\"{\\partial_2}\", from=1-2, to=1-3]\n"
+        + "\t\\arrow[\"{\\partial_1}\", from=1-3, to=1-4]\n"
+        + "\t\\arrow[from=1-4, to=1-5]\n");
+    check("a cochain complex runs up them, bounded below", body(stamp(
+        "chain-complex 3 type=cochain bounded=start dir=d")),
+        "\t0 \\\\\n\t{C^0} \\\\\n\t{C^1} \\\\\n\t{C^2} \\\\\n\t\\vdots\n"
+        + "\t\\arrow[from=1-1, to=2-1]\n"
+        + "\t\\arrow[\"{d^0}\", from=2-1, to=3-1]\n"
+        + "\t\\arrow[\"{d^1}\", from=3-1, to=4-1]\n"
+        + "\t\\arrow[from=4-1, to=5-1]\n");
+    check("a symbol centres the indices on it", body(stamp("cc 3 at=n bounded=both d=none")),
+        "\t0 & {C_{n+1}} & {C_n} & {C_{n-1}} & 0\n"
+        + "\t\\arrow[from=1-1, to=1-2]\n\t\\arrow[from=1-2, to=1-3]\n"
+        + "\t\\arrow[from=1-3, to=1-4]\n\t\\arrow[from=1-4, to=1-5]\n");
+    const labels = (ui) => ui.quiver.all_cells().filter((cell) => cell.is_vertex())
+        .sort((a, b) => a.position.x - b.position.x).map((cell) => cell.label);
+    check("at= takes a symbol with a number, or a multiple of one", [
+        labels(stamp("cc 3 at=n+1 bounded=both d=none")),
+        labels(stamp("cc 3 at=2k bounded=both d=none"))],
+    [["0", "C_{n+2}", "C_{n+1}", "C_n", "0"], ["0", "C_{2k+1}", "C_{2k}", "C_{2k-1}", "0"]]);
+    const refusal = (line) => {
+        try {
+            stamp(line);
+            return null;
+        } catch (error) {
+            return error.message;
+        }
+    };
+    check("and refuses what is not one", [refusal("cc at="), refusal("cc at=#")], [
+        "at takes a lower-case letter, as at=n, or one with a number, as at=n+1: not \"\".",
+        "at takes a lower-case letter, as at=n, or one with a number, as at=n+1: not \"#\"."]);
+    check("TeX's own \\# is not a place", labels(stamp("cc 1 obj=\\#_# bounded=both d=none")),
+        ["0", "\\#_0", "0"]);
+    check("one term to a row needs no route", body(stamp("cc 2 wrap=1 bounded=both d=none"))
+        .includes("checkpoint") || body(stamp("cc 2 wrap=1 bounded=both d=none")).includes(".center"),
+    false);
+    check("a short exact sequence includes, then projects", body(stamp("ses maps=f,g")),
+        "\t0 & A & B & C & 0\n"
+        + "\t\\arrow[from=1-1, to=1-2]\n"
+        + "\t\\arrow[\"f\", hook, from=1-2, to=1-3]\n"
+        + "\t\\arrow[\"g\", two heads, from=1-3, to=1-4]\n"
+        + "\t\\arrow[from=1-4, to=1-5]\n");
+    const section = (line) => body(stamp(line)).split("\n").find((arrow) => arrow.includes("dashed"));
+    check("a split's section curves back over the epi", section("ses split"),
+        "\t\\arrow[\"s\"', curve={height=12pt}, dashed, from=1-4, to=1-3]");
+    check("or under it", section("ses split under"),
+        "\t\\arrow[\"s\", curve={height=-12pt}, dashed, from=1-4, to=1-3]");
+    check("an exact sequence counts up from 1", body(stamp("es 2 dir=l")),
+        "\t0 & {A_2} & {A_1} & 0\n"
+        + "\t\\arrow[from=1-2, to=1-1]\n\t\\arrow[from=1-3, to=1-2]\n"
+        + "\t\\arrow[from=1-4, to=1-3]\n");
+    const les = stamp("les");
+    check("a long exact sequence snakes from row to row", body(les).split("\n").slice(1, 8),
+        ["\t\\cdots & {H_1(A)} & {H_1(B)} & {H_1(C)} \\\\",
+            "\t& && \\\\",
+            "\t& {H_0(A)} & {H_0(B)} & {H_0(C)} & \\cdots",
+            "\t\\arrow[from=1-1, to=1-2]",
+            "\t\\arrow[from=1-2, to=1-3]",
+            "\t\\arrow[from=1-3, to=1-4]",
+            "\t\\arrow[\"\\delta\", to path={[rounded corners=6pt] -- (\\tikzcdmatrixname-2-4.center)"
+            + " -- (\\tikzcdmatrixname-2-2.center) \\tikztonodes -- (\\tikztotarget) [sharp corners]},"
+            + " from=1-4, to=3-2]"]);
+    check("as one step to undo, selected", [les.history.present, les.selection.size], [1, 15]);
+    les.history.undo(les);
+    check("which undoes whole", les.quiver.all_cells().length, 0);
+    let refused = "";
+    try {
+        stamp("cc 2", (ui) => {
+            ui.focus_position = new Position(-1, 0);
+            new Vertex(ui, "X", new Position(1, 0));
+        });
+    } catch (error) {
+        refused = error.message;
+    }
+    check("a stamp onto cells already there is refused", refused,
+        "That would land \\cdots on X already at (1, 0): move the focus point somewhere with room.");
+    let wrong = "";
+    try {
+        stamp("cc dir=x");
+    } catch (error) {
+        wrong = error.message;
+    }
+    check("an option out of its values is refused, saying which there are", wrong,
+        "dir takes r, d, l, or u: not \"x\".");
+}
+
+// Indices: stepping along a sequence, and moving them.
+{
+    check("an index is a number, a symbol, or a multiple of one and a number",
+        Index.scan("C_2 \\partial_{n-1} H^{2k+1} X_\\alpha E^{p,q}").map(({ value, base }) =>
+            Template.index(value, base)), ["2", "n-1", "2k+1"]);
+    check("reindexing moves each, braced where it needs it",
+        Index.shift("C_n \\otimes D_2", 1), "C_{n+1} \\otimes D_3");
+    check("but not arguments in brackets, capitals, scripts in scripts, or bound letters", [
+        Index.shift("H^{n}(X;\\mathbb{Z}_2)", 1), Index.shift("\\Omega^n_X", 1),
+        Index.shift("\\sum_{i=1}^n x_i", 1), Index.shift("\\pi_n(X,x_0)", 1),
+        Index.shift("E_{n_1}", 1), Index.shift("X_\\alpha", 1)],
+    ["H^{n+1}(X;\\mathbb{Z}_2)", "\\Omega^{n+1}_X", "\\sum_{i=1}^{n+1} x_i",
+        "\\pi_{n+1}(X,x_0)", "E_{n_1}", "X_\\alpha"]);
+    check("a step is how far alike labels' indices move", [Index.step("C_2", "C_1"),
+        Index.step("C_{n+1}", "C_n"), Index.step("H^0(A)", "H^1(A)")], [-1, -1, 1]);
+    check("and there is none between labels that differ otherwise",
+        [Index.step("H_n(A)", "H_n(B)"), Index.step("\\cdots", "C_0")], [null, null]);
+
+    const make = (code) => {
+        const { ui } = parse(code);
+        ui.focus_position = Position.zero();
+        return ui;
+    };
+    const ui = make("\\begin{tikzcd}\n\t{C_2} & {C_1}\n"
+        + "\t\\arrow[\"{\\partial_2}\", hook, from=1-1, to=1-2]\n\\end{tikzcd}\n");
+    ui.select(ui.quiver.all_cells().find((cell) => cell.label === "C_1"));
+    Commands.TABLE["continue"].run(new Commands(ui), []);
+    check(":continue adds the next term, stepped, drawn as the last arrow",
+        ui.text().split("\n").slice(1, -2),
+        ["\t{C_2} & {C_1} & {C_0}",
+            "\t\\arrow[\"{\\partial_2}\", hook, from=1-1, to=1-2]",
+            "\t\\arrow[\"{\\partial_1}\", hook, from=1-2, to=1-3]"]);
+    check("as one step, selected", [ui.history.present, ui.selection.size], [1, 2]);
+    {
+        const two = make("\\begin{tikzcd}\n\t{C_2} & {C_1} && {D_1} & {D_2}\n"
+            + "\t\\arrow[\"f\", color={rgb,255:red,214;green,92;blue,92}, curve={height=6pt}, from=1-1, to=1-2]\n"
+            + "\t\\arrow[from=1-5, to=1-4]\n\\end{tikzcd}\n");
+        two.select(...two.quiver.all_cells().filter((cell) => ["C_1", "D_1"].includes(cell.label)));
+        let clash = "";
+        try {
+            Commands.TABLE["continue"].run(new Commands(two), []);
+        } catch (error) {
+            clash = error.message;
+        }
+        check(":continue refuses two ends going on to one cell", [clash, two.history.present],
+            ["C_1 and D_1 would both go on to (2, 0): continue them one at a time.", 0]);
+        two.deselect();
+        two.select(two.quiver.all_cells().find((cell) => cell.label === "C_1"));
+        Commands.TABLE["continue"].run(new Commands(two), []);
+        check("and draws the next arrow in the last one's colour and curve",
+            two.text().split("\n").find((line) => line.includes("to=1-3")),
+            "\t\\arrow[color={rgb,255:red,214;green,92;blue,92}, curve={height=6pt}, from=1-2, to=1-3]");
+    }
+    ui.deselect();
+    ui.select(...ui.quiver.all_cells());
+    Commands.TABLE["reindex"].run(new Commands(ui), ["-1"]);
+    check(":reindex moves every selected index",
+        ui.quiver.all_cells().map((cell) => cell.label).sort(),
+        ["C_0", "C_1", "C_{-1}", "\\partial_0", "\\partial_1"]);
+    ui.history.undo(ui);
+    check("and undoes as one step", ui.quiver.all_cells()[0].label, "C_2");
+
+    const triangle = make("");
+    Presets.run(triangle, "triangle", []);
+    check("a triangle's third arrow is marked +1", triangle.text().split("\n").slice(1, -2),
+        ["\tX && Y \\\\", "\t& Z", "\t\\arrow[from=1-1, to=1-3]", "\t\\arrow[from=1-3, to=2-2]",
+            "\t\\arrow[\"{+1}\", from=2-2, to=1-1]"]);
+}
+
+// Labels that once did not come back: a quote in an arrow's label, and a `%`.
+{
+    const square = "\\begin{tikzcd}\n\tA & B\n\t\\arrow[\"f\", from=1-1, to=1-2]\n\\end{tikzcd}\n";
+    const relabel = (vertex, edge) => {
+        const { ui } = parse(square);
+        ui.quiver.all_cells().find((cell) => cell.label === "B").label = vertex;
+        ui.quiver.all_cells().find((cell) => cell.is_edge()).label = edge;
+        const text = ui.text();
+        const back = parse(text);
+        return [text.split("\n").slice(1, 3), labels(back.ui), back.diagnostics.length];
+    };
+    check("a quote in an arrow's label is braced, and read back", relabel("B", "\\text{\"}"),
+        [["\tA & B", "\t\\arrow[\"{\\text{\"}}\", from=1-1, to=1-2]"], ["A", "B", "\\text{\"}"], 0]);
+    check("a bare % is written as the sign, not a comment", relabel("50%", "x%y"),
+        [["\tA & {50\\%}", "\t\\arrow[\"{x\\%y}\", from=1-1, to=1-2]"], ["A", "50\\%", "x\\%y"], 0]);
+    check("an escaped one is left as it is", [Delimiters.percent("\\%"), Delimiters.percent("%%"),
+        Delimiters.percent("a\\\\%")], ["\\%", "\\%\\%", "a\\\\\\%"]);
+    check("braces balance, escaped ones aside", ["{B", "B}", "}{", "\\{", "{\\}}", "\\frac{a}{b}"]
+        .map(Delimiters.balanced), [false, false, false, true, true, true]);
+}
+
+// Spectral sequences: the page, its frame in the file, and its differentials.
+{
+    const page = (words, setup = null) => {
+        const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+        ui.focus_position = new Position(1, 0);
+        setup?.(ui);
+        Presets.run(ui, "spectral-sequence", words);
+        return ui;
+    };
+    const small = page(["p=0..2", "q=0..1", "obj=E_#^{#p,#q}"]);
+    const text = small.text();
+    check("a page is its entries, a tick column and row, and the names of the axes",
+        text.split("\n").slice(1, 6), [
+            "\t% sagitta: spectral-sequence grading=coh page=2 origin=3-2 p=0..2 q=0..1",
+            "\t{\\scriptstyle q} \\\\",
+            "\t{\\scriptstyle 1} & {E_2^{0,1}} & {E_2^{1,1}} & {E_2^{2,1}} \\\\",
+            "\t{\\scriptstyle 0} & {E_2^{0,0}} & {E_2^{1,0}} & {E_2^{2,0}} \\\\",
+            "\t& {\\scriptstyle 0} & {\\scriptstyle 1} & {\\scriptstyle 2} & {\\scriptstyle p}"]);
+    check("with axes drawn from the ticks", text.split("\n")[0].includes(
+        String.raw`\coordinate (sagitta-corner) at ($(\tikzcdmatrixname-3-1.base)!.5!(`
+        + String.raw`\tikzcdmatrixname-4-2.base)+(0,\the\fontdimen22\textfont2)$)`), true);
+    check("its frame is set as one step with it", [small.frame.origin.x, small.frame.origin.y,
+        small.history.present], [1, 1, 1]);
+    const { ui: read, diagnostics: read_diagnostics } = parse(text);
+    check("and read back from the file", [read.frame.origin.x, read.frame.origin.y, read.frame.p,
+        read.frame.q, read.frame.grading, read_diagnostics.length], [1, 2, [0, 2], [0, 1], "coh", 0]);
+    check("so saving writes the same bytes", read.text(), text);
+    small.history.undo(small);
+    check("undoing takes the frame away with the page", [small.frame, small.quiver.all_cells().length],
+        [null, 0]);
+
+    const at = (ui, p, q) => ui.positions.get(`${SpectralSequence.cell(ui.frame, p, q)}`);
+    const differential = (grading, r, from) => {
+        const ui = page(["p=0..3", "q=0..3", "obj=\\bullet", `grading=${grading}`]);
+        ui.deselect();
+        ui.select(at(ui, ...from));
+        SpectralSequence.differential(ui, r, true);
+        const edge = ui.quiver.all_cells().find((cell) => cell.is_edge());
+        return [SpectralSequence.bidegree(ui.frame, edge.target.position), edge.label];
+    };
+    check("d_2 goes right 2, down 1, cohomologically", differential("coh", 2, [0, 1]),
+        [[2, 0], "d_2"]);
+    check("left 2, up 1, homologically", differential("hom", 2, [2, 0]), [[0, 1], "d_2"]);
+    check("and left 1, up r, in an Adams chart", differential("adams", 3, [2, 0]), [[1, 3], "d_3"]);
+    const outside = page(["p=0..1", "q=0..1", "obj=\\bullet"]);
+    outside.deselect();
+    outside.select(at(outside, 0, 1));
+    SpectralSequence.differential(outside, 3, false);
+    check("a differential to where there is no cell makes one, as Space does",
+        outside.quiver.all_cells().filter((cell) => cell.is_vertex() && cell.label === "\\bullet")
+            .length, 5);
+    check("and selects it with the arrow", Array.from(outside.selection, (cell) => cell.is_vertex()
+        ? SpectralSequence.bidegree(outside.frame, cell.position) : "arrow"), [[3, -1], "arrow"]);
+
+    const gap = page(["p=0..1", "q=0..1"]);
+    new Commands(gap).insert("x", 0);
+    check("a column opened before the page moves its origin", gap.frame.origin.x, 2);
+    gap.history.undo(gap);
+    check("and back with the undo", gap.frame.origin.x, 1);
+    const refuse = (f) => {
+        try {
+            f();
+            return null;
+        } catch (error) {
+            return error.message;
+        }
+    };
+    const inside = page(["p=0..3", "q=0..1"]);
+    check("a column opened through the page, or between its ticks and entries, is refused", [
+        refuse(() => new Commands(inside).insert("x", 3)),
+        refuse(() => new Commands(inside).insert("x", 1)),
+        inside.history.present], [
+        "That would open a gap inside the spectral sequence's page: open it left or right of the"
+            + " page, or grow a range in :frame.",
+        "That would open a gap inside the spectral sequence's page: open it left or right of the"
+            + " page, or grow a range in :frame.", 1]);
+    new Commands(inside).insert("x", 5);
+    check("one past the ticks, at the name, leaves the frame where it is", inside.frame.origin.x, 1);
+    check("deleting every cell takes the frame too", SpectralSequence.deleting(inside,
+        new Set(inside.quiver.all_cells())).map(({ to }) => to), [null]);
+    check("and deleting some leaves it", SpectralSequence.deleting(inside,
+        new Set(inside.quiver.all_cells().slice(1))), []);
+    check("a second page in one diagram is refused", refuse(() => Presets.run(inside,
+        "spectral-sequence", [])), "This diagram has a spectral sequence already, and keeps only"
+        + " one: put the next page in a diagram of its own.");
+
+    const directive = (words) => {
+        const { ui, diagnostics } = parse(text.replace(/grading=.*$/m, words));
+        return [ui.frame === null, diagnostics.map(({ message }) => message)];
+    };
+    check("a directive that cannot be read is said so, and left out", [
+        directive("grading=coh page=two origin=3-2 p=0..2 q=0..1"),
+        directive("grading=coh page=2 origin=3-2 p=2..0 q=0..1"),
+        directive("grading=coh page=2 origin=3-2 p=0..2 q=0..1 lines=1,x")], [
+        [true, ["Spectral sequence ignored: page=two should be a whole number."]],
+        [true, ["Spectral sequence ignored: p=2..0 should be low..high."]],
+        [true, ["Spectral sequence ignored: lines=1,x should be numbers."]]]);
+    check("and its lines are kept once each, in order", parse(text.replace(/q=0\.\.1$/m,
+        "q=0..1 lines=3,1,3")).ui.frame.lines, [1, 3]);
+    check("axes without their comment are said to go", parse(text.split("\n")
+        .filter((line) => !line.includes("% sagitta")).join("\n")).diagnostics
+        .map(({ message }) => message), ["Axes dropped: their spectral-sequence comment is missing."]);
+}
+
+// The frame changes: its range grows and shrinks by its ticks, and its page and grading.
+{
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+    ui.focus_position = new Position(1, 0);
+    Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1"]);
+    const row = () => ui.text().split("\n").filter((line) => line.includes("{\\scriptstyle p}"))[0];
+    SpectralSequence.resize(ui, "p", 1);
+    check("growing p adds its tick where its name was, and moves the name on", [row(), ui.frame.p],
+        ["\t& {\\scriptstyle 0} & {\\scriptstyle 1} & {\\scriptstyle 2} & {\\scriptstyle p}", [0, 2]]);
+    SpectralSequence.resize(ui, "p", -1);
+    SpectralSequence.resize(ui, "p", -1);
+    check("shrinking takes the last tick away, and brings the name back", [row(), ui.frame.p],
+        ["\t& {\\scriptstyle 0} & {\\scriptstyle p}", [0, 0]]);
+    let refused = "";
+    try {
+        SpectralSequence.resize(ui, "p", -1);
+    } catch (error) {
+        refused = error.message;
+    }
+    check("but not below one", refused, "The range of p is down to one, 0..0.");
+    ui.history.undo(ui);
+    ui.history.undo(ui);
+    check("each is a step to undo", [row(), ui.frame.p],
+        ["\t& {\\scriptstyle 0} & {\\scriptstyle 1} & {\\scriptstyle 2} & {\\scriptstyle p}", [0, 2]]);
+    SpectralSequence.change(ui, { ...ui.frame, page: 3 });
+    check("the page changes, and the file says so",
+        ui.text().includes("% sagitta: spectral-sequence grading=coh page=3"), true);
+}
+
+// The low ends of the ranges: the other axis's ticks move with them.
+{
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+    ui.focus_position = new Position(1, 0);
+    Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1"]);
+    const body = () => ui.text().split("\n").filter((line) => line.startsWith("\t")
+        && !line.includes("sagitta:") && !line.includes("\\arrow"));
+    SpectralSequence.shift_low(ui, "p", -1);
+    check("lowering p's low end moves the q ticks out and adds a tick", [body(), ui.frame.p], [[
+        "\t{\\scriptstyle q} \\\\",
+        "\t{\\scriptstyle 1} \\\\",
+        "\t{\\scriptstyle 0} \\\\",
+        "\t& {\\scriptstyle -1} & {\\scriptstyle 0} & {\\scriptstyle 1} & {\\scriptstyle p}",
+    ], [-1, 1]]);
+    SpectralSequence.shift_low(ui, "q", -1);
+    check("and q's moves the p ticks down", [ui.frame.q, body().length], [[-1, 1], 5]);
+    SpectralSequence.shift_low(ui, "q", 1);
+    SpectralSequence.shift_low(ui, "p", 1);
+    check("raising them takes the ticks back", [ui.frame.p, ui.frame.q, body()], [[0, 1], [0, 1], [
+        "\t{\\scriptstyle q} \\\\",
+        "\t{\\scriptstyle 1} \\\\",
+        "\t{\\scriptstyle 0} \\\\",
+        "\t& {\\scriptstyle 0} & {\\scriptstyle 1} & {\\scriptstyle p}",
+    ]]);
+    const entry = new Vertex(ui, "A", SpectralSequence.cell(ui.frame, 0, 1));
+    ui.history.add(ui, [{ kind: "create", cells: new Set([entry]) }]);
+    let refused = "";
+    try {
+        SpectralSequence.shift_low(ui, "p", 1);
+    } catch (error) {
+        refused = error.message;
+    }
+    check("but not onto entries", refused, "The entries of p=0 are in the way: A.");
+}
+
+// Every d_r at once, the diagonals, and an augmentation.
+{
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+    ui.focus_position = new Position(1, 0);
+    Presets.run(ui, "spectral-sequence", ["p=0..3", "q=0..2", "obj=\\bullet"]);
+    // A command line's one command, run as the command line would, returning what it says.
+    const command = (line) => {
+        const [name, ...args] = Commands.split(line)[0];
+        try {
+            Commands.TABLE[Commands.canonical(name)].run(new Commands(ui), args);
+            return "";
+        } catch (error) {
+            return error.message;
+        }
+    };
+    command("d 2 all");
+    const edges = () => ui.quiver.all_cells().filter((cell) => cell.is_edge());
+    check(":d 2 all draws each d_2 between entries in the ranges", edges().map((edge) =>
+        [SpectralSequence.bidegree(ui.frame, edge.source.position),
+            SpectralSequence.bidegree(ui.frame, edge.target.position)]).sort().join(" "),
+        [[[0, 1], [2, 0]], [[0, 2], [2, 1]], [[1, 1], [3, 0]], [[1, 2], [3, 1]]].join(" "));
+    check("and none twice", [command("d 2 all"), edges().length],
+        ["There are no d_2 to draw between the entries in the ranges.", 4]);
+    command("diagonal 2");
+    check(":diagonal selects the entries of a total degree", Array.from(ui.selection, (cell) =>
+        SpectralSequence.bidegree(ui.frame, cell.position)).sort(), [[0, 2], [1, 1], [2, 0]]);
+    command("diagonal 2 line");
+    const text = ui.text();
+    check("line keeps it in the frame", text.includes("p=0..3 q=0..2 lines=2"), true);
+    check("and draws it dashed through the entries' maths axes", text.includes(String.raw`\coordinate (sagitta-a) at ($(\tikzcdmatrixname-5-2.base |- \tikzcdmatrixname-2-1.base)+(0,\the\fontdimen22\textfont2)$);`)
+        && text.includes(String.raw`\draw[line width=0.4pt, dashed] ($(sagitta-a)!-8pt!(sagitta-b)$)`), true);
+    const { ui: read } = parse(text);
+    check("and reads back", [read.frame.lines, read.text() === text], [[2], true]);
+    command("diagonal 2 line");
+    check("again takes it away", ui.text().includes("lines="), false);
+
+    const resolution = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+    resolution.focus_position = Position.zero();
+    Presets.run(resolution, "chain-complex", ["2", "obj=P_#", "aug=M"]);
+    check(":cc aug=M ends a chain complex with ε onto M, then 0",
+        resolution.text().split("\n")[1], "\t\\cdots & {P_1} & {P_0} & M & 0");
+    const injective = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+    injective.focus_position = Position.zero();
+    Presets.run(injective, "chain-complex", ["2", "type=cochain", "obj=I^#", "aug=M"]);
+    check("and starts a cochain complex with it", injective.text().split("\n")[1],
+        "\t0 & M & {I^0} & {I^1} & \\cdots");
+    check("text options suggest values", Presets.completions(Presets.SPECTRAL_SEQUENCE)
+        .filter((word) => word.startsWith("obj=")), ["obj=", "obj=\\bullet", "obj=E_#^{#p,#q}",
+        "obj=E^#_{#p,#q}"]);
+    check("the setup layer's keys step to", [Presets.steps(Presets.CHAIN_COMPLEX.wrap, 0),
+        Presets.steps(Presets.CHAIN_COMPLEX.step, 2), Presets.amscd("split",
+            Presets.SHORT_EXACT_SEQUENCE.split)], [[1], [3, 1], "no split"]);
+}

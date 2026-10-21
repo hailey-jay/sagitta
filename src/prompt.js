@@ -158,7 +158,7 @@ class Prompt {
         const prefix = words[words.length - 1].toLowerCase();
         let candidates;
         if (words.length === 1) {
-            candidates = Object.keys(Commands.TABLE).sort();
+            candidates = [...Object.keys(Commands.TABLE), ...Object.keys(Commands.SHORT)].sort();
         } else {
             const command = Commands.TABLE[Commands.canonical(words[0])];
             candidates = command === undefined ? [] : typeof command.completions === "function"

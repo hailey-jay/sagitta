@@ -879,18 +879,19 @@ def test_a_cells_node_is_tikz_cds(sagitta, home):
 
 
 def test_an_error_stands_clear_of_the_command_line(sagitta, home):
-    """A standing error takes the line above the mode line, which the command line takes while it
-    is open, so the error moves above it."""
+    """A standing error takes the line above the mode line, and the command line, opened after
+    it, sits above the error."""
     boxes = sagitta("evaluate", _diagram(home / "paper"), """(async () => {
         UI.display_error("a standing error");
         ui.prompt.open("Command");
         await new Promise((resolve) => requestAnimationFrame(resolve));
         const box = (selector) => document.querySelector(selector).getBoundingClientRect();
-        return [box(".mode-line .message.error").bottom, box(".label-input-container").top,
+        return [box(".mode-line .message.error").top, box(".mode-line .message.error").bottom,
+            box(".label-input-container").bottom, box(".mode-line").top,
             document.activeElement === ui.label_input.element];
     })()""", expected_error="a standing error")
-    error, prompt, focused = boxes
-    assert focused and error <= prompt + 0.5, boxes
+    top, bottom, prompt, mode_line, focused = boxes
+    assert focused and prompt <= top + 0.5 and bottom == pytest.approx(mode_line, abs=0.5), boxes
 
 def test_a_key_press_ends_a_pan_whose_key_was_released_unseen(sagitta, home):
     result = sagitta("stale_pan", _diagram(home / "paper"))
@@ -1329,6 +1330,267 @@ def test_the_export_layer_greys_out_maths_and_saves_with_s(sagitta, home):
     })()"""
     assert sagitta("evaluate", diagram, script) == {"greyed": ["m", "M"], "active": False}
     assert diagram.read_text().startswith("\\begin{tikzcd}")
+
+
+# ── Presets ───────────────────────────────────────────────────────────────────
+
+PRESS = """const press = async (key, options = {}) => {
+    (document.activeElement ?? document.body).dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, ...options }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+};
+const ghosts = () => document.querySelectorAll(".cell.ghost").length;
+const cells = () => ui.quiver.all_cells().length;
+"""
+
+
+def test_a_preset_previews_a_ghost_and_stamps_it_on_return(sagitta, home):
+    """`:cc 3` opens the setup layer with a ghost of `... C_2 C_1 C_0 ...`, outside the history and
+    the file; `n` adds a term, an arrow key moves it, C-z does nothing, and RET stamps it as one
+    step, selected."""
+    diagram = _diagram(home / "paper", "", "new.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.commands.run("cc 3");
+        const opened = [ui.keymap.layer === ui.keymap.layers.preset, ghosts(), cells(),
+            ui.history.present, ui.file.dirty];
+        await press("n");
+        await press("ArrowDown");
+        await press("z", { ctrlKey: true });
+        const stepped = [ghosts(), ui.focus_position.y];
+        await press("Enter");
+        return { opened, stepped, stamped: [ui.keymap.layer, ghosts(), cells(), ui.history.present,
+            ui.selection.size, ui.file.text().includes("{C_3} & {C_2}"), ui.file.dirty] };
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == {
+        "opened": [True, 9, 9, 0, False],
+        "stepped": [11, 1],
+        "stamped": [None, 0, 11, 1, 11, True, True],
+    }
+
+
+def test_a_stamped_preset_is_queued_for_tab(sagitta, home):
+    """`:ses` stamps nine cells, all queued: Tab goes to the first, typing labels it, which takes
+    it out of the queue, and Tab goes on to the next."""
+    diagram = _diagram(home / "paper", "", "new.cd.tex")
+    script = """(async () => {
+        %s
+        const queued = () => document.querySelectorAll(".cell kbd.queue").length;
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.commands.run("ses");
+        await press("Enter");
+        const stamped = queued();
+        await press("Tab");
+        const first = Array.from(ui.selection, (cell) => cell.label);
+        ui.label_input.element.value = "X";
+        ui.label_input.element.dispatchEvent(new Event("input", { bubbles: true }));
+        await press("Tab");
+        return [stamped, first, queued(), Array.from(ui.selection, (cell) => cell.label)];
+    })()""" % PRESS
+    stamped, first, after, second = sagitta("evaluate", diagram, script)
+    assert stamped == 9
+    assert len(first) == 1 and after == 8 and len(second) == 1 and second != ["X"]
+
+
+def test_pressing_keys_in_a_preset_leaves_the_view_where_it_was(sagitta, home):
+    """Each key redraws the ghost, which resizes columns and rows; the view stays put."""
+    diagram = _diagram(home / "paper")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(0, 3));
+        ui.commands.run("cc 2");
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const before = `${ui.view}`;
+        for (const key of ["n", "n", "n", "o", "N", "o", "b", "n", "o", "o", "N"]) {
+            await press(key);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return [before === `${ui.view}`, before, `${ui.view}`];
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script)[0] is True
+
+
+def test_leaving_a_preset_takes_its_ghost_away(sagitta, home):
+    diagram = _diagram(home / "paper")
+    script = """(async () => {
+        %s
+        const before = cells();
+        ui.reposition_focus_point(new Position(0, 3));
+        ui.commands.run("ses");
+        const shown = ghosts();
+        await press("Escape");
+        return [shown, ghosts(), cells() === before, ui.history.present, ui.file.dirty];
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == [9, 0, True, 0, False]
+
+
+def test_a_preset_says_why_it_will_not_land_on_cells_already_there(sagitta, home):
+    """The square's `B` is in the way of `:cc 2` from `A`: there is no ghost, the layer says why,
+    and RET stamps nothing."""
+    diagram = _diagram(home / "paper")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.commands.run("cc 2 bounded=both");
+        const said = document.querySelector(".which-key").textContent.includes("would land");
+        await press("Enter");
+        return [ghosts(), said, ui.history.present];
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script,
+                   expected_error="would land") == [0, True, 0]
+
+
+def test_a_preset_amscd_cannot_draw_is_not_shown(sagitta, home):
+    """The long exact sequence's snake is routed, which amscd cannot draw; without the wrap, it
+    is a row, which it can."""
+    diagram = _diagram(home / "paper", AMSCD_SQUARE, "square.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(0, 3));
+        ui.commands.run("les");
+        const refused = [ghosts(), ui.keymap.layers.preset.problem];
+        const dimmed = () => Array.from(document.querySelectorAll(".which-key .entry.disabled"),
+            (entry) => entry.querySelector("kbd").textContent);
+        const before = dimmed();
+        await press("W");
+        await press("W");
+        await press("W");
+        return [refused, before, ghosts(), ui.keymap.layers.preset.problem, dimmed()];
+    })()""" % PRESS
+    # Once wrap is at 0, its keys could only step away from what amscd draws, so it is dimmed,
+    # as step at 1 is from the start.
+    assert sagitta("evaluate", diagram, script) == [
+        [0, "amscd has no arrows that are not between neighbours: try wrap=0, or :format tikz-cd"],
+        [], 15, None, ["w W"]]
+
+
+def test_a_spectral_sequence_draws_its_axes_and_reads_bidegrees(sagitta, home):
+    """`:ss p=0..2 q=0..1 obj=\\bullet`, then RET: the axes run between the ticks and the
+    entries, the mode line reads the focused entry's bidegree, `:d 2` aims d_2 from `(0,1)` to
+    `(2,0)`, and the frame is saved in the file and read back."""
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(1, 0));
+        ui.commands.run("ss p=0..2 q=0..1 obj=\\\\bullet");
+        const ghost_axes = document.querySelectorAll("svg.frame-axes polyline:not(.hit)").length;
+        await press("Enter");
+        const polyline = document.querySelector("svg.frame-axes polyline:not(.hit)");
+        const corner = SpectralSequence.axes(ui, ui.frame).corner;
+        const tick = (p, q) => ui.grid.centre_offset_from_position(new Position(
+            ui.frame.origin.x + p, ui.frame.origin.y - q));
+        // The corner is halfway between the ticks' column and the first entries', and between
+        // the ticks' row and the lowest entries'.
+        const halfway = [corner.x === (tick(-1, 0).x + tick(0, 0).x) / 2,
+            corner.y === (tick(0, 0).y + tick(0, -1).y) / 2];
+        const entry = ui.positions.get(`${SpectralSequence.cell(ui.frame, 0, 1)}`);
+        ui.deselect();
+        ui.select(entry);
+        ui.mode_line.update(ui);
+        const said = document.querySelector(".mode-line").textContent.includes("(p,q)=(0,1)");
+        ui.commands.run("d 2 label");
+        const edge = Array.from(ui.selection).find((cell) => cell.is_edge());
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        await ui.file.save();
+        return { ghost_axes, drawn: polyline !== null, halfway, said,
+            target: SpectralSequence.bidegree(ui.frame, edge.target.position), label: edge.label };
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == {
+        "ghost_axes": 1, "drawn": True, "halfway": [True, True], "said": True,
+        "target": [2, 0], "label": "d_2"}
+    text = diagram.read_text()
+    assert "% sagitta: spectral-sequence grading=coh page=2 origin=3-2 p=0..2 q=0..1" in text
+    reopened = sagitta("evaluate", diagram, "[ui.frame?.p, document.querySelectorAll("
+                       "'svg.frame-axes polyline:not(.hit)').length]")
+    assert reopened == [[0, 2], 1]
+
+
+def test_switching_a_spectral_sequence_to_amscd_drops_its_axes(sagitta, home):
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        ui.reposition_focus_point(new Position(1, 0));
+        Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1", "obj=\\\\bullet"]);
+        let asked = null;
+        ui.ask = async (message) => { asked = message; return true; };
+        await ui.switch_format("amscd");
+        const after = [ui.frame, document.querySelectorAll("svg.frame-axes").length];
+        ui.history.undo(ui);
+        return { asked, after, undone: [ui.format, ui.frame?.p] };
+    })()"""
+    result = sagitta("evaluate", diagram, script)
+    assert "the axes of a spectral sequence," in result["asked"]
+    assert result["after"] == [None, 0]
+    assert result["undone"] == ["tikz-cd", [0, 1]]
+
+
+def test_semicolon_d_draws_the_pages_differential_as_space_draws_an_arrow(sagitta, home):
+    """With `(0,1)` selected on an `E_2` page, `D` in the command layer draws d_2 to a new
+    `\\bullet` at `(2,0)`, selecting it with the arrow, the focus point on it; `D` again goes on
+    from there."""
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(1, 0));
+        Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1"]);
+        const entry = new Vertex(ui, "A", SpectralSequence.cell(ui.frame, 0, 1));
+        ui.history.add(ui, [{ kind: "create", cells: new Set([entry]) }]);
+        ui.deselect();
+        ui.select(entry);
+        await press(";");
+        await press("D", { shiftKey: true });
+        const first = {
+            selected: Array.from(ui.selection, (cell) => cell.is_vertex()
+                ? [cell.label, ...SpectralSequence.bidegree(ui.frame, cell.position)] : "arrow"),
+            focus: SpectralSequence.bidegree(ui.frame, ui.focus_position),
+            file: ui.file.text().includes("\\\\[\\\\begin{tikzcd}") ,
+        };
+        ui.deselect();
+        ui.select(ui.positions.get(`${ui.focus_position}`));
+        await press("D", { shiftKey: true });
+        return { first, second: SpectralSequence.bidegree(ui.frame, ui.focus_position),
+            summary: document.querySelector(".mode-line .file").textContent };
+    })()""" % PRESS
+    result = sagitta("evaluate", diagram, script)
+    assert result["first"]["selected"] == [["\\bullet", 2, 0], "arrow"]
+    assert result["first"]["focus"] == [2, 0]
+    assert result["second"] == [4, -1]
+    assert "E_2 coh" in result["summary"]
+
+
+def test_the_frame_layer_shows_and_changes_the_frame(sagitta, home):
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(1, 0));
+        Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1"]);
+        ui.commands.run("frame");
+        const shown = document.querySelector(".which-key").textContent;
+        await press("r");
+        await press("g");
+        await press("p");
+        const changed = [ui.frame.page, ui.frame.grading, ui.frame.p];
+        await press("Escape");
+        ui.history.undo(ui);
+        return { shown: shown.includes("0..1"), changed, undone: ui.frame.p,
+            layer: ui.keymap.layer };
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == {
+        "shown": True, "changed": [3, "hom", [0, 2]], "undone": [0, 1], "layer": None}
+
+
+def test_colon_in_a_preset_edits_its_options_as_a_command(sagitta, home):
+    diagram = _diagram(home / "paper", "", "new.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.commands.run("les obj=\\"X, Y\\",Z");
+        await press("c");
+        await press(":");
+        return [ui.label_input.element.value, ghosts(), ui.keymap.layer];
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == [
+        'les "obj=X, Y,Z" cohom ', 0, None]
 
 
 def test_a_new_diagram_is_saved_as_cd_tex(sagitta, home):
@@ -2482,3 +2744,488 @@ def test_a_label_measured_before_it_is_laid_out_is_measured_again(sagitta, home)
     result = sagitta("evaluate", _diagram(home / "paper"), script)
     assert result["unlaid"] == 0
     assert result["width"] > 0
+
+
+def test_clearing_drops_the_frame_in_the_same_step(sagitta, home):
+    """Clear takes a spectral sequence's frame and axes with its cells; one undo brings both
+    back. Clear is offered with only a frame left."""
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        ui.reposition_focus_point(new Position(1, 0));
+        Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1", "obj=\\\\bullet"]);
+        const ran = ui.mode_line.run(ui, "clear");
+        const cleared = [ui.frame, ui.quiver.all_cells().length,
+            document.querySelectorAll("svg.frame-axes polyline:not(.hit)").length];
+        ui.history.undo(ui);
+        const undone = [ui.frame?.p, ui.quiver.all_cells().length > 0];
+        ui.history.add(ui, [{ kind: "delete", cells: new Set(ui.quiver.all_cells()) }], true);
+        const offered = ui.mode_line.actions.get("clear").enabled();
+        return { ran, cleared, undone, offered };
+    })()"""
+    assert sagitta("evaluate", diagram, script) == {
+        "ran": True, "cleared": [None, 0, 0], "undone": [[0, 1], True], "offered": True}
+
+
+def test_the_key_list_hides_the_differential_without_a_frame(sagitta, home):
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s
+        const shown = () => {
+            const entry = Array.from(document.querySelectorAll(".which-key .entry"))
+                .find((entry) => entry.textContent.includes("differential d_r"));
+            return getComputedStyle(entry).display !== "none";
+        };
+        await press(";");
+        const before = shown();
+        await press("Escape");
+        ui.reposition_focus_point(new Position(1, 0));
+        Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1"]);
+        await press(";");
+        const after = shown();
+        await press("Escape");
+        return [before, after];
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == [False, True]
+
+
+def test_the_frame_layer_moves_the_low_ends(sagitta, home):
+    """`x` and `y` in `:frame` step the low ends up, and `X` and `Y` down, the other axis's
+    ticks moving with them, and the axes following on the canvas at once."""
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(1, 0));
+        Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1"]);
+        const corner = () => JSON.stringify(SpectralSequence.axes(ui, ui.frame).corner);
+        const drawn = () => document.querySelector("svg.frame-axes").dataset.shown;
+        ui.commands.run("frame");
+        const before = drawn();
+        await press("X");
+        await press("Y");
+        const grown = [ui.frame.p, ui.frame.q, drawn() !== before, drawn().includes(corner())];
+        await press("x");
+        await press("y");
+        const back = [ui.frame.p, ui.frame.q, drawn().includes(corner())];
+        await press("Escape");
+        return { grown, back };
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == {
+        "grown": [[-1, 1], [-1, 1], True, True], "back": [[0, 1], [0, 1], True]}
+
+
+def test_a_dashed_diagonal_is_drawn_and_deleting_a_tick_takes_the_axes(sagitta, home):
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        ui.reposition_focus_point(new Position(1, 0));
+        Presets.run(ui, "spectral-sequence", ["p=0..2", "q=0..2", "obj=\\\\bullet"]);
+        ui.commands.run("diagonal 2 line");
+        const line = document.querySelector("svg.frame-axes line.diagonal");
+        const dashed = line?.getAttribute("stroke-dasharray");
+        ui.commands.run("diagonal 2 line; diagonal 2 line");
+        const tick = ui.positions.get(`${new Position(ui.frame.origin.x + 2, ui.frame.origin.y + 1)}`);
+        ui.history.add(ui, [{ kind: "delete", cells: new Set([tick]) }], true);
+        // Both are drawn across from the ticks, so both go with the last p tick, at once.
+        const after = [document.querySelectorAll("svg.frame-axes polyline:not(.hit)").length,
+            document.querySelectorAll("svg.frame-axes line:not(.hit)").length];
+        return { drawn: line !== null, dashed: dashed?.split(" ").length, after,
+            selected: ui.selection.size };
+    })()"""
+    result = sagitta("evaluate", diagram, script)
+    assert result["drawn"] and result["dashed"] == 2
+    assert result["after"] == [0, 0]
+
+
+def test_go_home_and_the_focus_bidegree(sagitta, home):
+    """`; g` moves the focus point to the first object and the view to it; with nothing
+    selected in a spectral sequence, the mode line gives the focus point's bidegree."""
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(3, 2));
+        Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1"]);
+        ui.deselect();
+        ui.reposition_focus_point(new Position(30, 30));
+        ui.pan_to(ui.grid.centre_offset_from_position(new Position(30, 30)));
+        await press(";");
+        await press("g");
+        const first = ui.quiver.all_cells().filter((cell) => cell.is_vertex())
+            .sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x)[0];
+        const centred = ui.grid.centre_offset_from_position(first.position);
+        const homed = [ui.focus_position.x, ui.focus_position.y];
+        ui.focus_point.class_list.remove("focused");
+        ui.mode_line.update(ui);
+        const named = document.querySelector(".mode-line .target").textContent;
+        // One across and one down from the name of q is the entry of bidegree (0,1).
+        ui.reposition_focus_point(ui.focus_position.add(new Position(1, 1)));
+        ui.focus_point.class_list.remove("focused");
+        ui.mode_line.update(ui);
+        return { home: homed,
+            first: [first.position.x, first.position.y], label: first.label,
+            view: [ui.view.x === centred.x, ui.view.y === centred.y], named,
+            target: document.querySelector(".mode-line .target").textContent };
+    })()""" % PRESS
+    result = sagitta("evaluate", diagram, script)
+    assert result["home"] == result["first"]
+    assert result["label"] == "\\scriptstyle q"
+    assert result["view"] == [True, True]
+    # Outside the page, there is no bidegree to give.
+    assert result["named"] == ""
+    assert result["target"] == "focus  (p,q)=(0,1)"
+
+
+def test_undoing_a_stamp_puts_the_focus_point_back(sagitta, home):
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(2, 2));
+        ui.commands.run("cc");
+        await press("ArrowRight");
+        await press("Enter");
+        ui.reposition_focus_point(new Position(9, 9));
+        ui.history.undo(ui);
+        return [ui.focus_position.x, ui.focus_position.y, cells()];
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == [3, 2, 0]
+
+
+def test_tab_walks_a_stamp_in_the_order_it_reads(sagitta, home):
+    """After `:cc 2 bounded=both`, Tab goes object, arrow, object, arrow, ..., as the sequence
+    reads, rather than all the objects and then the arrows."""
+    diagram = _diagram(home / "paper", "", "new.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.commands.run("cc 2 bounded=both");
+        await press("Enter");
+        const order = [];
+        for (let i = 0; i < 7; ++i) {
+            await press("Tab");
+            const [cell] = ui.selection;
+            order.push(cell.is_vertex() ? cell.label : "→");
+        }
+        return order;
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == ["0", "→", "C_1", "→", "C_0", "→", "0"]
+
+
+def test_a_stamp_marks_what_is_in_its_way_and_the_error_clears_the_list(sagitta, home):
+    """Over cells, the setup layer marks them and says so; the error sits under the key list,
+    which it pushes up, not over it."""
+    diagram = _diagram(home / "paper")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.commands.run("cc");
+        const marked = document.querySelectorAll(".cell.in-the-way").length;
+        await press("Enter");
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const error = document.querySelector(".mode-line .message.error").getBoundingClientRect();
+        const list = document.querySelector(".which-key").getBoundingClientRect();
+        await press("Escape");
+        await press("Escape");
+        return { marked: marked > 0, above: list.bottom <= error.top + 0.5,
+            cleared: document.querySelectorAll(".cell.in-the-way").length };
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script, expected_error="That would land") == {
+        "marked": True, "above": True, "cleared": 0}
+
+
+def test_an_error_on_the_command_line_sits_above_its_completions(sagitta, home):
+    diagram = _diagram(home / "paper")
+    script = """(async () => {
+        ui.prompt.open("Command");
+        ui.label_input.element.value = "cc 2 aug M";
+        ui.prompt.input?.();
+        ui.prompt.list_completions(["cc", "es", "ses"]);
+        UI.display_error('cc takes a number of terms: not "aug".');
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const message = document.querySelector(".mode-line .message.error").getBoundingClientRect();
+        return Array.from(document.querySelectorAll(".label-input-container, .prompt-completions"))
+            .filter((panel) => {
+                const rect = panel.getBoundingClientRect();
+                return rect.height > 0 && rect.top < message.bottom - 0.5
+                    && rect.bottom > message.top + 0.5;
+            }).length;
+    })()"""
+    assert sagitta("evaluate", diagram, script, expected_error="not \"aug\"") == 0
+
+
+def test_pressing_on_the_axes_does_nothing(sagitta, home):
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        ui.reposition_focus_point(new Position(1, 0));
+        Presets.run(ui, "spectral-sequence", ["p=0..2", "q=0..2", "obj=\\\\bullet"]);
+        const corner = SpectralSequence.axes(ui, ui.frame).corner;
+        const hit = document.querySelector("svg.frame-axes polyline.hit");
+        const before = ui.quiver.all_cells().length;
+        let reached = false;
+        const listener = () => { reached = true; };
+        ui.canvas.element.addEventListener("pointerdown", listener);
+        hit.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+        ui.canvas.element.removeEventListener("pointerdown", listener);
+        return [reached, ui.quiver.all_cells().length === before,
+            getComputedStyle(hit).pointerEvents];
+    })()"""
+    assert sagitta("evaluate", diagram, script) == [False, True, "stroke"]
+
+
+# ── What the review and stress test of 0.7.0 found ─────────────────────────────
+
+
+def test_the_mode_line_saves_without_the_ghost(sagitta, home):
+    """A press on the mode line leaves the setup layer first, so its save button writes the diagram
+    without the ghost."""
+    diagram = _diagram(home / "paper")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(0, 3));
+        ui.commands.run("cc 3");
+        const shown = ghosts();
+        const button = document.querySelector('.mode-line .hint[data-action="save"]');
+        button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+        button.click();
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        const written = await host.read(ui.file.path);
+        return [shown > 0, ghosts(), ui.keymap.layer === ui.keymap.layers.preset,
+            written.includes("C_2")];
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == [True, 0, False, False]
+
+
+def test_a_preset_goes_last_on_a_command_line(sagitta, home):
+    diagram = _diagram(home / "paper")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(0, 3));
+        const ran = ui.commands.run("cc 2; w");
+        const written = await host.read(ui.file.path);
+        return [ran, ghosts(), written.includes("C_1")];
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script,
+                   expected_error="cc opens its layer, so it goes last on the line") == [
+        False, 0, False]
+
+
+PAGE = """
+        ui.reposition_focus_point(new Position(2, 2));
+        Presets.run(ui, "spectral-sequence", ["p=0..2", "q=0..1", "obj=\\\\bullet"]);
+        const axes = () => document.querySelectorAll("svg.frame-axes polyline:not(.hit)").length;
+        const origin = () => ui.frame === null ? null : [ui.frame.origin.x, ui.frame.origin.y];
+"""
+
+
+def test_moving_a_page_moves_its_frame(sagitta, home):
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s %s
+        const before = origin();
+        ui.select(...ui.quiver.all_cells());
+        ui.move_selection(new Position(1, 0));
+        const moved = [origin(), axes()];
+        ui.history.undo(ui);
+        return [before, moved, origin(), axes()];
+    })()""" % (PRESS, PAGE)
+    assert sagitta("evaluate", diagram, script) == [[2, 3], [[3, 3], 1], [2, 3], 1]
+
+
+def test_flipping_a_page_is_refused(sagitta, home):
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s %s
+        ui.mode_line.run(ui, "flip-hor");
+        return [origin(), ui.history.present];
+    })()""" % (PRESS, PAGE)
+    assert sagitta("evaluate", diagram, script,
+                   expected_error="would scramble the spectral sequence's bidegrees") == [
+        [2, 3], 1]
+
+
+def test_deleting_every_cell_takes_the_frame(sagitta, home):
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s %s
+        ui.select(...ui.quiver.all_cells());
+        ui.mode_line.run(ui, "delete");
+        const gone = [origin(), cells(), document.querySelector(".mode-line").textContent
+            .includes("[E_2")];
+        ui.history.undo(ui);
+        return [gone, origin(), axes()];
+    })()""" % (PRESS, PAGE)
+    assert sagitta("evaluate", diagram, script) == [[None, 0, False], [2, 3], 1]
+
+
+def test_pasting_over_a_page_undoes_with_its_frame(sagitta, home):
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s %s
+        ui.keymap.layers.import.paste("\\\\begin{tikzcd}\\n\\tA & B\\n\\t\\\\arrow[from=1-1, to=1-2]\\n\\\\end{tikzcd}\\n");
+        const pasted = origin();
+        ui.history.undo(ui);
+        return [pasted, origin(), axes()];
+    })()""" % (PRESS, PAGE)
+    assert sagitta("evaluate", diagram, script) == [None, [2, 3], 1]
+
+
+def test_the_frame_layer_says_when_undo_took_the_frame(sagitta, home):
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s %s
+        ui.commands.run("frame");
+        ui.history.undo(ui);
+        await press("g");
+        return document.querySelector(".mode-line .message").textContent;
+    })()""" % (PRESS, PAGE)
+    assert "There is no spectral sequence here now" in sagitta(
+        "evaluate", diagram, script, expected_error="There is no spectral sequence here now")
+
+
+def test_a_differential_goes_only_from_entries(sagitta, home):
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s %s
+        ui.deselect();
+        ui.select(ui.quiver.all_cells().find((cell) => cell.label === "\\\\scriptstyle p"));
+        const ran = ui.commands.run("d");
+        return [ran, cells()];
+    })()""" % (PRESS, PAGE)
+    assert sagitta("evaluate", diagram, script,
+                   expected_error="Select the entries to draw") == [False, 13]
+
+
+def test_a_crlf_file_is_saved_with_crlf(sagitta, home):
+    diagram = home / "paper" / "square.cd.tex"
+    diagram.parent.mkdir(parents=True)
+    diagram.write_bytes(SQUARE.replace("\n", "\r\n").encode())
+    script = """(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const dirty = ui.file.dirty;
+        await ui.file.save();
+        return dirty;
+    })()"""
+    assert sagitta("evaluate", diagram, script) is False
+    assert b"\r\n" in diagram.read_bytes()
+    assert b"\n" not in diagram.read_bytes().replace(b"\r\n", b"")
+
+
+def test_a_label_whose_braces_do_not_balance_is_not_saved(sagitta, home):
+    diagram = _diagram(home / "paper", SQUARE, "square.cd.tex")
+    script = """(async () => {
+        const b = ui.quiver.all_cells().find((cell) => cell.label === "B");
+        ui.history.add(ui, [{ kind: "label", labels: [{ cell: b, from: "B", to: "{B" }] }], true);
+        const saved = await ui.file.save();
+        return [saved, Array.from(ui.selection, (cell) => cell.label)];
+    })()"""
+    assert sagitta("evaluate", diagram, script, expected_error="Not saved: unbalanced braces in {B.") == [
+        False, ["{B"]]
+    assert diagram.read_text() == SQUARE
+
+
+def test_a_file_that_was_not_all_read_is_marked_so(sagitta, home):
+    """Saving over such a file asks first (`DiagramFile.save`), which the shell's own dialog does,
+    so here only the mark is checked; a file read whole has none."""
+    broken = SQUARE.replace("& B", "& {{B}")
+    diagram = _diagram(home / "paper", broken, "square.cd.tex")
+    script = """(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const marked = ui.file.unread;
+        await ui.file.new_diagram();
+        return [marked, ui.file.unread];
+    })()"""
+    assert sagitta("evaluate", diagram, script) == [True, False]
+    assert diagram.read_text() == broken
+
+
+def test_typing_a_percent_in_a_label_types_the_sign(sagitta, home):
+    diagram = _diagram(home / "paper", SQUARE, "square.cd.tex")
+    script = """(async () => {
+        const b = ui.quiver.all_cells().find((cell) => cell.label === "B");
+        ui.deselect();
+        ui.select(b);
+        const input = ui.label_input.element;
+        input.disabled = false;
+        input.focus();
+        input.value = "50";
+        input.setSelectionRange(2, 2);
+        input.dispatchEvent(new InputEvent("beforeinput",
+            { data: "%", inputType: "insertText", cancelable: true }));
+        return [input.value, b.label];
+    })()"""
+    assert sagitta("evaluate", diagram, script) == ["50\\%", "50\\%"]
+
+
+def test_tab_after_a_second_stamp_starts_on_it(sagitta, home):
+    """Tab starts on the stamp just made, not on an older one still queued; a spectral sequence's
+    ticks are not queued, so Tab after `; D` goes to the new arrow."""
+    diagram = _diagram(home / "paper", "", "new.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.commands.run("cc 2 bounded=both");
+        await press("Enter");
+        ui.reposition_focus_point(new Position(0, 4));
+        ui.commands.run("ses");
+        await press("Enter");
+        await press("Tab");
+        const [first] = ui.selection;
+        const second = [first.label, first.position.y];
+        ui.history.undo(ui);
+        ui.history.undo(ui);
+        ui.reposition_focus_point(new Position(2, 2));
+        Presets.run(ui, "spectral-sequence", ["p=0..2", "q=0..1", "obj=\\\\bullet"]);
+        const queued = Array.from(document.querySelectorAll("kbd.queue")).length;
+        ui.deselect();
+        ui.select(ui.positions.get(`${SpectralSequence.cell(ui.frame, 0, 1)}`));
+        ui.commands.run("d");
+        await press("Tab");
+        const [next] = ui.selection;
+        return [second, queued, next.is_edge()];
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == [["0", 4], 6, True]
+
+
+def test_a_file_with_a_coloured_arrow_label_opens(sagitta, home):
+    """Its label is coloured once it is drawn, after the cells are all added (since 0.6.0, the
+    colour was set before there was a label, and opening failed)."""
+    text = SQUARE.replace('\\arrow[r, "f"]',
+                          '\\arrow[r, "f", color={rgb,255:red,214;green,92;blue,92}]')
+    diagram = _diagram(home / "paper", text, "square.cd.tex")
+    script = """(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const edge = ui.quiver.all_cells().find((cell) => cell.label === "f");
+        return [ui.quiver.all_cells().length,
+            getComputedStyle(edge.element.query_selector(".label").element).color];
+    })()"""
+    assert sagitta("evaluate", diagram, script) == [8, "rgb(214, 92, 92)"]
+
+
+def test_the_key_list_opened_after_an_error_sits_above_it(sagitta, home):
+    diagram = _diagram(home / "paper")
+    script = """(async () => {
+        %s
+        UI.display_error("a standing error that is long enough to say something");
+        await press(";");
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+        return [box(".which-key").bottom <= box(".mode-line .message.error").top + 0.5,
+            Math.abs(box(".mode-line .message.error").bottom - box(".mode-line").top) < 0.5];
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script, expected_error="a standing error") == [
+        True, True]
+
+
+def test_a_problem_runs_across_the_key_list_and_wraps(sagitta, home):
+    diagram = _diagram(home / "paper", "", "page.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(2, 2));
+        Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1"]);
+        ui.reposition_focus_point(new Position(12, 2));
+        ui.commands.run("ss");
+        const line = document.querySelector(".which-key .entry.wide");
+        const group = line.closest(".group").getBoundingClientRect();
+        const value = line.querySelector(".value");
+        return [line.textContent.includes("keeps only one"),
+            line.getBoundingClientRect().width > group.width / 2,
+            value.scrollWidth <= value.clientWidth + 1];
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == [True, True, True]
