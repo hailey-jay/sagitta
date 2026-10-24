@@ -124,11 +124,12 @@ def _diagram(directory, text=SQUARE, name="square.tikzcd"):
 
 @pytest.mark.parametrize("commands,expected", [
     (["tail hook", "body dashed", "head none"], '\\arrow["f", dashed, hook, no head, from=1-1'),
-    (["curve 3"], '\\arrow["f", curve={height=18pt}, from=1-1'),
+    (["curve 18"], '\\arrow["f", curve={height=18pt}, from=1-1'),
     (["level 2"], '\\arrow["f", Rightarrow, from=1-1'),
     (["offset 2"], '\\arrow["f", shift right=2, from=1-1'),
     (["position 30"], '\\arrow["f"{pos=0.3}, from=1-1'),
     (["length 20 80"], '\\arrow["f", between={0.2}{0.8}, from=1-1'),
+    (["length 5 95"], '\\arrow["f", between={0.05}{0.95}, from=1-1'),
     (["adjunction"], '"\\dashv"{anchor=center}, draw=none, from=1-1'),
     (["corner"], '"\\lrcorner"{anchor=center, pos=0.125, rotate=45}, draw=none'),
     (["corner", "corner-var"], '"\\ulcorner"{anchor=center, pos=0.125, rotate=45}, draw=none'),
@@ -212,7 +213,7 @@ def test_aligning_the_labels_redraws_them(sagitta, home, alignment):
 
 
 @pytest.mark.parametrize("keys,expected", [
-    (["b", "3", "Enter"], '\\arrow["f", curve={height=18pt}, from=1-1'),
+    (["b", "1", "8", "Enter"], '\\arrow["f", curve={height=18pt}, from=1-1'),
     (["b", "Right"], '\\arrow["f", curve={height=6pt}, from=1-1'),
     (["o", "Left"], '\\arrow["f", shift left, from=1-1'),
     (["n", "2", "Enter"], '\\arrow["f", Rightarrow, from=1-1'),
@@ -275,7 +276,7 @@ def test_the_mode_line_names_the_list_or_slider_open(sagitta, home, keys, mode):
 
 
 @pytest.mark.parametrize("commands,expected", [
-    (["curve 3", "corner", "arrow"], '\\arrow["f", curve={height=18pt}, from=1-1'),
+    (["curve 18", "corner", "arrow"], '\\arrow["f", curve={height=18pt}, from=1-1'),
     (["level 3", "tail hook", "adjunction", "arrow"],
      '\\arrow["f", Rightarrow, scaling nfold=3, hook, from=1-1'),
 ])
@@ -479,8 +480,10 @@ def test_the_corner_alternates_between_its_two_kinds(sagitta, home):
 
 @pytest.mark.parametrize("scenario,argument,expected", [
     # With only loops selected, `b` (curve) sets the radius.
-    ("layer", ["b", "3", "Enter"], "loop, in=55, out=125, distance=10mm]"),
+    ("layer", ["b", "1", "0", "Enter"], "loop, in=55, out=125, distance=10mm]"),
     ("commands", ["angle 90"], "loop, in=330, out=30, distance=5mm]"),
+    # And `o` (offset) sets the angle, to the degree.
+    ("layer", ["o", "3", "0", "Enter"], "loop, in=30, out=90, distance=5mm]"),
     # With the vertex let go of, the arrow keys, panning, grow the loop and turn it.
     ("keys", [["Space", ["shift"]], ["Up", ["control"]]], "loop, in=55, out=125, distance=10mm]"),
     ("keys", [["Space", ["shift"]], ["Right", ["control"]]], "loop, in=15, out=75, distance=5mm]"),
@@ -970,7 +973,7 @@ def test_the_keys_file_rebinds_the_mark(sagitta, home):
 def test_a_chord_choosing_a_slider_enters_the_command_layer(sagitta, home):
     _keys(home, "curve ; k C-k\n")
     diagram = _diagram(home / "paper")
-    sagitta("keys", diagram, json.dumps([["k", ["control"]], ["3"], ["Enter"]]))
+    sagitta("keys", diagram, json.dumps([["k", ["control"]], ["1"], ["8"], ["Enter"]]))
     assert '\\arrow["f", curve={height=18pt}, from=1-1' in diagram.read_text()
 
 
@@ -1856,7 +1859,7 @@ def test_the_gap_is_saved_as_an_empty_row(sagitta, home):
     (["route x", "rounding 0"], "to path={-- (\\tikzcdmatrixname-2-2.center"),
     # A one-cell end leg holds no more than 13pt at normal separations, with room for the head
     # (see `QuiverExport.route_radius`).
-    (["route x", "rounding 8"], "to path={[rounded corners=13pt] --"),
+    (["route x", "rounding 16"], "to path={[rounded corners=13pt] --"),
     (["route x", "squiggly"], "[sharp corners]}, squiggly, from=1-1, to=2-2]"),
 ])
 def test_route_commands_write_a_to_path(sagitta, home, commands, expected):
@@ -1953,7 +1956,7 @@ def test_k_takes_out_the_checkpoint_under_the_pointer(sagitta, home):
 def test_checkpoint_has_a_key_in_the_layer(sagitta, home):
     diagram = _diagram(home / "diagonal", DIAGONAL, "diagonal.tikzcd")
     result = sagitta("route", diagram, json.dumps(
-        [[1, 0], {"keys": [[";"], ["k"], ["b"], ["5"], ["Enter"], ["Escape"]]}]))
+        [[1, 0], {"keys": [[";"], ["k"], ["b"], ["1"], ["0"], ["Enter"], ["Escape"]]}]))
     # The curve's key rounds a route instead.
     assert result["edges"][0]["route"] == [[1, 0]]
     assert "[rounded corners=10pt]" in diagram.read_text()

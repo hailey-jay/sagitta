@@ -77,13 +77,19 @@ class ArrowOptions {
         });
     }
 
-    /// `values` (one per thumb) brought inside `property`'s range, rounded to its step counted from
-    /// `min` (so that a loop's radius stays odd), and, for `length`, kept in order and far enough
-    /// apart.
+    /// `values` (one per thumb) brought inside `property`'s range, rounded to its grain, or else its
+    /// step, counted from `min` (so that a loop's radius stays odd), and, for `length`, kept in
+    /// order and far enough apart.
     static clamp(property, values) {
-        const { min, max, step, spacing = 0, wraps = false } = ArrowOptions.PROPERTIES[property];
+        const { min, max, step, grain = step, spacing = 0, wraps = false, nonzero = false }
+            = ArrowOptions.PROPERTIES[property];
         const clamped = values.map((value) => {
-            let result = min + Math.round((Number(value) - min) / step) * step;
+            let result = min + Math.round((Number(value) - min) / grain) * grain;
+            // A fractional grain leaves binary noise (`0.1 + 0.2`), which would be written out.
+            result = Number(result.toFixed(6));
+            if (nonzero && result === 0) {
+                result = step;
+            }
             if (wraps) {
                 result = (result - min) % (max - min);
                 result += result < 0 ? max : min;
@@ -124,8 +130,18 @@ class ArrowOptions {
         const { thumbs, default: fallback } = ArrowOptions.PROPERTIES[property];
         const current = this.value(ui, property) ?? fallback;
         const values = thumbs === 1 ? [current] : Array.from(current);
-        const { step } = ArrowOptions.PROPERTIES[property];
-        this.set(ui, property, values.map((value) => value + step * delta));
+        this.set(ui, property, values.map((value) => ArrowOptions.stepped(property, value, delta)));
+    }
+
+    /// `value` of `property` moved by `delta` of its step. A value whose sign is a direction (a
+    /// loop's) turns round where it would cross `0`, keeping its size.
+    static stepped(property, value, delta) {
+        const { step, nonzero = false } = ArrowOptions.PROPERTIES[property];
+        const next = value + step * delta;
+        if (nonzero && value !== 0 && Math.sign(next) !== Math.sign(value)) {
+            return -value;
+        }
+        return next;
     }
 
     /// Nudge the selected edges with an arrow key. For arrows, `↑`/`↓` bend them toward their
@@ -420,20 +436,42 @@ ArrowOptions.EDGE_TYPES = [
 /// The numeric arrow options, with the range each takes. `only` limits a property to one of
 /// `ArrowOptions.KINDS`; `arrow_only` marks those that mean nothing to an adjunction or a corner;
 /// `wraps` marks the one that turns rather than stopping at its ends; `spacing` is the least gap
-/// between a pair of values; and `default` is what the palette reports for a selection that has
-/// no value.
+/// between a pair of values; `grain`, where it is finer than `step`, is what a value is rounded
+/// to; `nonzero` marks the one whose sign is a direction, so that it never stops at `0`; and
+/// `default` is what the palette reports for a selection that has no value.
 ArrowOptions.PROPERTIES = {
     label_position: { min: 0, max: 100, step: 10, thumbs: 1, default: 50 },
-    offset: { min: -5, max: 5, step: 1, thumbs: 1, default: 0, only: "unrouted" },
-    rounding: { min: 0, max: 8, step: 1, thumbs: 1, default: 3, only: "routed", arrow_only: true },
-    curve: { min: -5, max: 5, step: 1, thumbs: 1, default: 0, only: "curved", arrow_only: true },
-    radius: { min: -5, max: 5, step: 2, thumbs: 1, default: 0, only: "loop", arrow_only: true },
+    // An offset, in tikz-cd's own unit of shift, as the export writes it.
+    offset: {
+        min: -Math.floor(CONSTANTS.MAX_DIMENSION / CONSTANTS.TEX.SHIFT),
+        max: Math.floor(CONSTANTS.MAX_DIMENSION / CONSTANTS.TEX.SHIFT),
+        step: 1, grain: 0.01, thumbs: 1, default: 0, only: "unrouted",
+    },
+    // The radius of a route's corners, in pt, before the export caps it by the legs.
+    rounding: {
+        min: 0, max: CONSTANTS.MAX_DIMENSION, step: CONSTANTS.ROUNDING_STEP, grain: 0.01,
+        thumbs: 1, default: 6, only: "routed", arrow_only: true,
+    },
+    // A curve's height, in pt, as the export writes it, within TeX's largest dimension.
+    curve: {
+        min: -CONSTANTS.MAX_DIMENSION, max: CONSTANTS.MAX_DIMENSION, step: CONSTANTS.CURVE_STEP, grain: 0.01, thumbs: 1, default: 0,
+        only: "curved", arrow_only: true,
+    },
+    // A loop's distance, in mm, as the export writes it; negative for an anticlockwise loop.
+    radius: {
+        min: -Math.floor(CONSTANTS.MAX_DIMENSION / CONSTANTS.TEX.PT_PER_MM),
+        max: Math.floor(CONSTANTS.MAX_DIMENSION / CONSTANTS.TEX.PT_PER_MM),
+        step: CONSTANTS.LOOP_STEP, grain: 0.01, nonzero: true, thumbs: 1, default: 0,
+        only: "loop", arrow_only: true,
+    },
     angle: {
-        min: -180, max: 180, step: 45, thumbs: 1, default: 0,
+        min: -180, max: 180, step: 45, grain: 1, thumbs: 1, default: 0,
         only: "loop", arrow_only: true, wraps: true,
     },
     length: {
-        min: 0, max: 100, step: 10, thumbs: 2, spacing: 20, default: [0, 100], arrow_only: true,
+        // In whole percent, as links keep it; the arrow keys step it 10% at a time.
+        min: 0, max: 100, step: 10, grain: 1, thumbs: 2, spacing: 20, default: [0, 100],
+        arrow_only: true,
     },
     level: {
         min: 1, max: CONSTANTS.MAXIMUM_CELL_LEVEL, step: 1, thumbs: 1, default: 1,

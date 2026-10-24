@@ -181,6 +181,70 @@ const pending = [];
     check("a bend reads as a curve", bent.ui.quiver.all_cells()
         .filter((cell) => cell.is_edge())[0].options.curve !== 0, true);
 
+    // A curve is kept in pt, as written, rather than rounded to quiver's units of 6pt, and links
+    // still give it in those units.
+    const height = "\\begin{tikzcd}\n\tA \\arrow[r, curve={height=-7.5pt}] & B\n\\end{tikzcd}\n";
+    const tall = parse(height);
+    const [arc] = tall.ui.quiver.all_cells().filter((cell) => cell.is_edge());
+    check("a curve reads in pt", arc.options.curve, -7.5);
+    check("and is written as it was read", tall.ui.quiver.export("tikz-cd", tall.ui.settings,
+        tall.ui.options(), tall.ui.definitions()).data.includes("curve={height=-7.5pt}"), true);
+    check("a curve far past quiver's reads", parse(height.replace("-7.5", "100")).ui.quiver
+        .all_cells().filter((cell) => cell.is_edge())[0].options.curve, 100);
+    const link = QuiverImportExport.base64.export(
+        tall.ui.quiver, tall.ui.settings, tall.ui.options(), tall.ui.definitions()).data;
+    const decoded = JSON.parse(atob(link));
+    check("a link gives the curve in quiver's units", decoded[decoded.length - 1][4].curve, -1.25);
+    const relinked = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History,
+        ArrowOptions });
+    QuiverImportExport.base64.import(relinked, link);
+    check("and reads back in pt", relinked.quiver.all_cells().filter((cell) => cell.is_edge())[0]
+        .options.curve, -7.5);
+    check("an arrow key bends by 6pt", ArrowOptions.PROPERTIES.curve.step, 6);
+
+    // The other lengths are kept as the source gives them too: an offset in tikz-cd's shifts, a
+    // loop's distance in mm, its angle to the degree, and shortening in pt.
+    const edge_of = (code) => parse(code).ui.quiver.all_cells().find((cell) => cell.is_edge());
+    const written = (code) => {
+        const { ui } = parse(code);
+        return ui.quiver.export("tikz-cd", ui.settings, ui.options(), ui.definitions()).data;
+    };
+    const shifted = "\\begin{tikzcd}\n\tA \\arrow[r, shift left=1.5] & B\n\\end{tikzcd}\n";
+    check("a fractional offset reads", edge_of(shifted).options.offset, -1.5);
+    check("and is written as read", written(shifted).includes("shift left=1.5"), true);
+    const looped = (distance) => "\\begin{tikzcd}\n\tA \\arrow[loop, in=55, out=125, "
+        + `distance=${distance}] \\end{tikzcd}\n`;
+    check("a loop's distance reads in mm", edge_of(looped("12mm")).options.radius, 12);
+    check("whatever its unit", edge_of(looped("1cm")).options.radius, 10);
+    check("and is written in mm", written(looped("12mm")).includes("distance=12mm"), true);
+    const turned = "\\begin{tikzcd}\n\tA \\arrow[loop, in=40, out=100, distance=5mm]"
+        + " \\end{tikzcd}\n";
+    check("a loop's angle reads to the degree", edge_of(turned).options.angle, 20);
+    check("stepping a loop past 0 turns it round",
+        [ArrowOptions.stepped("radius", 5, -1), ArrowOptions.stepped("radius", 2, -1),
+            ArrowOptions.stepped("radius", 10, -1)], [-5, -2, 5]);
+    check("a loop of 0mm is refused", ArrowOptions.clamp("radius", [0]), 5);
+    const loop_link = (units) => {
+        const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History,
+            ArrowOptions });
+        QuiverImportExport.base64.import(ui, btoa(JSON.stringify(
+            [0, 1, [0, 0, "A"], [0, 0, "", 0, { radius: units, angle: 0 }]])));
+        return ui.quiver.all_cells().find((cell) => cell.is_edge()).options.radius;
+    };
+    check("quiver's loop units read as mm", [1, 3, 5, -3].map(loop_link), [5, 10, 15, -10]);
+    check("and go back to them",
+        [5, 10, 15, -10].map((mm) => QuiverExport.loop_units(mm)), [1, 3, 5, -3]);
+    const short = "\\begin{tikzcd}\n\tA \\arrow[r, shorten <=2.5pt] & B\n\\end{tikzcd}\n";
+    check("a fractional shortening reads", parse(short).diagnostics.length, 0);
+    const corner = String.raw`\begin{tikzcd}
+	A & B \\
+	& C
+	\arrow[to path={[rounded corners=5pt] -- (\tikzcdmatrixname-1-2.center) -- (\tikztotarget) [sharp corners]}, from=1-1, to=2-2]
+\end{tikzcd}
+`;
+    check("a route's rounding reads in pt", edge_of(corner).options.rounding, 5);
+    check("an arrow key rounds by 2pt", ArrowOptions.PROPERTIES.rounding.step, 2);
+
     const replaced = parse("\\begin{tikzcd}[ampersand replacement=\\&]\n"
         + "\tA \\arrow[r] \\& B\n\\end{tikzcd}\n");
     check("ampersand replacement reads", counts(replaced.ui), [2, 1]);

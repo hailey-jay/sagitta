@@ -579,15 +579,15 @@ class ModeLine {
                 }
             }
             if (edges[0].is_loop()) {
-                parts.push(`radius ${options.radius}`, `angle ${options.angle}`);
+                parts.push(`radius ${options.radius}mm`, `angle ${options.angle}°`);
             } else if (edges[0].is_routed()) {
                 const count = options.route.length;
                 parts.push(`route via ${count} cell${count === 1 ? "" : "s"}`);
                 if (options.rounding !== Edge.default_options().rounding) {
-                    parts.push(`rounding ${options.rounding}`);
+                    parts.push(`rounding ${options.rounding}pt`);
                 }
             } else if (options.curve !== 0) {
-                parts.push(`curve ${options.curve}`);
+                parts.push(`curve ${options.curve}pt`);
             }
             const { source, target } = options.shorten;
             if (source !== 0 || target !== 0) {

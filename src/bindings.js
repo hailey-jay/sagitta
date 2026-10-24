@@ -286,8 +286,8 @@ Bindings.DEFAULTS = {
     "paste": ["C-v"],
 
     // The selected arrows' numeric properties, then the components whose styles to list. `curve`
-    // sets a loop's radius instead when only loops are selected, so `radius` needs no key of its
-    // own. In the layer, capitals act on the label.
+    // and `offset` set a loop's radius and angle instead when only loops are selected, so `radius`
+    // and `angle` need no keys of their own. In the layer, capitals act on the label.
     "level": ["; n"],
     "curve": ["; b"],
     "offset": ["; o"],

@@ -83,7 +83,7 @@ The rest live one key away:
 
 - `;` lists the command layer's keys: arrow styles and label alignment (a key, then the choice's own key, as listed), sliders (a key, then a number and RET), and presets.
   `?` shows or hides the list too.
-  Its capitals act on the label, and curve sets a loop's radius instead.
+  Its capitals act on the label, and curve and offset set a loop's radius and angle instead.
   A preset with no arrow selected sets `diagram.arrow_preset`, the preset new arrows take, and the list marks the one they take now; a style still needs an arrow to apply to.
 - `:` the command line: named commands, with Tab completion.
 - `/` (or `C-f`) search: selects the cells whose label is (or else contains) what is typed, or else the cells whose codes are typed.
@@ -168,7 +168,7 @@ The names and their defaults:
 | `centre-view`, `go-home`, `hide-grid` | `; z`, `; g`, `; #` |
 | `zoom-out`, `zoom-in`, `reset-zoom` | `C--`, `C-=`, `C-0` |
 | `dark-mode`, `hide-mode-line`, `shortcuts`, `settings` | none, `C-\`, `C-/` `<f1>`, `C-,` |
-| `level`, `curve`, `offset`, `radius`, `length`, `position` | `; n`, `; b` (on loops alone, the radius; on routes alone, the rounding), `; o`, none, `; l`, `; P` |
+| `level`, `curve`, `offset`, `radius`, `angle`, `length`, `position` | `; n`, `; b` (on loops alone, the radius; on routes alone, the rounding), `; o` (on loops alone, the angle), none, none, `; l`, `; P` |
 | `tail`, `body`, `head` | `; t`, `; d`, `; h` |
 | `arrow`, `adjunction`, `corner` | `; a`, `; j`, `; p` |
 | `align`, then `l`, `r`, `c`, or `o` for left, right, centre, or over | `; A` |
@@ -184,6 +184,10 @@ The names and their defaults:
 | `colour`, `label-colour` | `; c`, `; C` |
 | `select-at-focus`, `toggle-selection`, `create-arrows` | none (`S-SPC` does it), `; s`, `; e` |
 | `change-source`, `change-target` | `; ,`, `; .` |
+
+The arrow options take the units the export writes: `curve` and `rounding` in pt, `radius` (a loop's distance, negative for anticlockwise) in mm, `angle` in degrees, and `offset` in tikz-cd's shifts.
+All but `angle` take a fraction, as `:curve 7.5`, up to TeX's largest dimension; the arrow keys step them by 6pt, 2pt, 5mm, 45°, and one shift.
+`length` takes whole percent, stepped 10% by the arrow keys.
 
 `go-home` (`:home`) moves the focus point to the diagram's first object, the top row's leftmost, or to `(0,0)` in an empty diagram, and centres the view there.
 
@@ -223,7 +227,7 @@ An arrow can be routed through cells instead of drawn as a curve: it runs straig
   RET puts it down, as one undo step, and ESC puts it back; any other change to the diagram puts it down first.
   With the mouse, drag a selected arrow's checkpoint by its ring; letting go puts it down, and ESC, before then, puts it back.
   It skips over the arrow's own ends; while one is carried, its ring is filled, and the mode line shows `CHECKPOINT`.
-- `; b` rounds the corners of a route, from 0 (sharp) to 8, as `:rounding` does; it is 3 to begin with.
+- `; b` rounds the corners of a route, in pt, from 0 (sharp), as `:rounding` does; it is 6pt to begin with, and each arrow key rounds it 2pt more or less.
 
 A route takes the place of the arrow's curve and offset, which come back when it is straightened.
 Loops, and arrows with an arrow at an end, have no route.

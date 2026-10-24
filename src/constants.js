@@ -15,12 +15,18 @@ Object.assign(CONSTANTS, {
     SVG_PADDING: 6,
     /// How much space (in pixels) to leave between adjacent parallel arrows.
     EDGE_OFFSET_DISTANCE: 8,
-    /// How many pixels each unit of curve height corresponds to.
-    CURVE_HEIGHT: 24,
-    /// How many pixels each unit of a route's rounding corresponds to.
-    ROUNDING: 8,
+    /// How far (in pt) each press of an arrow key bends an arrow, and one unit of quiver's curve
+    /// height, which its links are written in.
+    CURVE_STEP: 6,
+    /// How far (in pt) each press of an arrow key rounds a route's corners, and the unit of
+    /// rounding that links are written in.
+    ROUNDING_STEP: 2,
+    /// How far (in mm) each press of an arrow key grows a loop.
+    LOOP_STEP: 5,
     /// How many pixels each unit of loop radius corresponds to.
     LOOP_HEIGHT: 16,
+    /// TeX's largest dimension, in pt, which bounds the lengths an arrow takes.
+    MAX_DIMENSION: 16383,
     /// How much padding to try to keep around the focus point when moving it via the keyboard
     /// (in pixels).
     VIEW_PADDING: 128,
