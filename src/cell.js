@@ -519,7 +519,8 @@ class Edge extends Cell {
             label_position: 50,
             offset: 0,
             curve: 0,
-            radius: 3,
+            // A loop's distance, in mm, negative for an anticlockwise loop.
+            radius: 10,
             angle: 0,
             shorten: { source: 0, target: 0 },
             level: 1,
@@ -535,8 +536,8 @@ class Edge extends Cell {
             // The cells, as `[x, y]`, that the arrow passes through on its way from source to
             // target, turning at each, or none for an arrow drawn as a curve (see `is_routed`).
             route: [],
-            // How much the corners of a route are rounded, in steps of `CONSTANTS.ROUNDING`.
-            rounding: 3,
+            // How much the corners of a route are rounded, in pt.
+            rounding: 6,
             // For historical reasons, the following options are in a `style` subobject. Originally,
             // these were those pertaining to the edge style. However, options such as `curve` and
             // `level` also pertain to the edge style (and can only be set for arrows), but are not
@@ -602,9 +603,7 @@ class Edge extends Cell {
                         if (Edge.is_routed_for_options(options)) {
                             style.shape = CONSTANTS.ARROW_SHAPE.ROUTE;
                             // The radius the export writes, in the canvas's pixels.
-                            style.rounding = options.rounding * CONSTANTS.ROUNDING
-                                * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER
-                                * Edge.PX_PER_PT;
+                            style.rounding = options.rounding * Edge.PX_PER_PT;
                             style.shift = 0;
                             break;
                         }
@@ -612,15 +611,13 @@ class Edge extends Cell {
                         // The export writes quiver's `curve={height=H}`, whose control points are
                         // `H` from the line, which the canvas draws as TikZ does (see
                         // `Arrow.tikz_curve`), in the canvas's pixels.
-                        // The export, and the parser, scale every curve the same way, whatever its
-                        // angle (see `QuiverExport`).
-                        style.curve = options.curve * CONSTANTS.CURVE_HEIGHT
-                            * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER
-                            * Edge.PX_PER_PT;
+                        // The curve is kept in pt, whatever its angle.
+                        style.curve = options.curve * Edge.PX_PER_PT;
                         break;
                     case "arc":
                         style.shape = CONSTANTS.ARROW_SHAPE.ARC;
-                        const radius = [2, 3, 4][Math.floor(Math.abs(options.radius) / 2)];
+                        // 2, 3, and 4 for loops of 5, 10, and 15mm.
+                        const radius = 1 + Math.abs(options.radius) / CONSTANTS.LOOP_STEP;
                         style.curve = radius * Math.sign(options.radius) * CONSTANTS.LOOP_HEIGHT;
                         style.angle = deg_to_rad(options.angle);
                         // The loop the export writes, which the canvas draws as TikZ does (see
@@ -1068,7 +1065,8 @@ class Edge extends Cell {
             .filter(([edge,]) => edge.is_loop()))
         {
             const angle = mod(
-                loop.options.angle + 180 - (loop.options.radius < -1 ? 180 : 0), 360) - 180;
+                loop.options.angle + 180
+                    - (loop.options.radius < -CONSTANTS.LOOP_STEP ? 180 : 0), 360) - 180;
             angles.set(angle, Math.abs(loop.options.radius));
             // Both -180 and 180 are possible angle values for symmetry, but they should count
             // as the same angle.
@@ -1090,7 +1088,7 @@ class Edge extends Cell {
             // Next, attempt to find an angle at which there is no loop of the default radius.
             for (let angle = 0; angle < 360; angle += 45) {
                 const attempt_angle = mod(180 - angle, 360) - 180;
-                if (angles.get(attempt_angle) !== 3) {
+                if (angles.get(attempt_angle) !== Edge.default_options().radius) {
                     options.angle = attempt_angle;
                     break;
                 }

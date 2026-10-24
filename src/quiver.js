@@ -425,13 +425,22 @@ QuiverExport.route_lengths = (points) => {
 QuiverExport.loop = (options) => {
     const clockwise = options.radius >= 0 ? 1 : -1;
     const loop_angle = (180 - 90 * clockwise - options.angle);
-    const angle_spread = 30 + 5 * (Math.abs(options.radius) - 1) / 2;
+    const distance = Math.abs(options.radius);
+    // The angle between leaving and coming back widens with the loop: 30°, 35°, and 40° at 5, 10,
+    // and 15mm, as quiver draws them, and no further either way, so that a loop stays a loop.
+    const angle_spread = 25 + Math.min(Math.max(distance, 5), 15);
     return {
         in: mod(loop_angle - angle_spread * clockwise, 360),
         out: mod(loop_angle + angle_spread * clockwise, 360),
-        distance: 5 + 5 * (Math.abs(options.radius) - 1) / 2,
+        distance,
     };
 };
+
+/// quiver's links give a loop's radius as an odd number of its own units, `1`, `3`, and `5` for
+/// 5, 10, and 15mm, rather than in mm. These convert between the two, keeping the sign.
+QuiverExport.loop_units = (mm) => Math.sign(mm) * (2 * Math.abs(mm) / CONSTANTS.LOOP_STEP - 1);
+QuiverExport.loop_mm = (units) => (units < 0 ? -1 : 1)
+    * CONSTANTS.LOOP_STEP * (1 + (Math.abs(units) - 1) / 2);
 
 /// The radius, in pt, to round the corners of a route through `points` by, for `wanted` at most, in
 /// a diagram whose separations are `sep` (in em, as `options.sep`). TikZ's `rounded corners` takes
@@ -852,10 +861,8 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                         .concat(["-- (\\tikztotarget)"]);
                     legs[route_label.leg] += " \\tikztonodes";
                     const radius = Number(QuiverExport.route_radius(
-                        QuiverExport.route_points(edge), options.sep,
-                        edge.options.rounding * CONSTANTS.ROUNDING
-                            * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER,
-                    ).toFixed(1));
+                        QuiverExport.route_points(edge), options.sep, edge.options.rounding,
+                    ).toFixed(2));
                     // The corners are rounded only while the route is built: rounded corners
                     // still in force when a squiggly arrow is drawn round every zigzag too.
                     parameters["to path"] = `{${radius > 0 ? `[rounded corners=${radius}pt] ` : ""
@@ -864,12 +871,8 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                 }
 
                 if (edge.options.curve !== 0 && !routed) {
-                    parameters.curve = `{height=${
-                        // Using a fixed multiplier for curves of any angle tends to work better
-                        // in the examples I tested.
-                        edge.options.curve * CONSTANTS.CURVE_HEIGHT
-                            * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER
-                    }pt}`;
+                    // The curve is kept in pt, as it is written.
+                    parameters.curve = `{height=${edge.options.curve}pt}`;
                     phantom_parameters.curve = parameters.curve;
                 }
 
@@ -1402,6 +1405,18 @@ QuiverImportExport.base64 = new class extends QuiverImportExport {
                 if (options.route.length === 0) {
                     delete delta["rounding"];
                 }
+                // quiver's links give a curve in units of its height, rather than in pt. A curve
+                // between whole units is written as a fraction, which quiver itself refuses.
+                if (delta.hasOwnProperty("curve")) {
+                    delta.curve /= CONSTANTS.CURVE_STEP;
+                }
+                // As are a loop's radius and a route's rounding (see `import`).
+                if (delta.hasOwnProperty("radius")) {
+                    delta.radius = QuiverExport.loop_units(delta.radius);
+                }
+                if (delta.hasOwnProperty("rounding")) {
+                    delta.rounding /= CONSTANTS.ROUNDING_STEP;
+                }
 
                 if (end.length > 0 || Object.keys(delta).length > 0) {
                     end.push(delta);
@@ -1590,16 +1605,24 @@ QuiverImportExport.base64 = new class extends QuiverImportExport {
                             assert(options.label_position <= 100, "invalid label position");
                         }
                         if (options.hasOwnProperty("offset")) {
-                            assert_kind(options.offset, "integer");
+                            assert_kind(options.offset, "float");
+                            options.offset = ArrowOptions.clamp("offset", [options.offset]);
                         }
                         if (options.hasOwnProperty("curve")) {
-                            assert_kind(options.curve, "integer");
+                            // In units of quiver's height, kept in pt (see `export`).
+                            assert_kind(options.curve, "float");
+                            options.curve = ArrowOptions.clamp(
+                                "curve", [options.curve * CONSTANTS.CURVE_STEP]);
                         }
                         if (options.hasOwnProperty("radius")) {
-                            assert_kind(options.radius, "integer");
+                            // In quiver's units, kept in mm (see `export`).
+                            assert_kind(options.radius, "float");
+                            options.radius = ArrowOptions.clamp(
+                                "radius", [QuiverExport.loop_mm(options.radius)]);
                         }
                         if (options.hasOwnProperty("angle")) {
-                            assert_kind(options.angle, "integer");
+                            assert_kind(options.angle, "float");
+                            options.angle = ArrowOptions.clamp("angle", [options.angle]);
                         }
                         if (options.hasOwnProperty("shorten")) {
                             let shorten = { source: 0, target: 0 };
@@ -1635,7 +1658,10 @@ QuiverImportExport.base64 = new class extends QuiverImportExport {
                             });
                         }
                         if (options.hasOwnProperty("rounding")) {
-                            assert_kind(options.rounding, "natural");
+                            // In steps of 2pt, kept in pt (see `export`).
+                            assert_kind(options.rounding, "float");
+                            options.rounding = ArrowOptions.clamp(
+                                "rounding", [options.rounding * CONSTANTS.ROUNDING_STEP]);
                         }
                         if (options.hasOwnProperty("edge_alignment")) {
                             if (options.edge_alignment.hasOwnProperty("source")) {

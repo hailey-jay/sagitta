@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.1
+
+### Arrow options
+
+- A curve is set in pt, as the export writes it (`curve={height=Hpt}`), rather than in steps of 6pt from -30pt to 30pt. The arrow keys still bend it 6pt at a time, `:curve 18` sets what `:curve 3` did, and any height up to TeX's largest dimension, fractions too, is read and written as it was given.
+- A route's rounding is set in pt (the arrow keys still step it 2pt, and it starts at 6pt), a loop's radius in mm (its distance, negative for anticlockwise, stepped 5mm, and turning round rather than stopping at 0), and a loop's angle to the degree (stepped 45°). `:rounding 16` sets what `:rounding 8` did, and `:radius 10` what `:radius 3` did.
+- A loop's `distance` is read in the unit it is given in (pt, em, mm, or cm), rather than always as mm.
+- A fractional `shift left`, `shift right`, `shorten <`, or `shorten >` is read, rather than stopping the parse.
+- A length is set to the percent, as `:length 5`, rather than in steps of 10%, which the arrow keys still take.
+- `; o` sets a loop's angle while only loops are selected, as `; b` sets its radius, and the key list says so.
+- The mode line gives each with its unit, as `curve 12pt`.
+- Links still give a curve and a loop's radius in quiver's own units, so they open in quiver as before, and a route's rounding in steps of 2pt, so older links open as they did. A value between those units is written as a fraction, which quiver itself refuses.
+
 ## 0.7.0
 
 ### Presets

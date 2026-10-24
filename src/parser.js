@@ -915,8 +915,12 @@ class Parser {
             this.eat_whitespace();
             this.eat("=", true);
             this.eat_whitespace();
-            edge.options.radius = 1 + Math.round(clamp(0, this.parse_float(true) / 5 - 1, 2)) * 2;
-            this.eat(/^(em|pt|mm)/); // We ignore the unit.
+            // The distance is kept in mm, as quiver writes it. TikZ reads a bare number as pt.
+            const distance = this.parse_float(true);
+            const unit = this.eat(/^(em|pt|mm|cm)/) ?? "pt";
+            const pt = distance * { em: CONSTANTS.TEX.EM, pt: 1, mm: CONSTANTS.TEX.PT_PER_MM,
+                cm: 10 * CONSTANTS.TEX.PT_PER_MM }[unit];
+            edge.options.radius = ArrowOptions.clamp("radius", [pt / CONSTANTS.TEX.PT_PER_MM]);
             return;
         }
         if (this.eat("in")) {
@@ -942,20 +946,20 @@ class Parser {
             this.eat("height", true);
             this.eat_whitespace();
             this.eat("=", true);
-            const curve = this.parse_int(true);
+            this.eat_whitespace();
+            const curve = this.parse_float(true);
             this.eat("pt", true);
             this.eat_whitespace();
             this.eat("}", true);
-            const factor = CONSTANTS.CURVE_HEIGHT
-                * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER;
-            edge.options.curve = Math.round(clamp(-5, curve / factor, 5));
+            // The curve is kept in pt, as it is written.
+            edge.options.curve = ArrowOptions.clamp("curve", [curve]);
             return;
         }
         let neg;
         neg = true;
         if (this.eat("bend left") || ((neg = false) || this.eat("bend right"))) {
             this.eat_whitespace();
-            let amount = 1;
+            const amount = CONSTANTS.CURVE_STEP;
             if (this.eat("=")) {
                 this.eat_whitespace();
                 // Calculating the correct amount from the bend angle requires knowing the length of
@@ -965,7 +969,7 @@ class Parser {
                 // curve at all.
                 this.parse_int(true);
             }
-            edge.options.curve = Math.round(clamp(-5, amount * (neg ? -1 : 1), 5));
+            edge.options.curve = amount * (neg ? -1 : 1);
             return;
         }
         neg = true;
@@ -974,22 +978,22 @@ class Parser {
             let amount = 1;
             if (this.eat("=")) {
                 this.eat_whitespace();
-                amount = this.parse_int(true);
+                amount = this.parse_float(true);
             }
-            edge.options.offset = amount * (neg ? -1 : 1);
+            edge.options.offset = ArrowOptions.clamp("offset", [amount * (neg ? -1 : 1)]);
             return;
         }
         if (this.eat("shorten <")) {
             this.eat_whitespace();
             this.eat("=", true);
-            edge.shorten.source = this.parse_int(true);
+            edge.shorten.source = this.parse_float(true);
             this.eat("pt", true);
             return;
         }
         if (this.eat("shorten >")) {
             this.eat_whitespace();
             this.eat("=", true);
-            edge.shorten.target = this.parse_int(true);
+            edge.shorten.target = this.parse_float(true);
             this.eat("pt", true);
             return;
         }
@@ -1365,14 +1369,12 @@ Parser.prototype.parse_route = function (edge) {
         text = text.slice(match[0].length).trim();
         return match;
     };
+    // The radius is kept in pt, as it is written. One the export capped by the route's legs (see
+    // `QuiverExport.route_radius`) reads back as capped, which writes the same.
     let rounding = 0;
     const radius = take(/^\[rounded corners=([0-9.]+)pt\]/);
     if (radius !== null) {
-        // The export rounds a corner no more than the route's shortest leg allows (see
-        // `QuiverExport.route_radius`), so a radius between two steps was kept short by its legs,
-        // and the step above it gives it back.
-        rounding = Math.ceil(parseFloat(radius[1]) / (CONSTANTS.ROUNDING
-            * QuiverExport.CONSTANTS.TIKZ_HORIZONTAL_MULTIPLIER) - 1e-6);
+        rounding = ArrowOptions.clamp("rounding", [parseFloat(radius[1])]);
     }
     const node = String.raw`\\tikzcdmatrixname-([0-9]+)-([0-9]+)\.center`;
     const route = [];

@@ -919,18 +919,19 @@ class Keymap {
         this.render();
     }
 
-    /// The property a slider's key sets for the selection: a loop's radius, or a route's rounding,
-    /// in place of the curve it does not take, while only loops or only routes are selected, as
-    /// the arrow keys do.
+    /// The property a slider's key sets for the selection: a loop's radius and angle in place of
+    /// the curve and offset, while only loops are selected, and a route's rounding in place of the
+    /// curve, while only routes are, as the arrow keys do.
     slider_property(property) {
         const edges = ArrowOptions.edges(this.ui);
-        if (property !== "curve" || edges.length === 0) {
+        if (!["curve", "offset"].includes(property) || edges.length === 0) {
             return property;
         }
         if (edges.every((edge) => edge.is_loop())) {
-            return "radius";
+            return property === "curve" ? "radius" : "angle";
         }
-        return edges.every((edge) => edge.is_routed()) ? "rounding" : property;
+        return property === "curve" && edges.every((edge) => edge.is_routed())
+            ? "rounding" : property;
     }
 
     /// Whether the list of `component` has anything to act on: the selected arrows, but for
@@ -1045,10 +1046,10 @@ class Keymap {
         if (this.property === null) {
             return false;
         }
-        const { step } = ArrowOptions.PROPERTIES[this.property];
         const current = this.ui.arrow_options.value(this.ui, this.property)
             ?? ArrowOptions.PROPERTIES[this.property].default;
-        const value = (Array.isArray(current) ? current[this.thumb] : current) + step * delta;
+        const value = ArrowOptions.stepped(this.property,
+            Array.isArray(current) ? current[this.thumb] : current, delta);
         this.set_property(this.property, value);
         this.render();
         return true;
@@ -1266,7 +1267,7 @@ Keymap.WHICH_KEY = [
     ["Sliders (-0-9 RET)", [
         ["level", "level", "edge", "slider:level"],
         ["curve", "curve (loops: radius, routes: rounding)", "edge", "slider:curve"],
-        ["offset", "offset", "edge", "slider:offset"],
+        ["offset", "offset (loops: angle)", "edge", "slider:offset"],
         ["length", "length (again: end)", "edge", "slider:length"],
     ]],
     // A preset needs no selection: with none, it sets the preset new arrows take, and the list
