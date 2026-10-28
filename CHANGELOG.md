@@ -1,10 +1,11 @@
 # Changelog
 
-## 1.0.0 (unreleased)
+## 0.8.0 (unreleased)
 
 ### Upgrading
 
 - `S-arrows` walk the diagram rather than extending the selection. `; v` (select mode) gathers cells as the arrows pass over them, as `S-arrows` did, then RET, `+`, or `-` applies them.
+- The second `C-SPC` puts the rectangle into select mode's buffer rather than selecting it, so RET selects it, `+` adds it, and `-` takes it away. `C-S-SPC`, `mark-add`, and `:mark-add` are gone, since `+` adds; a keys file that binds `mark-add` says `no command "mark-add"` until the line is taken out.
 
 ### Labels
 
@@ -17,6 +18,7 @@
 
 - `S-arrows` walk from a cell to the arrow at it that leaves nearest that way, and from an arrow to its source, its target, or the arrow beside it.
 - `; v`, or `:select-mode`, gathers a buffer, outlined in blue, that RET puts in place of the selection, `+` adds to it, and `-` takes from it.
+- A mark's rectangle (`C-SPC`) goes into the same buffer, and joins what select mode has gathered, so rectangles and cells walked over can be taken together, or a rectangle taken away.
 
 ### Arrows
 

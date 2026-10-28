@@ -1025,7 +1025,8 @@ const pending = [];
         .map((combination) => Bindings.signature(combination));
     check("the mark is C-SPC by default", signatures(null, "mark"), ["C- "]);
     check("and may be rebound", signatures("mark C-q", "mark"), ["C-q"]);
-    check("as may the mark that adds", signatures("mark-add C-S-q", "mark-add"), ["C-S-q"]);
+    check("and the mark that added is gone, and says so", Bindings.resolve("mark-add C-S-q").problems,
+        ['line 1: no command "mark-add"']);
     check("but Space alone is still refused", Bindings.resolve("mark SPC").problems,
         ['line 1: "SPC": SPC keeps its own meaning']);
 

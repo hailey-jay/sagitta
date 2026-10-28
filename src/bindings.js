@@ -339,10 +339,8 @@ Bindings.DEFAULTS = {
     "move-checkpoint": ["; m"],
     "rounding": [],
 
-    // The mark, a corner of a rectangle of cells to select. Shift with `mark`'s key adds the
-    // rectangle to the selection, as `mark-add` does.
+    // The mark, a corner of a rectangle of cells to gather into select mode's buffer.
     "mark": ["C-SPC"],
-    "mark-add": [],
 
     // Colours, the selection, and the hint-code prompts.
     "colour": ["; c"],
@@ -402,12 +400,8 @@ Bindings.HANDLERS = {
     },
     "paste": { press: (ui) => ui.keys.paste(), help: ["Chords", "paste"] },
     "mark": {
-        press: (ui, event) => ui.keys.mark(event.shiftKey),
+        press: (ui) => ui.keys.mark(),
         help: ["Typing", "mark a region"],
-    },
-    "mark-add": {
-        press: (ui) => ui.keys.mark(true),
-        help: ["Typing", "mark a region to add"],
     },
     "search": { press: (ui) => ui.keymap.search() },
     "select-at-focus": { press: (ui) => ui.keys.toggle_at_focus() },

@@ -955,15 +955,13 @@ def test_a_chord_in_the_keys_file_takes_the_key_from_its_default(sagitta, home):
 
 
 def test_the_keys_file_rebinds_the_mark(sagitta, home):
-    _keys(home, "mark C-q\nmark-add C-j\n")
-    # The top row with the new key, then the bottom row added with the other.
+    _keys(home, "mark C-q\n")
+    # The top row with the new key, selected with RET.
     rebound = sagitta("pressed", _diagram(home / "rebound"), json.dumps([
-        ["q", ["control"]], ["Right"], ["q", ["control"]],
-        ["Down"], ["j", ["control"]], ["Left"], ["j", ["control"]],
+        ["q", ["control"]], ["Right"], ["q", ["control"]], ["Enter"],
     ]))
-    # Each row's two vertices and its arrow; the arrows down the sides have their ends in
-    # different rectangles, so neither takes them.
-    assert rebound["counts"]["selected"] == 6, rebound
+    # The row's two vertices and its arrow.
+    assert rebound["counts"]["selected"] == 3, rebound
     # `C-SPC` is free now, and does nothing: no mark, and no vertex made by the Space in it.
     freed = sagitta("pressed", _diagram(home / "freed"), json.dumps([["Space", ["control"]]]))
     assert "MARK" not in freed["mode_line"]
@@ -1683,29 +1681,38 @@ def test_space_selects_the_arrow_it_draws_and_return_labels_the_cell(sagitta, ho
         "drawn": [2, True], "editing": [True], "after": 2, "labels": [""]}
 
 
-def test_the_mark_selects_a_rectangle_of_cells(sagitta, home):
-    """`C-SPC` at two corners takes every cell between them, and the arrows whose ends are both
-    among them; Shift adds that region to the selection; Escape drops a mark."""
+def test_the_mark_gathers_a_rectangle_into_the_buffer(sagitta, home):
+    """`C-SPC` at two corners puts every cell between them, and the arrows whose ends are both
+    among them, into select mode's buffer, which RET, `+`, and `-` then use; Escape drops a mark."""
     steps = sagitta("mark", _diagram(home / "paper"))
     assert "MARK" in steps["mark at A"]["mode_line"]
     assert steps["mark at A"]["counts"]["selected"] == 0
     # The rectangle shows from the mark, with `A` marked as one it would take, and grows to `B`,
-    # taking `B` and the arrow between them, before anything is selected.
+    # taking `B` and the arrow between them, before anything is gathered.
     assert steps["mark at A"]["region"] == {"shown": True, "size": [1, 1], "inside": 1}
     assert steps["towards B"]["region"] == {"shown": True, "size": [2, 1], "inside": 3}
-    assert steps["towards B"]["counts"]["selected"] == 0
-    assert steps["top row"]["region"] == {"shown": False, "size": None, "inside": 0}
-    # `A`, `B`, and the arrow between them.
+    assert steps["towards B"]["buffered"] == 0
+    # The second corner fills the buffer, in select mode, and selects nothing yet.
+    row = steps["row in the buffer"]
+    assert row["region"] == {"shown": False, "size": None, "inside": 0}
+    assert row["buffered"] == 3 and row["counts"]["selected"] == 0
+    assert "SELECT" in row["mode_line"] and "MARK" not in row["mode_line"]
+    # RET selects `A`, `B`, and the arrow between them, and leaves select mode.
     assert steps["top row"]["counts"]["selected"] == 3
-    assert "MARK" not in steps["top row"]["mode_line"]
+    assert steps["top row"]["buffered"] == 0
+    assert "SELECT" not in steps["top row"]["mode_line"]
     # The whole square: four vertices and four arrows.
     assert steps["square"]["counts"]["selected"] == 8
-    # Shift adds, so the square is still selected after the row is added to it.
-    assert steps["adding the row"]["counts"]["selected"] == 8
-    # A mark dropped with Escape selects nothing, and leaves the selection as it was.
-    assert "MARK" not in steps["mark dropped"]["mode_line"]
-    assert not steps["mark dropped"]["region"]["shown"]
-    assert steps["mark dropped"]["counts"]["selected"] == 8
+    # `-` takes away `A`, `B`, and the arrow between them.
+    assert steps["row taken away"]["counts"]["selected"] == 5
+    # A mark dropped with Escape gathers nothing, and leaves the selection as it was.
+    dropped = steps["mark dropped"]
+    assert "MARK" not in dropped["mode_line"] and "SELECT" not in dropped["mode_line"]
+    assert not dropped["region"]["shown"]
+    assert dropped["counts"]["selected"] == 5
+    # In select mode, a mark gathers its rectangle, not the path to its other corner.
+    assert steps["rectangle in select mode"]["buffered"] == 3
+    assert steps["left column"]["counts"]["selected"] == 3
     # Nothing was created or deleted along the way.
     for step in steps.values():
         assert (step["counts"]["vertices"], step["counts"]["edges"]) == (4, 4)

@@ -336,16 +336,16 @@ class Keys {
         }
     }
 
-    /// `mark` (`C-SPC`): set the mark at the focus point, as a corner of a rectangle of cells to
-    /// select; with one already set, take the rectangle between it and the focus point, and let go
-    /// of the mark. With `add` (`mark-add`, or Shift with `mark`'s key), add the rectangle to the
-    /// selection rather than replacing it. Escape lets go of the mark without selecting anything
-    /// (see `escape`).
+    /// `mark` (`C-SPC`): set the mark at the focus point, as a corner of a rectangle of cells;
+    /// with one already set, put the rectangle between it and the focus point into select mode's
+    /// buffer, opening select mode if it is not on, and let go of the mark. RET, `+`, and `-` then
+    /// replace, add to, or take away from the selection, as they do for any buffer (see
+    /// `select_mode`). Escape lets go of the mark without gathering anything (see `escape`).
     ///
     /// A rectangular block of a tikz-cd matrix is the unit a diagram is read in, and the keyboard
     /// had no way to take one: `select-all`, `select-connected`, `select-at-focus`, and `; s` take
     /// everything, a component, one cell, or cells by code.
-    mark(add = false) {
+    mark() {
         const ui = this.ui;
         // Holding Control is itself a binding, which pans, so the key arrives in the Pan mode as
         // often as in the default one.
@@ -368,15 +368,14 @@ class Keys {
         }
         const cells = Keys.cells_between(ui, ui.mark, ui.focus_position);
         ui.mark = null;
-        ui.update_mark_region();
-        if (!add) {
-            ui.deselect();
+        if (ui.buffer === null) {
+            ui.buffer = new Set();
         }
-        ui.select(...cells);
-        ui.hide_if_unselected();
+        this.buffer(...cells.filter((cell) => cell.is_vertex()));
         ui.mode_line.update(ui);
-        ui.mode_line.flash(cells.length === 0 ? "nothing in the region"
-            : `selected ${cells.length} cell${cells.length === 1 ? "" : "s"}`);
+        const count = Keys.buffered(ui).size;
+        ui.mode_line.flash(`${count} cell${count === 1 ? "" : "s"} in the buffer:`
+            + " RET selects, + adds, - takes away");
         return true;
     }
 
@@ -472,9 +471,9 @@ class Keys {
             this.drop_buffer();
             return;
         }
-        if (ui.mark !== null || ui.carried !== null) {
-            throw new Error("Select mode would leave the mark or the carried checkpoint behind:"
-                + " ESC lets go of it first.");
+        if (ui.carried !== null) {
+            throw new Error("Select mode would leave the carried checkpoint behind:"
+                + " ESC puts it back first.");
         }
         ui.buffer = new Set();
         if (!ui.focus_point.class_list.contains("focused")) {
@@ -701,8 +700,9 @@ class Keys {
                 return;
             }
             // In select mode, the cells the focus point passes over go into its buffer: the one
-            // it leaves (if it was visible) and the one it reaches.
-            if (ui.buffer !== null) {
+            // it leaves (if it was visible) and the one it reaches. While a mark waits for its
+            // other corner, the rectangle is what it gathers, not the path to the corner.
+            if (ui.buffer !== null && ui.mark === null) {
                 const positions = [ui.focus_position.add(position_delta)];
                 if (ui.focus_point.class_list.contains("focused")) {
                     positions.push(ui.focus_position);

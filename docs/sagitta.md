@@ -107,11 +107,12 @@ The rest live one key away:
   S-RET labels the arrows instead, and the mode line names both, as `B  S-RET f`.
 - Cells just drawn, or stamped by a preset, are queued for labels: Tab goes to the next one waiting, and S-TAB back, to any cell of the queue, labelled or not, so that a typo can be fixed; Tab then goes on to the next one waiting.
   ESC, with nothing selected and the focus point hidden, lets go of the queue.
-- `C-SPC` marks one corner of a rectangle of cells, as Emacs sets a mark: press it, move the focus point, and press it again to select every cell between the two corners, along with the arrows whose both ends are among them.
-  `C-S-SPC` adds that rectangle to the selection rather than replacing it, and ESC lets go of the mark.
+- `C-SPC` marks one corner of a rectangle of cells, as Emacs sets a mark: press it, move the focus point, and press it again to put every cell between the two corners, along with the arrows whose both ends are among them, into select mode's buffer.
+  Select mode opens if it is not on, so RET then selects the rectangle, `+` adds it, and `-` takes it away; in select mode, the rectangle joins what is gathered already, and the path to its other corner is not gathered.
+  ESC lets go of the mark.
   While there is a mark, the mode line shows `MARK`, and a dashed rectangle runs from it to the focus point, over the cells it would take.
-  `:mark` and `:mark-add` do the same from the command line.
-  The keys file can move it (`mark`, and `mark-add` for a key of its own that adds); Space alone cannot be bound, but its chords can.
+  `:mark` does the same from the command line.
+  The keys file can move it (`mark`); Space alone cannot be bound, but its chords can.
   Input methods such as IBus and Fcitx take Control-Space to switch input method, so where one runs, `C-SPC` never reaches Sagitta: bind `mark` to another key in the keys file (`mark C-g`, say, which is free), or change the input method's own key.
 
 In a label, `(`, `[`, and `{` wrap the selected part of it, and otherwise bring their closing delimiter, as in most editors, unless it is already next; typing the closing one steps over it, and Backspace in an empty pair deletes both.
@@ -190,7 +191,7 @@ The names and their defaults:
 | `align-source`, `align-target` | `; [`, `; ]` |
 | `crossing-over` | `; x` |
 | `route`, `checkpoint`, `move-checkpoint`, `rounding` | `; w`, `; k`, `; m`, none |
-| `mark`, `mark-add` | `C-SPC` (with `S-`, adding), none |
+| `mark` | `C-SPC` |
 | `colour`, `label-colour` | `; c`, `; C` |
 | `select-at-focus`, `toggle-selection`, `select-mode`, `create-arrows` | none (`S-SPC` does it), `; s`, `; v`, `; e` |
 | `change-source`, `change-target` | `; ,`, `; .` |

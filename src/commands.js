@@ -577,17 +577,15 @@ Commands.TABLE["select-mode"] = {
     },
 };
 
-/// `mark` and `mark-add` do what their keys do (see `Keys.mark`), from the command line.
-for (const [name, add] of [["mark", false], ["mark-add", true]]) {
-    Commands.TABLE[name] = {
-        run: (commands) => {
-            const ui = commands.ui;
-            if (!ui.keys.mark(add)) {
-                throw new Error(`The mark cannot be set in the ${ui.mode.name} mode.`);
-            }
-        },
-    };
-}
+/// `mark` does what its key does (see `Keys.mark`), from the command line.
+Commands.TABLE["mark"] = {
+    run: (commands) => {
+        const ui = commands.ui;
+        if (!ui.keys.mark()) {
+            throw new Error(`The mark cannot be set in the ${ui.mode.name} mode.`);
+        }
+    },
+};
 
 /// `crossing-over` toggles whether the selected arrows cut a gap in the arrows they cross, and
 /// `crossing-over on` or `off` sets it.
