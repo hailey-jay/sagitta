@@ -2891,6 +2891,140 @@ def test_undoing_a_stamp_puts_the_focus_point_back(sagitta, home):
     assert sagitta("evaluate", diagram, script) == [3, 2, 0]
 
 
+def test_shift_tab_goes_back_to_a_labelled_cell(sagitta, home):
+    """After `:ses`, Tab to the first cell, label it `X`, Tab on and label the next `Y`: S-TAB goes
+    back to `X`, which left the queue when labelled, and Tab then goes on past `Y`. ESC lets go of
+    the walk, so S-TAB has nowhere to go."""
+    diagram = _diagram(home / "paper", "", "new.cd.tex")
+    script = """(async () => {
+        %s
+        const label = (text) => {
+            ui.label_input.element.value = text;
+            ui.label_input.element.dispatchEvent(new Event("input", { bubbles: true }));
+        };
+        const selected = () => Array.from(ui.selection, (cell) => cell.label);
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.commands.run("ses");
+        await press("Enter");
+        await press("Tab");
+        label("X");
+        await press("Tab");
+        label("Y");
+        await press("Tab", { shiftKey: true });
+        const back = selected();
+        await press("Tab");
+        const on = selected();
+        for (let i = 0; i < 4; ++i) {
+            await press("Escape");
+        }
+        await press("Tab", { shiftKey: true });
+        return [back, on, ui.selection.size];
+    })()""" % PRESS
+    back, on, after = sagitta("evaluate", diagram, script)
+    assert back == ["X"]
+    assert on not in (["X"], ["Y"])
+    assert after == 0
+
+
+def test_shift_return_labels_the_arrows_space_drew(sagitta, home):
+    """Space from `A` to an empty cell selects the new cell and its arrow; S-RET labels the arrow
+    alone, the mode line saying so beforehand, and the cell comes back into the selection after.
+    A style applied first leaves both queued."""
+    script = """(async () => {
+        %s
+        ui.deselect();
+        ui.select(ui.positions.get("0 0"));
+        ui.reposition_focus_point(new Position(2, 0));
+        ui.focus_point.class_list.add("focused");
+        await press(" ");
+        ui.commands.run("dashed");
+        const queued = document.querySelectorAll(".cell kbd.queue").length;
+        const hint = ui.mode_line.target(ui);
+        await press("Enter", { shiftKey: true });
+        const editing = Array.from(ui.selection, (cell) => cell.is_edge());
+        ui.label_input.element.value = "f";
+        ui.label_input.element.dispatchEvent(new Event("input", { bubbles: true }));
+        await press("Enter");
+        const edge = ui.quiver.all_cells().find((cell) => cell.is_edge()
+            && cell.source.position.x === 0 && cell.target.position.x === 2);
+        return [queued, hint, editing, edge.label, edge.target.label, ui.selection.size];
+    })()""" % PRESS
+    queued, hint, editing, edge, target, size = sagitta("evaluate", _diagram(home / "paper"), script)
+    assert queued == 2
+    assert "S-RET" in hint
+    assert editing == [True]
+    assert (edge, target, size) == ("f", "\\bullet", 2)
+
+
+def test_shift_arrows_walk_the_square(sagitta, home):
+    """On the square, from `A`: S-→ takes `f`, S-→ again its target `B`, S-↓ `h`, S-↑ back to
+    `B`, S-← the incoming `f`, which RET would label, and S-← its source `A`; S-↑ from `A` has no
+    arrow to take, and leaves `A` selected."""
+    script = """(async () => {
+        %s
+        const at = (shift) => {
+            const labels = Array.from(ui.selection, (cell) => cell.label);
+            return labels.join(",");
+        };
+        ui.deselect();
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.focus_point.class_list.add("focused");
+        const steps = [];
+        for (const key of ["ArrowRight", "ArrowRight", "ArrowDown", "ArrowUp", "ArrowLeft"]) {
+            await press(key, { shiftKey: true });
+            steps.push(at());
+        }
+        steps.push(ui.mode_line.target(ui));
+        await press("ArrowLeft", { shiftKey: true });
+        steps.push(at(), `${ui.focus_position}`);
+        await press("ArrowUp", { shiftKey: true });
+        steps.push(at());
+        return steps;
+    })()""" % PRESS
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == [
+        "f", "B", "h", "B", "f", "f", "A", "0 0", "A"]
+
+
+def test_select_mode_gathers_a_buffer_then_replaces_adds_or_takes_away(sagitta, home):
+    """With `D` selected and the focus point on `A`: `v`, then → gathers `A` and `B` (and `f`),
+    and `+` adds them; `v`, ↓ from `B` gathers `B` and `D` (and `h`), and `-` takes them away,
+    without making anything dashed; `v`, ← from `D` gathers `D` and `C` (and the arrow between),
+    and RET replaces the selection with them. ESC in select mode leaves the selection alone."""
+    script = """(async () => {
+        %s
+        const selected = () => Array.from(ui.selection, (cell) => cell.label).sort().join(",");
+        ui.deselect();
+        ui.select(ui.positions.get("1 1"));
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.focus_point.class_list.add("focused");
+        const steps = [];
+        await press("v");
+        await press("ArrowRight");
+        steps.push(ui.mode_line.mode(ui)[0],
+            document.querySelectorAll(".cell.in-buffer").length);
+        await press("+");
+        steps.push(selected(), ui.buffer === null);
+        await press("v");
+        await press("ArrowDown");
+        await press("-");
+        steps.push(selected());
+        await press("v");
+        await press("ArrowLeft");
+        await press("Enter");
+        steps.push(selected());
+        await press("v");
+        await press("ArrowUp");
+        await press("Escape");
+        steps.push(selected(), ui.buffer === null,
+            ui.quiver.all_cells().some((cell) => cell.is_edge()
+                && cell.options.style.body?.name === "dashed"));
+        return steps;
+    })()""" % PRESS
+    steps = sagitta("evaluate", _diagram(home / "paper"), script)
+    assert steps[:2] == ["SELECT", 3]
+    assert steps[2:] == ["A,B,D,f", True, "A,f", "C,D,\\alpha", "C,D,\\alpha", True, False]
+
+
 def test_tab_walks_a_stamp_in_the_order_it_reads(sagitta, home):
     """After `:cc 2 bounded=both`, Tab goes object, arrow, object, arrow, ..., as the sequence
     reads, rather than all the objects and then the arrows."""

@@ -11,8 +11,8 @@ class Keys {
 
     /// Enter: submit a hint-code prompt; otherwise edit the targeted cell's label in place, or,
     /// while editing, confirm it (typing a character instead replaces the label: see
-    /// `Keymap.after`).
-    enter() {
+    /// `Keymap.after`). With Shift, edit the selected arrows' label instead.
+    enter(event = null) {
         const ui = this.ui;
         if (ui.in_mode(UIMode.Command)) {
             // Get the list of IDs to select.
@@ -111,7 +111,7 @@ class Keys {
             // empty cell with nothing selected, there is no label to edit, so make the cell.
             const input = ui.label_input.element;
             if (document.activeElement !== input) {
-                if (ui.keymap.edit_target(ui.selection.size === 0)) {
+                if (ui.keymap.edit_target(ui.selection.size === 0, event?.shiftKey ?? false)) {
                     ui.keymap.begin_edit();
                 }
             } else {
@@ -123,13 +123,17 @@ class Keys {
     }
 
     /// The queued cell Tab goes to next (going backwards when `sign` is -1): the first in the queue
-    /// after any selected cell (queued or not), or `null` if no other cell is queued. Of the cell
+    /// after any selected cell (queued or not), or `null` if no other cell is queued. Going
+    /// backwards also reaches the cells already labelled from the queue (`walked`), so that S-TAB
+    /// goes back to fix a typo. Of the cell
     /// and arrows Space leaves selected, the cell is the one Tab goes on from, as RET labels it
     /// (see `Keymap.drawn_to`). A selection of several cells, all queued, as a preset leaves (see
     /// `Presets.stamp`), is where Tab goes, rather than what it goes on from.
     next_queued(sign = 1) {
         const ui = this.ui;
         const queued = (cell) => cell.element.query_selector("kbd.queue") !== null;
+        const reachable = sign > 0 ? queued
+            : (cell) => cell.element.query_selector("kbd.queue, kbd.walked") !== null;
         const drawn = Keymap.drawn_to(ui.selection);
         const cells = Array.from(ui.codes.values());
         // A selection all queued, as a stamp leaves, starts with its own first cell (or last).
@@ -138,7 +142,7 @@ class Keys {
             return sign > 0 ? selected[0] : selected[selected.length - 1];
         }
         const current = drawn !== null ? new Set([drawn]) : ui.selection;
-        const waiting = cells.filter((cell) => !current.has(cell) && queued(cell));
+        const waiting = cells.filter((cell) => !current.has(cell) && reachable(cell));
         if (waiting.length === 0) {
             return null;
         }
@@ -152,7 +156,7 @@ class Keys {
         const count = cells.length;
         for (let step = 1; step < count; ++step) {
             const cell = cells[((index + sign * step) % count + count) % count];
-            if (!current.has(cell) && queued(cell)) {
+            if (!current.has(cell) && reachable(cell)) {
                 return cell;
             }
         }
@@ -280,6 +284,9 @@ class Keys {
         if (this.unmark()) {
             return;
         }
+        if (this.drop_buffer()) {
+            return;
+        }
 
         // Let go of what the command layer was setting.
         if (ui.keymap.property !== null || ui.keymap.component !== null) {
@@ -303,10 +310,11 @@ class Keys {
             return;
         }
 
-        // Unqueue queued cells. Finishing a label stops showing the queue (see
-        // `UI.create_label_input`), so this goes by the queue rather than by its being shown.
-        for (const element of ui.element.query_selector_all("kbd.queue")) {
-            element.class_list.remove("queue");
+        // Unqueue queued cells, and forget those already labelled from the queue. Finishing a
+        // label stops showing the queue (see `UI.create_label_input`), so this goes by the queue
+        // rather than by its being shown.
+        for (const element of ui.element.query_selector_all("kbd.queue, kbd.walked")) {
+            element.class_list.remove("queue", "walked");
         }
     }
 
@@ -454,6 +462,95 @@ class Keys {
         return true;
     }
 
+    /// `select-mode` (`; v`): gather cells into a buffer, drawn apart from the selection, as the
+    /// focus point passes over them, starting with the cell under it. RET then replaces the
+    /// selection with the buffer, `+` adds it, and `-` takes it away (see `Keymap.intercept`),
+    /// leaving select mode; ESC, or `; v` again, leaves it without changing the selection.
+    select_mode() {
+        const ui = this.ui;
+        if (ui.buffer !== null) {
+            this.drop_buffer();
+            return;
+        }
+        if (ui.mark !== null || ui.carried !== null) {
+            throw new Error("Select mode would leave the mark or the carried checkpoint behind:"
+                + " ESC lets go of it first.");
+        }
+        ui.buffer = new Set();
+        if (!ui.focus_point.class_list.contains("focused")) {
+            ui.focus_point.class_list.remove("revealed", "pending", "active");
+            ui.focus_point.class_list.add("focused");
+            ui.reposition_focus_point(ui.focus_position);
+        }
+        const cell = ui.cell_under_focus_point();
+        this.buffer(...(cell !== null ? [cell] : []));
+        ui.mode_line.update(ui);
+        ui.mode_line.flash("select: move to gather; RET replaces, + adds, - takes away");
+    }
+
+    /// Add `cells` to select mode's buffer.
+    buffer(...cells) {
+        const ui = this.ui;
+        for (const cell of cells) {
+            ui.buffer.add(cell);
+        }
+        ui.update_mark_region();
+    }
+
+    /// Leave select mode with the buffer: `how` is `replace`, `add`, or `subtract`.
+    commit_buffer(how) {
+        const ui = this.ui;
+        const cells = Array.from(Keys.buffered(ui));
+        ui.buffer = null;
+        ui.update_mark_region();
+        if (how === "replace") {
+            ui.deselect();
+        }
+        if (how === "subtract") {
+            for (const cell of cells) {
+                ui.deselect(cell);
+            }
+        } else {
+            ui.select(...cells);
+        }
+        ui.hide_if_unselected();
+        ui.mode_line.update(ui);
+        const count = `${cells.length} cell${cells.length === 1 ? "" : "s"}`;
+        ui.mode_line.flash({ replace: `selected ${count}`, add: `added ${count}`,
+            subtract: `took away ${count}` }[how]);
+    }
+
+    /// Leave select mode without changing the selection. Returns whether it was on.
+    drop_buffer() {
+        const ui = this.ui;
+        if (ui.buffer === null) {
+            return false;
+        }
+        ui.buffer = null;
+        ui.update_mark_region();
+        ui.mode_line.update(ui);
+        ui.mode_line.flash("select mode left");
+        return true;
+    }
+
+    /// The cells of select mode's buffer still in the diagram, with the arrows both of whose ends
+    /// are among them, as a rectangle of the mark takes them (see `cells_between`).
+    static buffered(ui) {
+        if (ui.buffer === null) {
+            return new Set();
+        }
+        const inside = new Set(Array.from(ui.buffer)
+            .filter((cell) => cell.is_vertex() && ui.quiver.contains_cell(cell)));
+        for (const cell of ui.quiver.all_cells().filter((cell) => cell.is_edge())
+            .sort((a, b) => a.level - b.level)
+        ) {
+            if (inside.has(cell.source) && inside.has(cell.target)) {
+                inside.add(cell);
+            }
+        }
+        return inside;
+    }
+
     /// Let go of the mark, if there is one. Returns whether there was.
     unmark() {
         const ui = this.ui;
@@ -597,14 +694,20 @@ class Keys {
         }
 
         if (ui.in_mode(UIMode.Default)) {
-            // Holding Shift extends the selection by the cells the focus point passes over, as
-            // in a spreadsheet: the one it leaves (if it was visible) and the one it reaches.
+            // Holding Shift walks the graph, from a cell to an arrow at it, and from an arrow to
+            // its ends, rather than moving the focus point.
             if (event.shiftKey) {
+                this.walk(position_delta);
+                return;
+            }
+            // In select mode, the cells the focus point passes over go into its buffer: the one
+            // it leaves (if it was visible) and the one it reaches.
+            if (ui.buffer !== null) {
                 const positions = [ui.focus_position.add(position_delta)];
                 if (ui.focus_point.class_list.contains("focused")) {
                     positions.push(ui.focus_position);
                 }
-                ui.select(...positions
+                this.buffer(...positions
                     .map((position) => ui.positions.get(`${position}`))
                     .filter((cell) => cell !== undefined));
             }
@@ -730,6 +833,132 @@ class Keys {
                 );
             }
         }
+    }
+
+    /// S-arrows: walk the graph in the direction `delta`. From a cell (the one under the focus
+    /// point, or the one selected), select the arrow at it that leaves nearest that way, within a
+    /// right angle, outgoing before incoming. From one selected arrow, go to its target along it,
+    /// to its source against it, and across it to the arrow beside it on that side (a parallel
+    /// one), or else to an arrow attached to it. A cell walked to takes the focus point; an
+    /// arrow hides it, so that RET labels the arrow.
+    walk(delta) {
+        const ui = this.ui;
+        if (ui.mark !== null) {
+            throw new Error("S-arrows walk the diagram, which would leave the mark behind: ESC"
+                + " lets go of it first.");
+        }
+        if (ui.carried !== null) {
+            throw new Error("S-arrows walk the diagram, which would leave the checkpoint behind:"
+                + " RET puts it down first.");
+        }
+        const pressed = Math.atan2(delta.y, delta.x);
+        const apart = (a, b) => Math.abs(mod(a - b + Math.PI, 2 * Math.PI) - Math.PI);
+        const selection = Array.from(ui.selection);
+        const focused = ui.focus_point.class_list.contains("focused")
+            ? ui.cell_under_focus_point() : null;
+        const go = (cell) => {
+            ui.deselect();
+            ui.select(cell);
+            if (cell.is_vertex()) {
+                ui.focus_point.class_list.remove("revealed", "pending", "active");
+                ui.focus_point.class_list.add("focused");
+                ui.reposition_focus_point(cell.position);
+            } else {
+                ui.focus_point.class_list.remove("focused", "smooth");
+            }
+            ui.mode_line.update(ui);
+        };
+        const nearest = (from) => {
+            const choices = Array.from(ui.quiver.dependencies_of(from))
+                .map(([edge, end]) => ({ edge, end, by: apart(Keys.leaving(ui, edge, end), pressed) }))
+                .filter(({ by }) => by < Math.PI / 2 - 1e-6)
+                .sort((a, b) => a.by - b.by || (a.end === "source" ? 0 : 1)
+                    - (b.end === "source" ? 0 : 1) || a.edge.serial - b.edge.serial);
+            return choices.length > 0 ? choices[0].edge : null;
+        };
+
+        let from = null;
+        if (selection.length === 1 && selection[0].is_edge()) {
+            from = selection[0];
+        } else if (focused !== null) {
+            from = focused;
+        } else if (selection.length === 1) {
+            from = selection[0];
+        }
+        if (from === null) {
+            throw new Error("S-arrows walk from one cell or one arrow: select one, or move the"
+                + " focus point onto a cell.");
+        }
+
+        if (from.is_vertex()) {
+            const edge = nearest(from);
+            if (edge === null) {
+                ui.mode_line.flash("no arrow that way");
+                return;
+            }
+            go(edge);
+            return;
+        }
+
+        // From an arrow.
+        const along = from.is_loop() ? null : from.target.shape.origin.sub(from.source.shape.origin);
+        if (along !== null && !along.is_zero()) {
+            const angle = along.angle();
+            if (apart(angle, pressed) <= Math.PI / 4 + 1e-6) {
+                go(from.target);
+                return;
+            }
+            if (apart(angle + Math.PI, pressed) <= Math.PI / 4 + 1e-6) {
+                go(from.source);
+                return;
+            }
+        }
+        // Across the arrow: the parallel arrow nearest on the side pressed, measured across
+        // this arrow by how far each curves and shifts.
+        const direction = along !== null && !along.is_zero() ? along.angle() : from.angle();
+        const across = new Point(-Math.sin(direction), Math.cos(direction));
+        const side = Math.sign(delta.x * across.x + delta.y * across.y);
+        const lateral = (edge) => (edge.arrow.style.curve + edge.arrow.style.shift)
+            * (edge.source === from.source ? 1 : -1);
+        const parallel = ui.quiver.all_cells()
+            .filter((cell) => cell.is_edge() && cell !== from
+                && (cell.source === from.source && cell.target === from.target
+                    || cell.source === from.target && cell.target === from.source))
+            .map((edge) => ({ edge, by: (lateral(edge) - lateral(from)) * side }))
+            .filter(({ by }) => by > 1e-6)
+            .sort((a, b) => a.by - b.by);
+        if (parallel.length > 0) {
+            go(parallel[0].edge);
+            return;
+        }
+        const attached = nearest(from);
+        if (attached !== null) {
+            go(attached);
+            return;
+        }
+        ui.mode_line.flash("no arrow that way");
+    }
+
+    /// The direction `edge` leaves its `end` in, on the canvas: towards its first checkpoint if it
+    /// is routed, along the tangent of its curve otherwise, and towards a loop's middle.
+    static leaving(ui, edge, end) {
+        const here = edge[end].shape.origin;
+        if (edge.is_loop()) {
+            const box = edge.element.element.getBoundingClientRect();
+            const cell = edge.source.element.element.getBoundingClientRect();
+            return Math.atan2((box.top + box.bottom - cell.top - cell.bottom) / 2,
+                (box.left + box.right - cell.left - cell.right) / 2);
+        }
+        if (edge.is_routed()) {
+            const route = edge.options.route;
+            const [x, y] = end === "source" ? route[0] : route[route.length - 1];
+            return ui.grid.centre_offset_from_position(new Position(x, y)).sub(here).angle();
+        }
+        const line = edge.target.shape.origin.sub(edge.source.shape.origin);
+        const length = line.length();
+        const curve = edge.arrow.style.curve;
+        return line.angle() + (end === "source"
+            ? Math.atan2(curve, 0.35 * length) : Math.atan2(curve, -0.35 * length));
     }
 
     /// Copy the selection, and the cells it depends on.

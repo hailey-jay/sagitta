@@ -535,6 +535,16 @@ Commands.TABLE["move-checkpoint"] = {
     run: (commands) => commands.ui.keys.carry(),
 };
 
+/// `select-mode` does what `; v` does (see `Keys.select_mode`).
+Commands.TABLE["select-mode"] = {
+    run: (commands) => {
+        if (!commands.ui.in_mode(UIMode.Default)) {
+            throw new Error(`Select mode cannot start in the ${commands.ui.mode.name} mode.`);
+        }
+        commands.ui.keys.select_mode();
+    },
+};
+
 /// `mark` and `mark-add` do what their keys do (see `Keys.mark`), from the command line.
 for (const [name, add] of [["mark", false], ["mark-add", true]]) {
     Commands.TABLE[name] = {

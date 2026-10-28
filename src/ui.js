@@ -47,6 +47,11 @@ class UI {
         // `null` if there is none. The mode line shows `MARK` while there is one.
         this.mark = null;
 
+        // The cells select mode has gathered (`; v`, see `Keys.select_mode`), to replace, add to,
+        // or take from the selection, or `null` outside select mode. The mode line shows
+        // `SELECT` while there is one.
+        this.buffer = null;
+
         // The checkpoint being moved with the focus point, as `{ edge, from, index }` for each
         // selected arrow whose route it is in, or `null` (see `Keys.carry`).
         this.carried = null;
@@ -743,9 +748,12 @@ class UI {
     }
 
     /// Unqueue any selected cell, typically after an edit affecting the cells in the selection.
+    /// Take the selected cells out of the queue, as labelled: S-TAB still goes back to them (see
+    /// `Keys.next_queued`) until ESC lets go of the queue.
     unqueue_selected() {
         for (const element of this.element.query_selector_all(".cell.selected kbd.queue")) {
             element.class_list.remove("queue");
+            element.class_list.add("walked");
         }
     }
 
@@ -791,6 +799,7 @@ class UI {
         // The mark, and a carried checkpoint, belong to the diagram they were set in.
         this.mark = null;
         this.carried = null;
+        this.buffer = null;
         this.update_mark_region();
 
         // Clear the quiver and update associated UI elements. A new diagram is in tikz-cd until
@@ -1271,6 +1280,10 @@ class UI {
             : new Set(Keys.cells_between(this, this.mark, this.focus_position));
         for (const cell of this.quiver.all_cells()) {
             cell.element.class_list.toggle("in-mark", inside.has(cell));
+        }
+        const buffered = Keys.buffered(this);
+        for (const cell of this.quiver.all_cells()) {
+            cell.element.class_list.toggle("in-buffer", buffered.has(cell));
         }
         this.mark_region.class_list.toggle("hidden", this.mark === null);
         if (this.mark === null) {

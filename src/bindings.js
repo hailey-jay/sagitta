@@ -349,6 +349,7 @@ Bindings.DEFAULTS = {
     // Selecting at the focus point has no key here, as Shift-Space does it.
     "select-at-focus": [],
     "toggle-selection": ["; s"],
+    "select-mode": ["; v"],
     "create-arrows": ["; e"],
     "change-source": ["; ,"],
     "change-target": ["; ."],
@@ -410,6 +411,7 @@ Bindings.HANDLERS = {
     "search": { press: (ui) => ui.keymap.search() },
     "select-at-focus": { press: (ui) => ui.keys.toggle_at_focus() },
     "toggle-selection": { press: (ui) => ui.keys.code_prompt("Toggle") },
+    "select-mode": { press: (ui) => ui.keys.select_mode() },
     // Arrows from the selection to the cells whose codes are typed.
     "create-arrows": {
         press: (ui) => {

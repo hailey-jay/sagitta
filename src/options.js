@@ -110,7 +110,6 @@ class ArrowOptions {
     set(ui, property, values) {
         const value = ArrowOptions.clamp(property, values);
         const { only = null } = ArrowOptions.PROPERTIES[property];
-        ui.unqueue_selected();
         ui.history.add_or_modify_previous(ui, [property, ui.selection], [{
             kind: property,
             value,
@@ -378,7 +377,6 @@ class ArrowOptions {
         const clone = (value) => JSON.parse(JSON.stringify(value));
         const edges = ArrowOptions.edges(ui);
         const before = new Map(edges.map((edge) => [edge, clone(edge.options.style)]));
-        ui.unqueue_selected();
         for (const edge of edges) {
             modify(edge);
         }

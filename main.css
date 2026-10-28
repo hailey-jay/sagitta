@@ -173,6 +173,17 @@ kbd {
     background: var(--cell-hover);
 }
 
+/* Select mode's buffer: outlined in blue, apart from the selection's grey, the mark's pink, and
+   the yellow of what waits. */
+.vertex.in-buffer .content {
+    outline: var(--ui-secondary) 2px dashed;
+    outline-offset: -2px;
+}
+.arrow.in-buffer > svg:first-child > path.arrow-background {
+    opacity: 1 !important;
+    stroke: var(--ui-secondary) !important;
+}
+
 /* Vertices */
 
 .vertex {

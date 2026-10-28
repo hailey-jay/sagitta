@@ -211,8 +211,7 @@ class ModeLine {
             ["flip-labels", "Flip labels", "flip labels"],
         ]) {
             this.add_action(ui, name, label, () => {
-                ui.unqueue_selected();
-                ui.history.add(ui, [{ kind, cells: ui.selection }], true);
+                        ui.history.add(ui, [{ kind, cells: ui.selection }], true);
             }, edges);
         }
 
@@ -522,7 +521,8 @@ class ModeLine {
         }
         // A mark waiting for its other corner, or a checkpoint being carried, is state the user
         // cannot otherwise see, so it shows wherever the layer has nothing of its own to show.
-        const pending = ui.mark !== null ? "MARK" : ui.carried !== null ? "CHECKPOINT" : null;
+        const pending = ui.mark !== null ? "MARK" : ui.carried !== null ? "CHECKPOINT"
+            : ui.buffer !== null ? "SELECT" : null;
         if (!ui.keymap.active) {
             return ["EDIT", pending, "edit"];
         }
@@ -632,6 +632,15 @@ class ModeLine {
             if (cell === null) {
                 return `new vertex  ${where(ui.focus_position)}`;
             }
+        }
+        // Space's selection, a cell and the arrows just drawn to it: RET labels the cell, and
+        // S-RET the arrows.
+        const drawn = Keymap.drawn_to(ui.selection);
+        if (drawn !== null) {
+            const arrows = Array.from(ui.selection).filter((cell) => cell !== drawn)
+                .map(describe);
+            return `${describe(drawn)}  S-RET ${arrows.slice(0, 4).join(", ")}${
+                arrows.length > 4 ? ", …" : ""}`;
         }
         switch (ui.selection.size) {
             case 0:
