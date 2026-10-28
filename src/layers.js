@@ -908,6 +908,7 @@ Layer.Settings.PRESET_KEYS = {
     "dashed": "-",
     "dotted": ".",
     "squiggly": "~",
+    "blank": "_",
 };
 
 /// The colour layer (`; c` for arrows, `; C` for labels): the selection's colour as an object,

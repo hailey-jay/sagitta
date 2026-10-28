@@ -302,6 +302,9 @@ class Commands {
         if (preset.level !== undefined) {
             this.slide("level", [preset.level]);
         }
+        if (preset.label_alignment !== undefined) {
+            ui.arrow_options.set_label_alignment(ui, preset.label_alignment);
+        }
     }
 }
 
@@ -348,6 +351,8 @@ Commands.PRESETS = {
     "dashed": { body: "dashed" },
     "dotted": { body: "dotted" },
     "squiggly": { body: "squiggly" },
+    // Nothing drawn, and the label over where the arrow would be, as `\cong` between objects.
+    "blank": { tail: "none", body: "none", head: "none", level: 1, label_alignment: "over" },
 };
 
 /// The command line's commands. `completions` lists the arguments offered by Tab.
@@ -535,6 +540,33 @@ Commands.TABLE["move-checkpoint"] = {
     run: (commands) => commands.ui.keys.carry(),
 };
 
+/// `version` says which version of Sagitta this is, as the help's About lines do.
+Commands.TABLE["version"] = {
+    run: (commands) => {
+        host.version().then((version) => commands.ui.mode_line.flash(
+            version === null ? "Sagitta, of an unknown version" : `Sagitta ${version}`));
+    },
+};
+
+/// `text-labels` turns text-label mode on or off (see `TextLabels`), or, with no argument, flips
+/// it. `claire` is its alias, and undocumented.
+Commands.TABLE["text-labels"] = {
+    arguments: true,
+    completions: ["on", "off"],
+    run: (commands, [value]) => {
+        const ui = commands.ui;
+        const on = value === undefined ? !ui.settings.get("ui.text_labels")
+            : ui.settings.parse("ui.text_labels", value.toLowerCase());
+        if (on === undefined) {
+            throw new Error(`text-labels takes on or off, not "${value}".`);
+        }
+        ui.change_setting("ui.text_labels", on);
+        ui.update_selection();
+        ui.mode_line.update(ui);
+        ui.mode_line.flash(on ? "text labels: typing writes text" : "text labels off");
+    },
+};
+
 /// `select-mode` does what `; v` does (see `Keys.select_mode`).
 Commands.TABLE["select-mode"] = {
     run: (commands) => {
@@ -664,4 +696,5 @@ Commands.ALIASES = {
     "help": "shortcuts",
     "w": "save",
     "u": "undo",
+    "claire": "text-labels",
 };

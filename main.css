@@ -173,6 +173,11 @@ kbd {
     background: var(--cell-hover);
 }
 
+/* An arrow that draws nothing (the blank preset): its highlight, faintly, so it can be found. */
+.arrow.blank:not(.selected):not(.in-buffer) > svg:first-child > .arrow-background {
+    opacity: 0.08 !important;
+}
+
 /* Select mode's buffer: outlined in blue, apart from the selection's grey, the mark's pink, and
    the yellow of what waits. */
 .vertex.in-buffer .content {

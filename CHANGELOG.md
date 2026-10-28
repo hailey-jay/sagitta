@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.0.0 (unreleased)
+
+### Upgrading
+
+- `S-arrows` walk the diagram rather than extending the selection. `; v` (select mode) gathers cells as the arrows pass over them, as `S-arrows` did, then RET, `+`, or `-` applies them.
+
+### Labels
+
+- S-RET labels the selected arrows rather than the cell: after Space draws to a cell, RET labels the cell and S-RET the arrows, and the mode line names both.
+- S-TAB goes back through the queue to cells already labelled, so a typo can be fixed; Tab then goes on to the next one waiting. ESC lets go of the queue, as before.
+- Styling, reversing, or flipping an arrow leaves it, and its cell, in the queue, since neither is labelled.
+- `:text-labels` types labels as text, stored as `\textnormal{...}` (or `\text`, or `\textrm`, by `ui.text_wrapper`): the label input shows the text alone, `_`, `^`, `&`, `#`, and `~` are typed as text outside `$ $`, and `/` finds a label by its text.
+
+### Selecting
+
+- `S-arrows` walk from a cell to the arrow at it that leaves nearest that way, and from an arrow to its source, its target, or the arrow beside it.
+- `; v`, or `:select-mode`, gathers a buffer, outlined in blue, that RET puts in place of the selection, `+` adds to it, and `-` takes from it.
+
+### Arrows
+
+- The blank preset (`; _`, `:blank`) draws nothing, with the label over the line, as `\cong` between objects, written as `draw=none`; the canvas shows it faintly.
+
+### Elsewhere
+
+- `:version` says which version of Sagitta this is.
+
 ## 0.7.1
 
 ### Arrow options

@@ -93,7 +93,8 @@ class Prompt {
         }
     }
 
-    /// The cells matching the search query: those whose label is the query (ignoring whitespace);
+    /// The cells matching the search query: those whose label, or a text label's text, is the
+    /// query (ignoring whitespace);
     /// failing that, those whose label contains it; failing that, those whose hint codes were
     /// typed (so that `/` subsumes the stock `;` jump).
     search_matches() {
@@ -104,7 +105,9 @@ class Prompt {
             return [];
         }
         const cells = ui.quiver.all_cells();
-        const exact = cells.filter((cell) => normalise(cell.label) === query);
+        // A text label, as `\textnormal{map}`, is the query `map` exactly (see `TextLabels`).
+        const exact = cells.filter((cell) => normalise(cell.label) === query
+            || normalise(TextLabels.unwrap(cell.label) ?? "\0") === query);
         if (exact.length > 0) {
             return exact;
         }

@@ -907,7 +907,7 @@ const pending = [];
         check("each is reported in the schema's own words", settings.problems, [
             "ui.zoom should be a number from 20 to 200",
             "diagram.arrow_preset should be one of plain, equals, inclusion, mono, epi, maps-to,"
-                + " dashed, dotted, squiggly",
+                + " dashed, dotted, squiggly, blank",
             "ui.dark_mode should be true or false",
         ]);
 

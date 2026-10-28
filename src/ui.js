@@ -56,6 +56,11 @@ class UI {
         // selected arrow whose route it is in, or `null` (see `Keys.carry`).
         this.carried = null;
 
+        // Whether the label input holds the text inside a wrapped label, in text-label mode, and
+        // the selection it holds it for (see `update_selection` and `TextLabels`).
+        this.text_label_editing = false;
+        this.text_label_selection = null;
+
         // The element associated with the focus position.
         this.focus_point = null;
         this.mark_region = null;
@@ -353,6 +358,25 @@ class UI {
             }
             // A `%` is typed as the sign, `\%`, since a comment means nothing in a label (see
             // `Delimiters.percent`), unless it finishes `\%`.
+            // In text-label mode, typing over the whole label, as RET leaves it selected, types
+            // text, whatever the label was (as `\bullet`, which Space gives a new cell).
+            if (ui.settings.get("ui.text_labels") && !ui.text_label_editing
+                && input.selectionStart === 0 && input.selectionEnd === input.value.length
+            ) {
+                ui.text_label_editing = true;
+            }
+            // In text, the characters that TeX would stop at, or split the cell at, are typed as
+            // text (see `TextLabels.escape`).
+            if (ui.text_label_editing && data !== null) {
+                const before = input.value.slice(0, input.selectionStart);
+                const replacement = TextLabels.escape(before, data);
+                if (replacement !== null) {
+                    event.preventDefault();
+                    input.setRangeText(replacement, input.selectionStart, input.selectionEnd, "end");
+                    input.dispatchEvent(new Event("input"));
+                    return;
+                }
+            }
             if (data === "%") {
                 const before = input.value.slice(0, input.selectionStart);
                 if ((before.match(/\\*$/)[0].length % 2) === 0) {
@@ -379,8 +403,12 @@ class UI {
         // the input field is modified.
         ui.label_input.listen("input", () => {
             if (!ui.in_mode(UIMode.Command)) {
+                // In text-label mode, what is typed is the text inside the wrapper.
+                const value = ui.text_label_editing ? TextLabels.wrap(
+                    ui.label_input.element.value, ui.settings.get("ui.text_wrapper"))
+                    : ui.label_input.element.value;
                 const selection = Array.from(ui.selection).filter((cell) => {
-                    return cell.label !== ui.label_input.element.value;
+                    return cell.label !== value;
                 });
                 if (selection.length === 0) {
                     // It can happen that we receive an event (e.g. `inputType` `historyUndo`)
@@ -395,11 +423,11 @@ class UI {
                     ["label", ui.selection],
                     [{
                         kind: "label",
-                        value: ui.label_input.element.value,
+                        value,
                         cells: selection.map((cell) => ({
                             cell,
                             from: cell.label,
-                            to: ui.label_input.element.value,
+                            to: value,
                         })),
                     }],
                 );
@@ -703,7 +731,25 @@ class UI {
         const input = this.label_input.element;
         // While a prompt owns the input, what it holds is being typed, not a label.
         if (!this.in_mode(UIMode.Command)) {
-            const label = ArrowOptions.common(this.selection, (cell) => cell.label) ?? "";
+            let label = ArrowOptions.common(this.selection, (cell) => cell.label) ?? "";
+            // In text-label mode, a label that is empty, or one wrapped group, is edited as the
+            // text inside; any other, or a selection of different labels, as it is. While the
+            // same selection's label is typed, it stays text, even through a state (an unclosed
+            // brace) that does not unwrap, and the input keeps what is typed.
+            if (this.text_label_selection === this.selection
+                && document.activeElement === input
+            ) {
+                label = input.value;
+            } else {
+                const common = ArrowOptions.common(this.selection, (cell) => cell.label);
+                const text = !this.settings.get("ui.text_labels") || common === null ? null
+                    : common === "" ? "" : TextLabels.unwrap(common);
+                this.text_label_editing = text !== null;
+                this.text_label_selection = this.selection;
+                if (text !== null) {
+                    label = text;
+                }
+            }
             if (input.value !== label) {
                 // Guard on the value changing: assigning it moves the caret to the end.
                 input.value = label;

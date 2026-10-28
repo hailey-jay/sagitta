@@ -454,8 +454,10 @@ class ModeLine {
 
         // The diagram's file, marked `●` with unsaved changes, by more than its colour.
         ui.file.update();
-        // Export options other than the defaults, which saving writes too, follow it.
-        const differences = Layer.Export.differences(ui);
+        // Export options other than the defaults, which saving writes too, follow it, and
+        // text-label mode, which changes what typing writes.
+        const differences = [...Layer.Export.differences(ui),
+            ...ui.settings.get("ui.text_labels") ? ["text labels"] : []];
         this.element.query_selector(".file").clear()
             .add(ui.file.name())
             .add(ui.file.dirty ? new DOM.Element("span", {
@@ -464,7 +466,7 @@ class ModeLine {
             }).add(" ●") : "")
             .add(differences.length === 0 ? "" : new DOM.Element("span", {
                 class: "export-options",
-                title: "Export options, which saving writes too (C-e)",
+                title: "Export options, which saving writes too (C-e), and text-label mode",
             }).add(` [${differences.join(", ")}]`));
 
         // What typing would edit.

@@ -588,7 +588,7 @@ class Presets {
     /// The options of an arrow drawn as `preset` (one of `Commands.PRESETS`), as the encoding
     /// writes them: its style, and its level if not 1.
     static style(preset) {
-        const { level = 1, ...components } = Commands.PRESETS[preset];
+        const { level = 1, label_alignment: _, ...components } = Commands.PRESETS[preset];
         const style = {};
         for (const [component, value] of Object.entries(components)) {
             style[component] = ArrowOptions.style_data(component, Commands.STYLES[component][value]);

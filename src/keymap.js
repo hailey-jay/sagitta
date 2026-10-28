@@ -1309,6 +1309,7 @@ Keymap.WHICH_KEY = [
     // marks the one they take now (see `Commands.preset`).
     ["Presets", [
         "plain", "equals", "inclusion", "mono", "epi", "maps-to", "dashed", "dotted", "squiggly",
+        "blank",
     ].map((name) => [name, name.replace("-", " "), null, `preset:${name}`])],
     ["Label", [
         ["align", "alignment", "edge", "alignment:"],
@@ -1352,7 +1353,7 @@ Keymap.WHICH_KEY = [
 Keymap.NOT_AMSCD = new Set([
     "tail", "body", "head", "adjunction", "corner", "crossing-over", "route", "checkpoint",
     "move-checkpoint", "colour", "level", "curve", "offset", "length", "inclusion", "mono", "epi",
-    "maps-to", "dashed", "dotted", "squiggly", "position", "label-colour", "align-centre",
+    "maps-to", "dashed", "dotted", "squiggly", "blank", "position", "label-colour", "align-centre",
     "align-over", "align-source", "align-target",
 ]);
 

@@ -323,6 +323,7 @@ Bindings.DEFAULTS = {
     "dashed": ["; -"],
     "dotted": [],
     "squiggly": ["; ~"],
+    "blank": ["; _"],
 
     // Where an arrow's ends attach, when they attach to arrows.
     "align-source": ["; ["],

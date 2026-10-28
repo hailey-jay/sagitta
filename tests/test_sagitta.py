@@ -3025,6 +3025,78 @@ def test_select_mode_gathers_a_buffer_then_replaces_adds_or_takes_away(sagitta, 
     assert steps[2:] == ["A,B,D,f", True, "A,f", "C,D,\\alpha", "C,D,\\alpha", True, False]
 
 
+def test_text_labels_wrap_what_is_typed_and_unwrap_to_edit(sagitta, home):
+    """`:claire` turns text-label mode on, as `:text-labels` does: typing `R&D_1` on `A` stores
+    `\textnormal{R\&D\_1}`, while `$x_1$` stays maths inside; the input shows the text alone; a
+    label of two groups is edited as it is; and `:text-labels off` leaves labels alone."""
+    script = """(async () => {
+        %s
+        const type = async (text) => {
+            const input = ui.label_input.element;
+            for (const data of text) {
+                const event = new InputEvent("beforeinput", { data, inputType: "insertText",
+                    cancelable: true });
+                if (input.dispatchEvent(event)) {
+                    input.setRangeText(data, input.selectionStart, input.selectionEnd, "end");
+                    input.dispatchEvent(new Event("input"));
+                }
+            }
+        };
+        const a = ui.positions.get("0 0");
+        const b = ui.positions.get("1 0");
+        ui.commands.run("claire");
+        const on = ui.settings.get("ui.text_labels");
+        ui.deselect();
+        ui.select(a);
+        ui.label_input.element.focus();
+        ui.label_input.element.value = "";
+        ui.label_input.element.dispatchEvent(new Event("input"));
+        await type("R&D_1 $x_1$");
+        ui.label_input.element.blur();
+        const stored = a.label;
+        ui.deselect();
+        ui.select(b);
+        ui.deselect();
+        ui.select(a);
+        const shown = ui.label_input.element.value;
+        b.label = "\\\\text{a} \\\\text{b}";
+        ui.deselect();
+        ui.select(b);
+        const raw = ui.label_input.element.value;
+        ui.commands.run("text-labels off");
+        ui.deselect();
+        ui.select(a);
+        return [on, stored, shown, raw, ui.label_input.element.value,
+            ui.settings.get("ui.text_labels")];
+    })()""" % PRESS
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == [
+        True, "\\textnormal{R\\&D\\_1 $x_1$}", "R\\&D\\_1 $x_1$", "\\text{a} \\text{b}",
+        "\\textnormal{R\\&D\\_1 $x_1$}", False]
+
+
+def test_the_blank_preset_draws_nothing_and_reads_back(sagitta, home):
+    """`:blank` on `f` leaves no tail, body, or head, and the label over the line; it is written
+    with `draw=none`, read back as blank, and shown faintly on the canvas alone."""
+    diagram = _diagram(home / "paper")
+    script = """(async () => {
+        const f = ui.quiver.all_cells().find((cell) => cell.label === "f");
+        ui.deselect();
+        ui.select(f);
+        ui.commands.run("blank");
+        await ui.file.save();
+        return [f.options.label_alignment, f.element.class_list.contains("blank")];
+    })()"""
+    assert sagitta("evaluate", diagram, script) == ["over", True]
+    text = diagram.read_text()
+    assert "draw=none" in text and "marking" in text, text
+    again = sagitta("evaluate", diagram, """(() => {
+        const f = ui.quiver.all_cells().find((cell) => cell.label === "f");
+        const { style } = f.options;
+        return [style.tail.name, style.body.name, style.head.name, f.options.label_alignment];
+    })()""")
+    assert again == ["none", "none", "none", "over"]
+
+
 def test_tab_walks_a_stamp_in_the_order_it_reads(sagitta, home):
     """After `:cc 2 bounded=both`, Tab goes object, arrow, object, arrow, ..., as the sequence
     reads, rather than all the objects and then the arrows."""

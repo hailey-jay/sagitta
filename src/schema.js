@@ -31,6 +31,10 @@ const SETTINGS = {
         // The characters of the codes that select cells, in the order they are given out (see
         // `UI.recode`): the keyboard's home row, then the bottom row, the top, and the digits.
         "ui.hint_characters": "ASDFGHJKLZXCVBNMQWERTYUIOP1234567890",
+        // Whether labels are typed as text, and stored wrapped (see `TextLabels`).
+        "ui.text_labels": false,
+        // What text labels are wrapped in.
+        "ui.text_wrapper": "\\textnormal",
     },
 
     /// The numbers a numeric setting may be, as `[least, most]`.
@@ -48,6 +52,10 @@ const SETTINGS = {
         "diagram.arrow_preset": [
             (value) => Object.hasOwn(Commands.PRESETS, value),
             () => `one of ${Object.keys(Commands.PRESETS).join(", ")}`,
+        ],
+        "ui.text_wrapper": [
+            (value) => TextLabels.WRAPPERS.includes(value),
+            () => `one of ${TextLabels.WRAPPERS.join(", ")}`,
         ],
         "ui.hint_characters": [
             (value) => /^[A-Z0-9]{2,}$/.test(value) && new Set(value).size === value.length,
