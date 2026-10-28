@@ -540,7 +540,7 @@ class UI {
             }
             // Currently all errors are disabled, so we don't wrap this in a try-catch block.
             katex.render(
-                Delimiters.percent(cell.label).replace(/\$/g, "\\$"),
+                Delimiters.dollars(Delimiters.percent(cell.label)),
                 label.element,
                 {
                     throwOnError: false,

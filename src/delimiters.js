@@ -150,6 +150,56 @@ Delimiters.balanced = (label) => {
     return depth === 0;
 };
 
+/// The commands whose group is text, in which `$ $` is maths again.
+Delimiters.TEXT_COMMANDS = new Set([
+    "text", "textnormal", "textrm", "textup", "textit", "textsl", "textsc", "textbf", "textmd",
+    "textsf", "texttt", "emph", "mbox", "hbox",
+]);
+
+/// `label` with each `$` that would leave maths escaped as `\$`, so that the canvas draws it as
+/// the sign, as quiver does, while a `$` inside a text group, as `\textnormal{Hi $\sum$}`, is
+/// left to go back into maths there, as it does in TeX.
+Delimiters.dollars = (label) => {
+    // The mode of each open group, from the outermost: `math`, `text`, or `text-math`, which is
+    // text gone back into maths with `$`.
+    const modes = ["math"];
+    let text_next = false;
+    let out = "";
+    for (let i = 0; i < label.length; ++i) {
+        const c = label[i];
+        const mode = modes[modes.length - 1];
+        if (c === "\\") {
+            const name = label.slice(i + 1).match(/^[a-zA-Z]+|^./)?.[0] ?? "";
+            out += c + name;
+            i += name.length;
+            text_next = Delimiters.TEXT_COMMANDS.has(name);
+            continue;
+        }
+        if (c === "{") {
+            modes.push(text_next && mode !== "text" ? "text" : mode === "text-math" ? "math" : mode);
+        } else if (c === "}") {
+            if (modes.length > 1) {
+                modes.pop();
+            }
+        } else if (c === "$") {
+            if (mode === "text") {
+                modes[modes.length - 1] = "text-math";
+            } else if (mode === "text-math") {
+                modes[modes.length - 1] = "text";
+            } else {
+                out += "\\$";
+                text_next = false;
+                continue;
+            }
+        }
+        if (!/\s/.test(c)) {
+            text_next = false;
+        }
+        out += c;
+    }
+    return out;
+};
+
 /// Text-label mode (`:text-labels`, `ui.text_labels`): labels are typed as text, and stored
 /// wrapped in `ui.text_wrapper`, `\textnormal` by default, which is upright and of the document's
 /// own font even in an italic theorem, and shrinks in an arrow's script style as `\text` does. The

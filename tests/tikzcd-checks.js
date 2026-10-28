@@ -1626,6 +1626,13 @@ const pending = [];
         [["\tA & {50\\%}", "\t\\arrow[\"{x\\%y}\", from=1-1, to=1-2]"], ["A", "50\\%", "x\\%y"], 0]);
     check("an escaped one is left as it is", [Delimiters.percent("\\%"), Delimiters.percent("%%"),
         Delimiters.percent("a\\\\%")], ["\\%", "\\%\\%", "a\\\\\\%"]);
+    check("a $ is the sign in maths, and goes into maths in text", [
+        "a$b", "\\$", "\\textnormal{Hi $\\sum$}", "\\text{$x$ and $y$} $",
+        "\\textnormal{$\\text{$z$}$}", "\\mathbb{R}$",
+    ].map(Delimiters.dollars), [
+        "a\\$b", "\\$", "\\textnormal{Hi $\\sum$}", "\\text{$x$ and $y$} \\$",
+        "\\textnormal{$\\text{$z$}$}", "\\mathbb{R}\\$",
+    ]);
     check("braces balance, escaped ones aside", ["{B", "B}", "}{", "\\{", "{\\}}", "\\frac{a}{b}"]
         .map(Delimiters.balanced), [false, false, false, true, true, true]);
 }
