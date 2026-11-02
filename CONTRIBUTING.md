@@ -37,6 +37,7 @@ To publish it, run `npm run site`, which gathers the page into `site/` (or `node
 The page is what the desktop app packages (`build.files` in `package.json`), less `electron/`, plus `service-worker.js`, so a file added to the page is added to that list; the browser tests serve the page from such a directory, so a file left out fails there.
 `LICENSE` and `NOTICE` go with every copy, as quiver's and KaTeX's MIT licences ask, and the help's About lines read the version from `package.json`.
 `service-worker.js` keeps what the page fetches, for opening without a network, and must sit beside `index.html` to cover it.
+It serves what it has kept at once and refreshes it behind, so a version just published shows on the second visit after it, not the first.
 `sagitta` is the launcher, which checks the arguments and picks an Electron.
 
 Match the code around a change: `///` doc comments on functions, `//` comments in full sentences, snake_case names, and lines of about 100 characters at most.

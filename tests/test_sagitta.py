@@ -2669,10 +2669,38 @@ def test_the_page_keeps_its_files_to_open_offline(browser):
                 .addEventListener("controllerchange", resolve, { once: true }));
         }
         await fetch("main.css");
-        const kept = await (await caches.open("sagitta")).match("main.css");
+        // The copy is kept behind the response, so it may not be in yet.
+        const cache = await caches.open("sagitta");
+        let kept;
+        for (let tries = 0; tries < 50 && kept === undefined; ++tries) {
+            kept = await cache.match("main.css");
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        }
         return kept !== undefined && (await kept.text()).includes("--ui-black");
     })()""")
     assert result
+
+
+def test_a_kept_file_is_served_at_once_and_refreshed_behind(browser):
+    """What the cache holds is served without waiting on the network, which then replaces it,
+    so that a version published since is taken up on the next visit."""
+    result = browser("""(async () => {
+        await navigator.serviceWorker.ready;
+        if (navigator.serviceWorker.controller === null) {
+            await new Promise((resolve) => navigator.serviceWorker
+                .addEventListener("controllerchange", resolve, { once: true }));
+        }
+        const cache = await caches.open("sagitta");
+        await cache.put("main.css", new Response("/* kept */"));
+        const served = await (await fetch("main.css")).text();
+        let refreshed = "/* kept */";
+        for (let tries = 0; tries < 50 && refreshed === "/* kept */"; ++tries) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            refreshed = await (await cache.match("main.css")).text();
+        }
+        return { served, refreshed: refreshed.includes("--ui-black") };
+    })()""")
+    assert result == {"served": "/* kept */", "refreshed": True}
 
 
 @pytest.mark.skipif(not node, reason="node not installed")

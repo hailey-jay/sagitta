@@ -57,6 +57,7 @@ Without a folder, or in Firefox and Safari, take macros from `f` in the macros l
 Chromium also reopens the last diagram, and its folder, on the next visit, once you agree.
 A link ending in `#q=...`, as quiver's do, opens the diagram it encodes, untitled; `q` in the export layer copies a diagram's, so the page's address followed by it opens that diagram.
 Once loaded, the page opens without a network, and browsers that install web apps (Chrome and Edge, or Safari's Add to Dock) can install it to run in a window of its own.
+It opens from what it kept, without waiting on the network, so a version published since the last visit shows from the visit after.
 Settings and the keys file live in the browser's storage, and opening the settings file (`o` in the settings layer) edits both.
 The browser keeps `C-n` for itself, so start a new diagram with `:new`.
 
