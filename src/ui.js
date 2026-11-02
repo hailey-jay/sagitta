@@ -896,13 +896,13 @@ class UI {
         return { macros, colours };
     }
 
-    /// Returns options that are not saved persistently in `settings`, but are used to modify
-    /// export output.
     /// The frame of the spectral sequence page in use, or `null` (see `SpectralSequence.current`).
     get frame() {
         return SpectralSequence.current(this);
     }
 
+    /// Returns options that are not saved persistently in `settings`, but are used to modify
+    /// export output.
     options() {
         return {
             dimensions: this.diagram_size(),

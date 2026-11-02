@@ -3703,3 +3703,63 @@ def test_nat_opens_its_setup_layer_and_stamps_the_two_cell(sagitta, home):
         "opened": [True, 5, 5],
         "stamped": [5, 1, 5, True],
     }
+
+
+# ── sagitta --check ─────────────────────────────────────────────────────────────
+
+def _paper(home):
+    """A paper whose diagrams have one problem each, but for the first: a square as Sagitta saves
+    it, a label with macros neither `macros.tex` nor KaTeX defines, a file written by hand, and a
+    label KaTeX cannot read."""
+    paper = home / "paper"
+    (paper / "figures").mkdir(parents=True)
+    (paper / ".git").mkdir()
+    (paper / "macros.tex").write_text("\\newcommand{\\pr}{\\mathrm{pr}}\n")
+    square = "\\[\\begin{tikzcd}\n\tA & B\n\t\\arrow[\"{\\pr_1}\", from=1-1, to=1-2]\n" \
+        "\\end{tikzcd}\\]\n"
+    (paper / "good.cd.tex").write_text(square)
+    (paper / "figures" / "macros.cd.tex").write_text(
+        square.replace("{\\pr_1}", "{\\foo \\baz_1}"))
+    (paper / "figures" / "hand.tikzcd").write_text(
+        "\\begin{tikzcd}\n  A \\arrow[r] & B\n\\end{tikzcd}\n")
+    (paper / "figures" / "broken.cd.tex").write_text(square.replace("{\\pr_1}", "{x^}"))
+    return paper
+
+
+_REPORT = [
+    'figures/broken.cd.tex: KaTeX cannot read the label "x^"',
+    'figures/hand.tikzcd: saving would change line 1: "\\\\begin{tikzcd}" to'
+    ' "\\\\[\\\\begin{tikzcd}"',
+    'figures/macros.cd.tex: \\foo is not defined, in "\\\\foo \\\\baz_1"',
+    'figures/macros.cd.tex: \\baz is not defined, in "\\\\foo \\\\baz_1"',
+    "4 diagrams checked, 3 with problems",
+]
+
+
+def test_check_lists_what_a_paper_would_suffer_from(home):
+    paper = _paper(home)
+    env = dict(os.environ, HOME=str(home), SAGITTA_ELECTRON=electron)
+    completed = subprocess.run([os.path.join(_APP, "sagitta"), "--check"], cwd=paper, env=env,
+                               capture_output=True, text=True, timeout=60, check=False)
+    assert completed.stdout.splitlines() == _REPORT
+    assert completed.returncode == 1
+
+
+def test_check_in_the_app_reports_the_same_without_a_window(home):
+    """The AppImage and Windows packages start `electron/main.js` directly, not the launcher."""
+    paper = _paper(home)
+    env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"))
+    command = [electron, "--ozone-platform=headless", _APP, "--check", str(paper)]
+    if os.environ.get("CI"):
+        command.insert(1, "--no-sandbox")
+    completed = subprocess.run(command, cwd=paper, env=env, capture_output=True, text=True,
+                               timeout=60, check=False)
+    assert completed.stdout.splitlines() == _REPORT
+    assert completed.returncode == 1
+
+
+def test_check_is_quiet_about_a_paper_with_nothing_wrong(home):
+    env = dict(os.environ, HOME=str(home), SAGITTA_ELECTRON=electron)
+    completed = subprocess.run([os.path.join(_APP, "sagitta"), "--check", "examples"], cwd=_APP,
+                               env=env, capture_output=True, text=True, timeout=60, check=False)
+    assert (completed.stdout, completed.returncode) == ("3 diagrams checked, all well\n", 0)

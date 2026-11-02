@@ -7,7 +7,12 @@ It edits `.cd.tex` files that a paper `\input`s directly.
 
 ```
 sagitta [--macros FILE] [--devtools] [DIAGRAM.cd.tex] [-- SWITCHES]
+sagitta --check [--macros FILE] [DIR]
 ```
+
+`--check` opens no window: it reads every `.cd.tex` and `.tikzcd` file under `DIR` (or the directory it is run from, leaving out hidden directories and `node_modules`) as Sagitta opens it, and prints a line for each problem: a part Sagitta cannot read, which saving would drop; a file saving would change, with the first line that differs; and a label KaTeX cannot read, or one using a macro that neither KaTeX nor the nearest `macros.tex` (or `--macros FILE`) defines.
+It ends with a count, and exits 1 if it found anything, so a paper's CI can run it.
+The launcher runs it as plain Node, needing no display.
 
 `DIAGRAM` need not exist yet.
 `sagitta --help` lists the options, and `--version` gives the version, as `:version` does inside.

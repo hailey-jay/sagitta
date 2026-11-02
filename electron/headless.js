@@ -1,4 +1,5 @@
-/// The window the fast suite (`tests/tikzcd.js`) runs the diagram in: enough of the DOM for
+/// The window the diagram runs in without Electron's page, for the fast suite (`tests/tikzcd.js`)
+/// and `sagitta --check` (see `check.js`): enough of the DOM for
 /// `src/dom.js` to build cells, and a `Stub.UI` holding only what parsing and exporting reach for.
 /// Nothing here draws or measures: the tikz-cd export is written from a cell's options alone, so
 /// every element below is somewhere for the cell to keep its own, and is never looked at again.
@@ -214,6 +215,8 @@ class StubText extends StubElement {
 
 const document = {
     body: new StubElement("body"),
+    // As `index.html`'s doctype sets it; KaTeX warns in quirks mode.
+    compatMode: "CSS1Compat",
     createElement: (tag_name) => new StubElement(tag_name),
     createElementNS: (_, tag_name) => new StubElement(tag_name),
     createTextNode: (text) => new StubText(text),
@@ -388,4 +391,56 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
     return ui;
 }
 
-module.exports = { document, window, host, make_ui, StubElement, StubClassList };
+/// The sources the diagram itself needs (nothing of the mode line, the pointer, or the window), in
+/// the order `index.html` loads them, from the app's directory.
+const SOURCES = [
+    "src/ds.js",
+    "src/dom.js",
+    "src/grid.js",
+    "src/curve.js",
+    "src/arrow.js",
+    "src/constants.js",
+    "src/parser.js",
+    "src/quiver.js",
+    "src/formats.js",
+    "src/settings.js",
+    "src/schema.js",
+    "src/macros.js",
+    "src/delimiters.js",
+    "src/history.js",
+    "src/colours.js",
+    "src/cell.js",
+    "src/options.js",
+    "src/commands.js",
+    "src/presets.js",
+    "src/spectral.js",
+    "src/universal.js",
+    "src/keys.js",
+    "src/keymap.js",
+    "src/bindings.js",
+    "src/file.js",
+];
+
+/// The text of `SOURCES`, read from `root`, the app's directory, after KaTeX if `katex`.
+function source(root, katex = false) {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    return [...(katex ? ["src/katex.min.js"] : []), ...SOURCES]
+        .map((file) => fs.readFileSync(path.join(root, file), "utf8")).join("\n");
+}
+
+/// A `vm` context over this window, with `globals` besides, for `source` to run in.
+function sandbox(globals = {}) {
+    const vm = require("node:vm");
+    const context = Object.assign({
+        console, process, setTimeout, clearTimeout,
+        // The encoding is base64 over UTF-8, which the page takes from the browser.
+        TextEncoder, TextDecoder, btoa, atob, URL, URLSearchParams,
+    }, globals, { document, window, host, make_ui, StubElement, StubClassList });
+    vm.createContext(context);
+    return context;
+}
+
+module.exports = {
+    document, window, host, make_ui, StubElement, StubClassList, SOURCES, source, sandbox,
+};
