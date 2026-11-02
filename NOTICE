@@ -19,7 +19,7 @@ Third-party code
 
 Sagitta is a fork of quiver (https://github.com/varkor/quiver), by varkor and
 its contributors, reworked into a keyboard-driven desktop editor. It bundles
-KaTeX 0.16.25 (src/katex.js, katex.css, and fonts/), with only the woff2
+KaTeX 0.16.25 (src/katex.min.js, katex.css, and fonts/), with only the woff2
 fonts kept. Both are
 MIT-licensed, and their notices follow. Sagitta as a whole, including its
 changes to quiver's code, is under the GPL above; KaTeX's files, taken on

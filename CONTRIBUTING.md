@@ -16,7 +16,7 @@ A diagram that does not round-trip (opening and saving changes it) is a bug wort
 There is no build step.
 `index.html` loads the scripts in `src/` in dependency order, each after what it uses:
 
-- `katex.js`: KaTeX, vendored.
+- `katex.min.js`: KaTeX 0.16.25, vendored as its release ships it.
 - `ds.js`, `dom.js`: points, colours, and DOM wrappers.
 - `grid.js`: column and row sizes, and positions to and from pixels.
 - `curve.js`, `arrow.js`, `constants.js`: curves, drawing arrows, and the editor's parameters.
