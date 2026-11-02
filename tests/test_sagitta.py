@@ -3686,3 +3686,20 @@ def test_colim_universal_draws_the_cocone_and_the_unique_arrow(sagitta, home):
     text = diagram.read_text()
     assert "{A \\sqcup B}" in text
     assert '\\arrow["{\\exists !}", dashed' in text
+
+
+def test_nat_opens_its_setup_layer_and_stamps_the_two_cell(sagitta, home):
+    diagram = _diagram(home / "paper", "", "new.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.commands.run("nat");
+        const opened = [ui.keymap.layer === ui.keymap.layers.preset, ghosts(), cells()];
+        await press("Enter");
+        return { opened, stamped: [cells(), ui.history.present, ui.selection.size,
+            ui.file.text().includes("Rightarrow, from=0, to=1")] };
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == {
+        "opened": [True, 5, 5],
+        "stamped": [5, 1, 5, True],
+    }

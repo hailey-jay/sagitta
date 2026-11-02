@@ -217,3 +217,67 @@ for (const [name, short, colimit] of [["limit", "lim", false], ["colimit", "coli
     Commands.ALIASES[short] = name;
     Commands.SHORT[short] = name;
 }
+
+/// `:natural-transformation` (`:nat`): two parallel functors `F, G : C → D`, curving apart, and
+/// a 2-cell `\alpha : F ⇒ G` between them.
+Presets.NATURAL_TRANSFORMATION = {
+    dir: { kind: "choice", default: "r", values: ["r", "d"], key: "o", title: "direction" },
+    obj: { kind: "text", default: "\\mathcal{C},\\mathcal{D}", title: "objects",
+        suggest: ["C,D"] },
+    maps: { kind: "text", default: "F,G", title: "functors" },
+    cell: { kind: "text", default: "\\alpha", title: "2-cell" },
+};
+
+/// `:adjoint-pair` (`:adj`): `L : C → D` over `R : D → C`, curving apart, and `⊣` between them.
+Presets.ADJOINT_PAIR = {
+    dir: Presets.NATURAL_TRANSFORMATION.dir,
+    obj: Presets.NATURAL_TRANSFORMATION.obj,
+    maps: { kind: "text", default: "L,R", title: "adjoints" },
+};
+
+/// Two objects two cells apart, the way `dir` says, and two arrows between them, each given as
+/// `[label, reversed]`, curving apart, as `{ vertices, edges }` for `Presets.stamp`.
+Presets.parallel = (what, o, arrows) => {
+    const objects = Template.list(o.obj);
+    if (objects.length !== 2) {
+        throw new Error(`${what} has two objects: obj gives ${objects.length}.`);
+    }
+    const maps = Template.list(o.maps);
+    if (maps.length !== 2) {
+        throw new Error(`${what} has two arrows: maps gives ${maps.length}.`);
+    }
+    return {
+        vertices: [
+            { position: [0, 0], label: objects[0] },
+            { position: o.dir === "d" ? [0, 2] : [2, 0], label: objects[1] },
+        ],
+        edges: arrows.map(([curve, reversed, alignment], i) => ({
+            source: reversed ? 1 : 0, target: reversed ? 0 : 1, label: maps[i], alignment,
+            options: { curve },
+        })),
+    };
+};
+
+Presets.build["natural-transformation"] = (o) => {
+    const stamp = Presets.parallel("A natural transformation", o,
+        [[-3, false, "left"], [3, false, "right"]]);
+    // The 2-cell runs from the first functor to the second, a short double arrow.
+    stamp.edges.push({ source: 2, target: 3, label: o.cell, alignment: "left",
+        options: { level: 2, shorten: { source: 20, target: 20 } } });
+    return stamp;
+};
+
+Presets.build["adjoint-pair"] = (o) => {
+    // `L` curves out one way and `R`, running back, the other; `⊣` points from `L` to `R`.
+    const stamp = Presets.parallel("An adjoint pair", o, [[-2, false, "left"], [-2, true, "left"]]);
+    stamp.edges.push({ source: 2, target: 3, label: "", options: { style: { name: "adjunction" } } });
+    return stamp;
+};
+
+for (const [name, short, schema] of [
+    ["natural-transformation", "nat", Presets.NATURAL_TRANSFORMATION],
+    ["adjoint-pair", "adj", Presets.ADJOINT_PAIR],
+]) {
+    Presets.COMMANDS.push([name, short, schema]);
+    Presets.register(name, short, schema);
+}

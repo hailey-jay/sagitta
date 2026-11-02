@@ -293,7 +293,7 @@ A connecting morphism is one arrow: curved (`; b`, and `; -` for dashed), or rou
 
 ## Presets
 
-A preset stamps a ready-made diagram at the focus point: a chain complex, or an exact sequence.
+A preset stamps a ready-made diagram at the focus point: a chain complex, an exact sequence, or a 2-cell.
 What it stamps is ordinary cells, selected, as one step to undo; nothing remembers the preset afterwards.
 Its cells are queued for labelling, as cells just drawn are: Tab goes to the first of them, and on through the rest in the order the diagram reads, each object followed by the arrows from it, each leaving the queue once labelled, though S-TAB still goes back to it.
 
@@ -305,6 +305,8 @@ Its cells are queued for labelling, as cells just drawn are: Tab goes to the fir
 | `:long-exact-sequence N` (`:les`) | `H_n(A) → H_n(B) → H_n(C)`, a row for each `n`, `\delta` routed from each row to the next |
 | `:triangle` (`:tri`) | `X → Y → Z`, with `Z → X` marked `+1`; `row` for `X → Y → Z → X[1]` |
 | `:spectral-sequence` (`:ss`) | a page of a spectral sequence, with ticks and axes (see Spectral sequences) |
+| `:natural-transformation` (`:nat`) | `F, G : \mathcal{C} → \mathcal{D}` curving apart, and a 2-cell `\alpha : F ⇒ G` between them |
+| `:adjoint-pair` (`:adj`) | `L : \mathcal{C} → \mathcal{D}` over `R` back, and `⊣` between them |
 
 Each opens its setup layer, which draws a ghost of what it would stamp, laid out as the diagram's format lays it out.
 The arrow keys move the focus point, and the ghost with it; RET stamps it; ESC or `;` leaves without stamping.
@@ -323,6 +325,7 @@ The options, as `key=value` after the command, quoted (`obj="H_#(X; Y)"`) where 
 - `obj` and `d` (`maps` for `:ses`): the labels, as templates. `#` is the index, `#{#-1}` arithmetic on it (`+`, `-`, `*`, brackets), and after `_` or `^` an index longer than a character is braced. A comma list cycles, keeping one index for each cycle through it, as the long exact sequence does; commas inside brackets do not split. `\#` is TeX's own `#`. `d=none` leaves the arrows unlabelled.
 - `aug`: an augmentation `\varepsilon` onto `aug` and then `0` where the indices start, as `:cc obj=P_# aug=M` gives `\cdots → P_1 → P_0 → M → 0`; a cochain complex starts `0 → M → I^0`.
 - `step`: cells between terms. `wrap`: terms a row, the next row two cells on, with the arrow between rows routed through the row between.
+- `:nat` and `:adj` take `obj` (two objects), `maps` (two arrows), and `dir` (`r` or `d`); `:nat` takes `cell`, the 2-cell's label.
 - `:ses` takes `plain` for plain arrows, and `split` for a dashed section `s` back from `C` to `B`, curving over the epi, or under it with `under`; `:les` takes `cohom` for `H^n`, with the indices rising.
 
 Two commands carry on from what is there:

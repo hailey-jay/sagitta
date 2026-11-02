@@ -1971,3 +1971,40 @@ check("a transposed loop's angle stays within a turn", [0, 90, -90, 180, -135, 4
     check("amscd refuses a cone it cannot draw", refused?.startsWith("amscd has no diagonal"),
         true);
 }
+
+// The 2-cell presets: a natural transformation between parallel functors, and an adjoint pair.
+{
+    const stamp = (name, words = []) => {
+        const { ui } = parse("");
+        ui.focus_position = Position.zero();
+        Presets.run(ui, name, words);
+        return ui.text().split("\n").slice(1, -2);
+    };
+    check(":nat stamps F and G curving apart, and alpha between them", stamp("natural-transformation"), [
+        "\t{\\mathcal{C}} && {\\mathcal{D}}",
+        "\t\\arrow[\"\"{name=0, anchor=center, inner sep=0}, \"F\", curve={height=-18pt},"
+            + " from=1-1, to=1-3]",
+        "\t\\arrow[\"\"{name=1, anchor=center, inner sep=0}, \"G\"', curve={height=18pt},"
+            + " from=1-1, to=1-3]",
+        "\t\\arrow[\"\\alpha\", between={0.2}{0.8}, Rightarrow, from=0, to=1]",
+    ]);
+    check("down a column, with its own labels",
+        stamp("natural-transformation", ["dir=d", "obj=C,D", "maps=U,V", "cell=\\eta"]).slice(0, 3),
+        ["\tC \\\\", "\t\\\\", "\tD"]);
+    check(":adj stamps L over R, and the adjunction between them", stamp("adjoint-pair").slice(1), [
+        "\t\\arrow[\"\"{name=0, anchor=center, inner sep=0}, \"L\", curve={height=-12pt},"
+            + " from=1-1, to=1-3]",
+        "\t\\arrow[\"\"{name=1, anchor=center, inner sep=0}, \"R\", curve={height=-12pt},"
+            + " from=1-3, to=1-1]",
+        "\t\\arrow[\"\\dashv\"{anchor=center, rotate=-90}, draw=none, from=0, to=1]",
+    ]);
+    const refused = (() => {
+        try {
+            stamp("adjoint-pair", ["maps=L"]);
+        } catch (error) {
+            return error.message;
+        }
+        return null;
+    })();
+    check("and each takes two maps", refused, "An adjoint pair has two arrows: maps gives 1.");
+}
