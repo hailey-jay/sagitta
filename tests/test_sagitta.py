@@ -3607,3 +3607,59 @@ def test_two_fingers_pan_and_pinch_to_zoom(sagitta, home):
         return [Math.round(zoomed * 100) / 100, panned > 0, ui.quiver.all_cells().length];
     })()"""
     assert sagitta("evaluate", _diagram(home / "paper"), script) == [-1, True, 8]
+
+
+# ── Transforming the selection ────────────────────────────────────────────────────────────
+
+ROW = "\\[\\begin{tikzcd}\n\tA & B && X\n\t\\arrow[\"f\", from=1-1, to=1-2]\n" \
+    "\t\\arrow[\"g\", from=1-2, to=1-4]\n\\end{tikzcd}\\]\n"
+
+
+def _transform(sagitta, home, name, select, text=ROW, expected_error=None):
+    """Select the cells labelled `select` (none for the whole diagram), run the action `name`,
+    and return the file's body, and the body again after undo."""
+    diagram = _diagram(home / "paper", text, "row.cd.tex")
+    script = """(async () => {
+        const wanted = %s;
+        ui.select(...ui.quiver.all_cells().filter((cell) => wanted.includes(cell.label)));
+        ui.mode_line.run(ui, %s);
+        const body = (text) => text.split("\\n").slice(1, -2);
+        const after = body(ui.file.text());
+        ui.history.undo(ui);
+        return [after, body(ui.file.text())];
+    })()""" % (json.dumps(select), json.dumps(name))
+    return sagitta("evaluate", diagram, script, expected_error=expected_error)
+
+
+def test_transposing_the_diagram_turns_its_row_into_a_column(sagitta, home):
+    after, undone = _transform(sagitta, home, "transpose", [])
+    assert after == ["\tA \\\\", "\tB \\\\", "\t\\\\", "\tX",
+                     "\t\\arrow[\"f\"', from=1-1, to=2-1]", "\t\\arrow[\"g\"', from=2-1, to=4-1]"]
+    assert undone == ROW.split("\n")[1:-2]
+
+
+def test_transposing_the_selection_leaves_the_rest_in_place(sagitta, home):
+    """A and B turn about A; X stays, and g, from B to X, follows B without being flipped."""
+    after, _ = _transform(sagitta, home, "transpose", ["A", "B", "f"])
+    assert after == ["\tA &&& X \\\\", "\tB",
+                     "\t\\arrow[\"f\"', from=1-1, to=2-1]", "\t\\arrow[\"g\", from=2-1, to=1-4]"]
+
+
+def test_rotating_the_selection_turns_it_within_its_rectangle(sagitta, home):
+    after, _ = _transform(sagitta, home, "rotate", ["A", "B"])
+    assert after == ["\tB &&& X \\\\", "\tA",
+                     "\t\\arrow[\"g\", from=1-1, to=1-4]", "\t\\arrow[\"f\", from=2-1, to=1-1]"]
+
+
+def test_a_transformation_onto_an_unselected_cell_is_refused(sagitta, home):
+    square = "\\[\\begin{tikzcd}\n\tA & B \\\\\n\tC & D\n\\end{tikzcd}\\]\n"
+    after, _ = _transform(sagitta, home, "transpose", ["A", "B"], square,
+                          expected_error="Transpose would land on C at (0, 1)")
+    assert after == ["\tA & B \\\\", "\tC & D"]
+
+
+def test_a_transformation_amscd_cannot_draw_is_refused(sagitta, home):
+    amscd = "\\[\\begin{CD}\n\tA @>>> B @>>> C\n\\end{CD}\\]\n"
+    after, _ = _transform(sagitta, home, "transpose", ["A", "B"], amscd,
+                          expected_error="amscd has no")
+    assert after == ["\tA @>>> B @>>> C"]

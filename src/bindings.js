@@ -265,6 +265,7 @@ Bindings.DEFAULTS = {
     "flip-hor": [],
     "flip-ver": [],
     "rotate": [],
+    "transpose": [],
     "centre-view": ["; z"],
     // The focus point to the diagram's first object, and the view to it.
     "go-home": ["; g"],

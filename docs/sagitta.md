@@ -104,6 +104,8 @@ The rest live one key away:
   Other colours are drawn exactly, and nothing saved changes.
   It follows the system's colour scheme until it is first set.
 - `C-arrows` move the selection; on arrows alone they bend or shift them, and on loops alone they resize or turn them.
+- `:flip-hor`, `:flip-ver`, `:rotate` (a quarter turn anticlockwise), and `:transpose` (rows into columns) act on the selection's objects, and the ends of its arrows, within the rectangle round them, or on the whole diagram with nothing selected.
+  Arrows among them turn with them, and an arrow to a cell left in place follows its end; landing on a cell left in place, or leaving what amscd cannot draw, is refused.
 - `S-arrows` walk the diagram: from a cell (the one under the focus point, or the one selected), they select the arrow at it that leaves nearest that way, within a right angle, outgoing before incoming; from one selected arrow, they go to its target along it, to its source against it, and across it to the arrow beside it on that side, or else to an arrow attached to it.
   A cell walked to takes the focus point; an arrow hides it, so that RET labels the arrow.
   While the command layer is setting a number, `S-arrows` step it, as the arrows do.
@@ -184,7 +186,7 @@ The names and their defaults:
 | `delete`, `clear` | `<delete>`, none |
 | `reverse`, `flip`, `flip-labels` | `; r` `C-r`, `; f`, none |
 | `search` | `C-f` (and `/`, which cannot be rebound) |
-| `flip-hor`, `flip-ver`, `rotate` | none |
+| `flip-hor`, `flip-ver`, `rotate`, `transpose` | none |
 | `centre-view`, `go-home`, `hide-grid` | `; z`, `; g`, `; #` |
 | `zoom-out`, `zoom-in`, `reset-zoom` | `C--`, `C-=`, `C-0` |
 | `dark-mode`, `hide-mode-line`, `shortcuts`, `settings` | none, `C-\`, `C-/` `<f1>`, `C-,` |

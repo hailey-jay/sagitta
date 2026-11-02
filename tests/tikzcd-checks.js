@@ -1896,3 +1896,7 @@ pending.push((async () => {
     check("and the corpus holds every style and edge type",
         Array.from(new Set(wanted)).filter((style) => !seen.has(style)), []);
 })());
+
+// Transposing turns a loop's angle `a` to `90 - a`, kept within (-180, 180].
+check("a transposed loop's angle stays within a turn", [0, 90, -90, 180, -135, 45]
+    .map((angle) => Transforms.angle(90 - angle)), [90, 0, 180, -90, -135, 45]);
