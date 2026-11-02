@@ -134,8 +134,8 @@ class UI {
         this._format = "tikz-cd";
         this.amscd_ends = new Map();
 
-        // The frame of a spectral sequence, if the diagram has one (see `SpectralSequence`).
-        this.frame = null;
+        // The frame of each spectral sequence page the diagram holds (see `SpectralSequence`).
+        this.frames = [];
 
         // Whether the view stays where it is as columns and rows resize, rather than moving to
         // keep what is in it centred: while a preset's ghost is redrawn on every key press (see
@@ -196,7 +196,7 @@ class UI {
         }
         const problems = Formats.problems(format, this.quiver);
         // Only tikz-cd draws a spectral sequence's axes; its entries and ticks stay.
-        const frame = format !== "tikz-cd" && this.frame !== null;
+        const frame = format !== "tikz-cd" && this.frames.length > 0;
         if (frame) {
             problems.push(["the axes of a spectral sequence", []]);
         }
@@ -215,9 +215,9 @@ class UI {
         const since = this.history.present;
         const actions = format === "amscd" ? AmsCD.convert(this) : [];
         if (frame) {
-            const dropped = { kind: "frame", from: this.frame, to: null };
-            this.history.effect(this, [dropped], false);
-            actions.push(dropped);
+            const dropped = SpectralSequence.clearing(this);
+            this.history.effect(this, dropped, false);
+            actions.push(...dropped);
         }
         const switched = { kind: "format", from: this.format, to: format };
         this.format = format;
@@ -886,7 +886,7 @@ class UI {
         this._format = "tikz-cd";
         this.grid.fixed = null;
         this.amscd_ends = new Map();
-        this.frame = null;
+        this.frames = [];
         this.update_extent();
     }
 
@@ -898,11 +898,16 @@ class UI {
 
     /// Returns options that are not saved persistently in `settings`, but are used to modify
     /// export output.
+    /// The frame of the spectral sequence page in use, or `null` (see `SpectralSequence.current`).
+    get frame() {
+        return SpectralSequence.current(this);
+    }
+
     options() {
         return {
             dimensions: this.diagram_size(),
             sep: this.sep,
-            frame: this.frame,
+            frames: this.frames,
             kept: this.kept,
         };
     }

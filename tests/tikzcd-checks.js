@@ -1,6 +1,13 @@
 /// The checks `tests/tikzcd.js` runs, in the context it builds: the sources are already loaded,
 /// and `check`, `example`, and `make_ui` are in scope.
 
+// The stub `UI` reads its page in use as the real one does, by `SpectralSequence`, which only
+// the sources loaded here can give it.
+{
+    const bare = make_ui;
+    make_ui = (deps) => bare({ ...deps, SpectralSequence });
+}
+
 /// A diagram loaded from the contents of its file, as opening it does (see `DiagramFile.read`):
 /// parsed, unless it has an encoded line, as older files do, that still reproduces its picture.
 function load(text) {
@@ -1720,9 +1727,9 @@ const pending = [];
         new Set(inside.quiver.all_cells())).map(({ to }) => to), [null]);
     check("and deleting some leaves it", SpectralSequence.deleting(inside,
         new Set(inside.quiver.all_cells().slice(1))), []);
-    check("a second page in one diagram is refused", refuse(() => Presets.run(inside,
-        "spectral-sequence", [])), "This diagram has a spectral sequence already, and keeps only"
-        + " one: put the next page in a diagram of its own.");
+    check("a second page over the first is refused", refuse(() => Presets.run(inside,
+        "spectral-sequence", [])), "That page would overlap the E_2 page already here: move the"
+        + " focus point clear of it.");
 
     const directive = (words) => {
         const { ui, diagnostics } = parse(text.replace(/grading=.*$/m, words));
@@ -2008,3 +2015,34 @@ check("a transposed loop's angle stays within a turn", [0, 90, -90, 180, -135, 4
     })();
     check("and each takes two maps", refused, "An adjoint pair has two arrows: maps gives 1.");
 }
+
+// Several spectral sequence pages in one diagram: each keeps its frame, in a comment of its own,
+// and draws its own axes; the page in use is the one holding the selection or the focus point.
+pending.push((async () => {
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+    ui.focus_position = new Position(1, 0);
+    Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1", "obj=\\bullet"]);
+    ui.focus_position = new Position(6, 0);
+    Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1", "page=3", "obj=\\bullet"]);
+    check("a second page beside the first is kept", ui.frames.map((frame) => frame.page), [2, 3]);
+    check("the page in use is the one just stamped, selected", ui.frame.page, 3);
+    ui.deselect();
+    check("or with nothing selected, the one the focus point is in", ui.frame.page, 3);
+    ui.focus_position = new Position(0, 0);
+    check("and the first, from its own", ui.frame.page, 2);
+    const text = ui.text();
+    check("each is written in a comment of its own", text.split("\n")
+        .filter((line) => line.includes("% sagitta: spectral-sequence")).length, 2);
+    check("and both draw their axes in the one option",
+        text.split("\\coordinate (sagitta-corner)").length - 1, 2);
+    const back = load(text);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    check("both are read back", [back.diagnostics.length, back.ui.frames.map((frame) => frame.page),
+        back.ui.text() === text], [0, [2, 3], true]);
+    ui.history.undo(ui);
+    check("undoing the second leaves the first", ui.frames.map((frame) => frame.page), [2]);
+    ui.history.redo(ui);
+    check("and redoing brings it back", ui.frames.map((frame) => frame.page), [2, 3]);
+    check("deleting everything takes every page", SpectralSequence.deleting(ui,
+        new Set(ui.quiver.all_cells())).map(({ to }) => to), [null, null]);
+})());

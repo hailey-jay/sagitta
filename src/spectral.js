@@ -2,7 +2,8 @@
 /// bidegree, with a column and a row of ticks, and axes between the ticks and the entries; and
 /// `:differential r` (`:d r`, or `; D` for the page's own) draws `d_r` from the selected entries.
 ///
-/// Unlike the other presets, a spectral sequence leaves a frame behind (`UI.frame`): where its
+/// Unlike the other presets, a spectral sequence leaves a frame behind (`UI.frames`, one for each
+/// page; `UI.frame` is the one in use, see `SpectralSequence.current`): where its
 /// origin is, its grading, page, and ranges, which `:d` aims by, the mode line reads bidegrees by,
 /// and the axes are drawn by. The entries and ticks stay ordinary cells. The frame is kept in the
 /// file as a comment inside the environment, which TeX ignores and Sagitta reads back:
@@ -15,6 +16,74 @@
 /// column, to a little past the last tick on each: they are drawn from the tick nodes, by the same
 /// rule on the canvas and in TikZ, and only while those ticks are there.
 class SpectralSequence {
+    /// Whether `position` is on the page of `frame`: its entries' places, its ticks, or the axes'
+    /// names just past the last ticks.
+    static holds(frame, position) {
+        const { origin } = frame;
+        return position.x >= origin.x + frame.p[0] - 1 && position.x <= origin.x + frame.p[1] + 1
+            && position.y >= origin.y - frame.q[1] - 1 && position.y <= origin.y - frame.q[0] + 1;
+    }
+
+    /// `frames` in the order the file keeps them: by origin, row by row.
+    static sorted(frames) {
+        return frames.slice().sort((a, b) => a.origin.y - b.origin.y || a.origin.x - b.origin.x);
+    }
+
+    /// The frame of `ui` in use (its `frame`): with one page, that one; with several, the page
+    /// that holds the first selected object, or else the focus point, or else the first page.
+    /// `null` if there is none.
+    static current(ui) {
+        const frames = ui.frames ?? [];
+        if (frames.length < 2) {
+            return frames[0] ?? null;
+        }
+        const positions = [
+            ...Array.from(ui.selection ?? []).filter((cell) => cell.is_vertex())
+                .map((cell) => cell.position),
+            ...(ui.focus_position === undefined ? [] : [ui.focus_position]),
+        ];
+        for (const position of positions) {
+            const frame = frames.find((frame) => SpectralSequence.holds(frame, position));
+            if (frame !== undefined) {
+                return frame;
+            }
+        }
+        return SpectralSequence.sorted(frames)[0];
+    }
+
+    /// The frame whose page holds `position`, for reading its bidegree: with one page, that one
+    /// wherever `position` is, as a differential may reach past the ranges; with several, the one
+    /// that holds it, or `null`.
+    static at(ui, position) {
+        const frames = ui.frames ?? [];
+        if (frames.length < 2) {
+            return frames[0] ?? null;
+        }
+        return frames.find((frame) => SpectralSequence.holds(frame, position)) ?? null;
+    }
+
+    /// Put `to` in place of the frame `from` among the frames of `ui`: a new page, with `from`
+    /// `null`; one taken away, with `to` `null`. This is what a `frame` history step does.
+    static replace(ui, from, to) {
+        const frames = (ui.frames ?? []).slice();
+        const at = from === null ? -1 : frames.indexOf(from);
+        if (at === -1) {
+            if (to !== null) {
+                frames.push(to);
+            }
+        } else if (to === null) {
+            frames.splice(at, 1);
+        } else {
+            frames[at] = to;
+        }
+        ui.frames = frames;
+    }
+
+    /// The steps that take every page of `ui` away.
+    static clearing(ui) {
+        return (ui.frames ?? []).map((frame) => ({ kind: "frame", from: frame, to: null }));
+    }
+
     /// The cell of bidegree `(p, q)`. `q` grows upwards, where rows grow downwards.
     static cell(frame, p, q) {
         return new Position(frame.origin.x + p, frame.origin.y - q);
@@ -133,20 +202,22 @@ class SpectralSequence {
         }
         // Most diagrams have no frame, and nothing drawn to take away: panning, which asks on
         // every frame, need not look.
-        if ((ui.frame ?? null) === null && !ui.axes_shown) {
+        if ((ui.frames ?? []).length === 0 && !ui.axes_shown) {
             return;
         }
         let svg = ui.canvas.query_selector("svg.frame-axes");
         const tikz = ui.format === "tikz-cd";
-        const axes = tikz ? SpectralSequence.axes(ui, ui.frame) : null;
-        const lines = tikz ? SpectralSequence.lines(ui, ui.frame) : [];
+        const frames = tikz ? SpectralSequence.sorted(ui.frames ?? []) : [];
+        const axes = frames.map((frame) => SpectralSequence.axes(ui, frame))
+            .filter((drawn) => drawn !== null);
+        const lines = frames.flatMap((frame) => SpectralSequence.lines(ui, frame));
         // The drawing is in the canvas's own coordinates, so panning and zooming leave it as it
         // is: it is only touched when what it shows changes, as the layout does.
         const shown = JSON.stringify([axes, lines]);
         if (svg !== null && svg.element?.dataset?.shown === shown) {
             return;
         }
-        ui.axes_shown = axes !== null || lines.length > 0;
+        ui.axes_shown = axes.length > 0 || lines.length > 0;
         if (!ui.axes_shown) {
             svg?.remove();
             return;
@@ -167,7 +238,7 @@ class SpectralSequence {
                 svg.add_to(ui.canvas);
             }
         }
-        const points = [...(axes === null ? [] : [axes.corner, axes.right, axes.top]),
+        const points = [...axes.flatMap(({ corner, right, top }) => [corner, right, top]),
             ...lines.flat()];
         const [left, upper] = [Math.min(...points.map(({ x }) => x)),
             Math.min(...points.map(({ y }) => y))];
@@ -181,8 +252,8 @@ class SpectralSequence {
         svg.clear();
         // Each line has a wider, unseen line under it to press on.
         const hit = 6 * Edge.PX_PER_PT;
-        if (axes !== null) {
-            const points = `${at(axes.right)} ${at(axes.corner)} ${at(axes.top)}`;
+        for (const { corner, right, top } of axes) {
+            const points = `${at(right)} ${at(corner)} ${at(top)}`;
             svg.add(new DOM.SVGElement("polyline", {
                 class: "hit", points, fill: "none", "stroke-width": hit,
             }));
@@ -211,14 +282,22 @@ class SpectralSequence {
         }
     }
 
-    /// The `execute at end picture` option that draws the axes of `frame` in TikZ, for a diagram
-    /// whose top-left cell is `offset`, or `null` if a tick they are drawn from is not there
-    /// (`has`, given a position, says whether a node is). Each tick's maths axis is its baseline
-    /// raised by the maths axis height, as the canvas centres a cell on it.
-    static tikz(frame, offset, has) {
-        if (frame === null) {
-            return null;
-        }
+    /// The `execute at end picture` option that draws the axes of each of `frames` in TikZ, for a
+    /// diagram whose top-left cell is `offset`, or `null` if it draws nothing: a page is left out
+    /// where a tick its axes are drawn from is not there (`has`, given a position, says whether a
+    /// node is). Each tick's maths axis is its baseline raised by the maths axis height, as the
+    /// canvas centres a cell on it.
+    static tikz(frames, offset, has) {
+        const drawings = SpectralSequence.sorted(frames)
+            .map((frame) => SpectralSequence.drawing(frame, offset, has))
+            .filter((drawing) => drawing !== null);
+        return drawings.length === 0 ? null
+            : String.raw`execute at end picture={${drawings.join("")}}`;
+    }
+
+    /// What `tikz` draws for one page, `frame`, or `null` if nothing: its corner, then its axes
+    /// and diagonals. Each page sets `sagitta-corner` afresh before drawing from it.
+    static drawing(frame, offset, has) {
         const ticks = SpectralSequence.ticks(frame);
         if (Object.values(ticks).some((position) => !has(position))) {
             return null;
@@ -249,8 +328,8 @@ class SpectralSequence {
         if (drawn.length === 0) {
             return null;
         }
-        return String.raw`execute at end picture={\coordinate (sagitta-corner) at ($(${
-            node(ticks.q_low)})!.5!(${node(ticks.p_low)})+${axis}$);${drawn.join("")}}`;
+        return String.raw`\coordinate (sagitta-corner) at ($(${
+            node(ticks.q_low)})!.5!(${node(ticks.p_low)})+${axis}$);${drawn.join("")}`;
     }
 
     /// The comment line that keeps `frame` in the file, for a diagram whose top-left cell is
@@ -332,48 +411,47 @@ class SpectralSequence {
         return ticks;
     }
 
-    /// The frame step that keeps the frame of `ui` with its page as `displacements` move vertices
-    /// (each `{ vertex, from, to }`), as a list of actions: the frame moves as its ticks do, when
-    /// they all move alike, and stays when none move. Returns `null` if the move would split
-    /// them, some moving and some not, or each its own way, which would leave the bidegrees
-    /// meaning nothing.
+    /// The frame steps that keep each page of `ui` with its ticks as `displacements` move vertices
+    /// (each `{ vertex, from, to }`), as a list of actions: a frame moves as its ticks do, when
+    /// they all move alike, and stays when none move. Returns `null` if the move would split a
+    /// page's ticks, some moving and some not, or each its own way, which would leave the
+    /// bidegrees meaning nothing.
     static follow(ui, displacements) {
-        const frame = ui.frame;
-        if (frame === null || frame === undefined) {
-            return [];
-        }
         const deltas = new Map(displacements.map(({ from, to }) => [`${from}`, to.sub(from)]));
         const moving = new Set(displacements.map(({ vertex }) => vertex));
-        const steps = [];
-        for (const position of SpectralSequence.all_ticks(frame)) {
-            const delta = deltas.get(`${position}`);
-            if (delta !== undefined) {
-                steps.push(delta);
-            } else {
-                const cell = ui.positions.get(`${position}`);
-                if (cell !== undefined && !moving.has(cell)) {
-                    steps.push(Position.zero());
+        const actions = [];
+        for (const frame of ui.frames ?? []) {
+            const steps = [];
+            for (const position of SpectralSequence.all_ticks(frame)) {
+                const delta = deltas.get(`${position}`);
+                if (delta !== undefined) {
+                    steps.push(delta);
+                } else {
+                    const cell = ui.positions.get(`${position}`);
+                    if (cell !== undefined && !moving.has(cell)) {
+                        steps.push(Position.zero());
+                    }
                 }
             }
+            if (steps.length === 0 || steps.every((step) => step.is_zero())) {
+                continue;
+            }
+            if (steps.some((step) => step.x !== steps[0].x || step.y !== steps[0].y)) {
+                return null;
+            }
+            actions.push({ kind: "frame", from: frame,
+                to: SpectralSequence.moved(frame, steps[0]) });
         }
-        if (steps.length === 0 || steps.every((step) => step.is_zero())) {
-            return [];
-        }
-        if (steps.some((step) => step.x !== steps[0].x || step.y !== steps[0].y)) {
-            return null;
-        }
-        return [{ kind: "frame", from: frame, to: SpectralSequence.moved(frame, steps[0]) }];
+        return actions;
     }
 
-    /// The frame step that deleting `cells` takes, as a list of actions: the frame goes with the
-    /// last of the diagram's cells, as Clear takes it.
+    /// The frame steps that deleting `cells` takes, as a list of actions: the pages go with the
+    /// last of the diagram's cells, as Clear takes them.
     static deleting(ui, cells) {
-        const frame = ui.frame;
-        if (frame === null || frame === undefined
-            || ui.quiver.all_cells().some((cell) => !cells.has(cell))) {
+        if (ui.quiver.all_cells().some((cell) => !cells.has(cell))) {
             return [];
         }
-        return [{ kind: "frame", from: frame, to: null }];
+        return SpectralSequence.clearing(ui);
     }
 }
 

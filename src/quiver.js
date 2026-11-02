@@ -537,8 +537,9 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
             }
             // The axes of a spectral sequence, drawn from its ticks (see `SpectralSequence`).
             // (An empty diagram is written before its cells are laid out, and has no axes.)
-            const frame = quiver.is_empty() ? null : options.frame ?? null;
-            const axes = frame === null ? null : SpectralSequence.tikz(frame, offset,
+            const frames = quiver.is_empty() ? []
+                : SpectralSequence.sorted(options.frames ?? []);
+            const axes = frames.length === 0 ? null : SpectralSequence.tikz(frames, offset,
                 (position) => rows.get(position.y)?.get(position.x) instanceof Vertex);
             if (axes !== null) {
                 diagram_options.push(axes);
@@ -548,9 +549,10 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
             if (empty_cells) {
                 diagram_options.push(QuiverExport.EMPTY_CELLS);
             }
-            // The frame is kept in a comment inside the environment, which TeX ignores.
-            if (frame !== null) {
-                output = `${SpectralSequence.directive(frame, offset)}\n${output}`;
+            // Each page's frame is kept in a comment inside the environment, which TeX ignores.
+            if (frames.length > 0) {
+                output = `${frames.map((frame) => SpectralSequence.directive(frame, offset))
+                    .join("\n")}\n${output}`;
             }
             // `tikzcd` environment.
             let tikzcd = `\\begin{tikzcd}${
@@ -1219,10 +1221,10 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
 
         const parser = new Parser(ui, data);
         ui.add_cells(() => parser.parse_diagram(), false);
-        // The frame of a spectral sequence the file keeps, if any (see `SpectralSequence`).
-        ui.frame = parser.frame ?? null;
-        // Sagitta's axes are drawn from the frame's comment: without it, they go.
-        if (parser.axes !== undefined && ui.frame === null && !parser.unread_frame) {
+        // The frames of the spectral sequence pages the file keeps (see `SpectralSequence`).
+        ui.frames = parser.frames ?? [];
+        // Sagitta's axes are drawn from the frames' comments: without them, they go.
+        if (parser.axes !== undefined && ui.frames.length === 0 && !parser.unread_frame) {
             parser.log(parser.warn("Axes dropped: their spectral-sequence comment is missing.",
                 parser.axes));
         }

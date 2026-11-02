@@ -255,7 +255,8 @@ const host = {
 ///
 /// `make_ui` builds one once the sources have been loaded into the context, which is why it takes
 /// the classes rather than naming them.
-function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions }) {
+function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions,
+    SpectralSequence }) {
     const focus_point = { class_list: new StubClassList() };
     const ui = {
         quiver: new Quiver(),
@@ -267,7 +268,11 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
         // The format the diagram is written in, which nothing here lays out (see `UI.format`).
         format: "tikz-cd",
         amscd_ends: new Map(),
-        frame: null,
+        frames: [],
+        // The page in use, as the real `UI.frame` reads it.
+        get frame() {
+            return SpectralSequence?.current(ui) ?? null;
+        },
         // The separations `DiagramFile.SEPS` calls normal, which a diagram keeps unless its file
         // says otherwise.
         present: 0,
@@ -287,7 +292,7 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
         // The element every cell is added to, which stands in for the canvas.
         canvas: new DOM.Div({ class: "canvas" }),
 
-        options: () => ({ dimensions: [0, 0], sep: ui.sep, frame: ui.frame, kept: ui.kept }),
+        options: () => ({ dimensions: [0, 0], sep: ui.sep, frames: ui.frames, kept: ui.kept }),
         definitions: () => ({ macros: ui.macros, colours: ui.colours }),
 
         /// As `UI.add_cell`, without the colour picker or the codes.
@@ -377,7 +382,7 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
             ui.positions.clear();
             ui.selection.clear();
             ui.format = "tikz-cd";
-            ui.frame = null;
+            ui.frames = [];
         },
     };
     return ui;

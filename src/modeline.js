@@ -243,9 +243,7 @@ class ModeLine {
             () => {
                 ui.deselect();
                 const actions = [{ kind: "delete", cells: new Set(ui.quiver.all_cells()) }];
-                if (ui.frame !== null) {
-                    actions.push({ kind: "frame", from: ui.frame, to: null });
-                }
+                actions.push(...SpectralSequence.clearing(ui));
                 ui.history.add(ui, actions, true);
                 ui.update_selection();
             },
@@ -689,8 +687,10 @@ class ModeLine {
     target(ui) {
         // Within a spectral sequence, a cell's bidegree too (see `SpectralSequence`), but for the
         // ticks and the axes' names, which have none.
-        const page = (position) => ui.frame !== null
-            && !SpectralSequence.on_ticks(ui.frame, position);
+        const page = (position) => {
+            const frame = SpectralSequence.at(ui, position);
+            return frame !== null && !SpectralSequence.on_ticks(frame, position);
+        };
         // A position is given as the export names it, row then column from the diagram's
         // top-left object (`from=2-1`), so that it reads the same in the file; one above or left
         // of the diagram is at 0 or less.
@@ -700,7 +700,7 @@ class ModeLine {
             return `${position.y - corner[1] + 1}-${position.x - corner[0] + 1}`;
         };
         const where = (position) => `${cell_name(position)}${!page(position)
-            ? "" : `  ${SpectralSequence.describe(ui.frame, position)}`}`;
+            ? "" : `  ${SpectralSequence.describe(SpectralSequence.at(ui, position), position)}`}`;
         const describe = (cell) => {
             const label = cell.label.trim() === "" ? "∅" : cell.label;
             return cell.is_vertex() ? `${label}  ${where(cell.position)}` : label;
@@ -728,7 +728,8 @@ class ModeLine {
                 // In a spectral sequence, where the focus point is, by bidegree, even while it is
                 // hidden.
                 return !page(ui.focus_position) ? ""
-                    : `focus  ${SpectralSequence.describe(ui.frame, ui.focus_position)}`;
+                    : `focus  ${SpectralSequence.describe(SpectralSequence.at(ui, ui.focus_position),
+                        ui.focus_position)}`;
             case 1:
                 return describe(ui.selection.values().next().value);
             default:

@@ -3489,12 +3489,12 @@ def test_a_problem_runs_across_the_key_list_and_wraps(sagitta, home):
         %s
         ui.reposition_focus_point(new Position(2, 2));
         Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1"]);
-        ui.reposition_focus_point(new Position(12, 2));
+        ui.reposition_focus_point(new Position(3, 2));
         ui.commands.run("ss");
         const line = document.querySelector(".which-key .entry.wide");
         const group = line.closest(".group").getBoundingClientRect();
         const value = line.querySelector(".value");
-        return [line.textContent.includes("keeps only one"),
+        return [line.textContent.includes("would overlap the E_2 page"),
             line.getBoundingClientRect().width > group.width / 2,
             value.scrollWidth <= value.clientWidth + 1];
     })()""" % PRESS
