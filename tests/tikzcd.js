@@ -57,9 +57,13 @@ const check = (what, got, wanted) => {
 
 const example = (name) => fs.readFileSync(path.join(ROOT, "examples", name), "utf8");
 
+/// Each file of `tests/corpus/`, as `[name, contents]`.
+const corpus = () => fs.readdirSync(path.join(__dirname, "corpus")).sort()
+    .map((name) => [name, fs.readFileSync(path.join(__dirname, "corpus", name), "utf8")]);
+
 const context = Object.assign(
     {
-        console, check, example, process, setTimeout, clearTimeout,
+        console, check, example, corpus, process, setTimeout, clearTimeout,
         // The encoding is base64 over UTF-8, which the page takes from the browser.
         TextEncoder, TextDecoder, btoa, atob, URL, URLSearchParams,
     },

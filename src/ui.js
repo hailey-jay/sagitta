@@ -903,6 +903,7 @@ class UI {
             dimensions: this.diagram_size(),
             sep: this.sep,
             frame: this.frame,
+            kept: this.kept,
         };
     }
 

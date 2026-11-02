@@ -287,7 +287,7 @@ function make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, Arrow
         // The element every cell is added to, which stands in for the canvas.
         canvas: new DOM.Div({ class: "canvas" }),
 
-        options: () => ({ dimensions: [0, 0], sep: ui.sep, frame: ui.frame }),
+        options: () => ({ dimensions: [0, 0], sep: ui.sep, frame: ui.frame, kept: ui.kept }),
         definitions: () => ({ macros: ui.macros, colours: ui.colours }),
 
         /// As `UI.add_cell`, without the colour picker or the codes.

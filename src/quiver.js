@@ -491,15 +491,21 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
         let output = "";
         let empty_cells = false;
 
+        // Which symbol to use as a column separator. Usually ampersand (`&`), but sometimes it is
+        // necessary to escape the ampersand when using TikZ diagrams in a nested context: as the
+        // settings ask, or as the file had it when it was opened.
+        const ampersand = settings.get("export.ampersand_replacement") || options.kept?.ampersand
+            ? "\\&" : "&";
+
         // Wrap tikz-cd code with `\begin{tikzcd} ... \end{tikzcd}`.
         const wrap_boilerplate = (output) => {
             const diagram_options = [];
             // Ampersand replacement.
-            if (settings.get("export.ampersand_replacement")) {
+            if (ampersand !== "&") {
                 diagram_options.push("ampersand replacement=\\&");
             }
-            // Cramped.
-            if (settings.get("export.cramped")) {
+            // Cramped, as the settings ask, or as the file had it when it was opened.
+            if (settings.get("export.cramped") || options.kept?.cramped) {
                 diagram_options.push("cramped");
             }
             // Column and row separation.
@@ -573,10 +579,6 @@ QuiverImportExport.tikz_cd = new class extends QuiverImportExport {
                 metadata: { tikz_incompatibilities: new Set(), dependencies: new Map() },
             };
         }
-
-        // Which symbol to use as a column separator. Usually ampersand (`&`), but sometimes it is
-        // necessary to escape the ampersand when using TikZ diagrams in a nested context.
-        const ampersand = settings.get("export.ampersand_replacement") ? "\\&" : "&";
 
         // If a label is particularly simple (containing no special symbols), we do not need to
         // surround it in curly brackets. This is preferable, because simpler output is more

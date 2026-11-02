@@ -1859,3 +1859,40 @@ const pending = [];
         Presets.steps(Presets.CHAIN_COMPLEX.step, 2), Presets.amscd("split",
             Presets.SHORT_EXACT_SEQUENCE.split)], [[1], [3, 1], "no split"]);
 }
+
+// The corpus: a file for each kind of thing a diagram can hold (every tail, body, and head, the
+// edge types, curves, shifts, loops, colours, 2-cells, the environment's options, amscd, and a
+// spectral sequence), each as Sagitta saves it. Opening and saving each must give back its bytes,
+// and the corpus must name every style, so that a new one comes with a file that holds it.
+pending.push((async () => {
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const changed = [];
+    const seen = new Set();
+    for (const [name, text] of corpus()) {
+        const { ui, diagnostics } = load(text);
+        await tick();
+        if (diagnostics.length > 0 || ui.text() !== text) {
+            changed.push(name);
+        }
+        for (const edge of ui.quiver.all_cells().filter((cell) => cell.is_edge())) {
+            const style = edge.options.style;
+            seen.add(`type ${style.name}`);
+            if (style.name !== "arrow") {
+                continue;
+            }
+            for (const component of ["tail", "body", "head"]) {
+                const { name: kind, side } = style[component];
+                seen.add(`${component} ${kind === "cell" ? "solid"
+                    : kind === "hook" || kind === "harpoon" ? `${side}-${kind}` : kind}`);
+            }
+        }
+    }
+    check("every file of the corpus saves back byte for byte", changed, []);
+    const wanted = [
+        ...["arrow", "adjunction", "corner", "corner-inverse"].map((type) => `type ${type}`),
+        ...["tail", "body", "head"].flatMap((component) =>
+            Object.values(Commands.STYLES[component]).map((value) => `${component} ${value}`)),
+    ];
+    check("and the corpus holds every style and edge type",
+        Array.from(new Set(wanted)).filter((style) => !seen.has(style)), []);
+})());
