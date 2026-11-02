@@ -33,7 +33,8 @@ There is no build step.
 `electron/` is the desktop shell, which the page reaches through `window.host`.
 `web/host.js` is the same `window.host` for a browser, and does nothing under the shell, which defines it first.
 To try the page in a browser, run `npm run web` and open <http://127.0.0.1:8000>.
-To publish it, serve `index.html`, `main.css`, `katex.css`, `icon.svg`, `icon.png`, `manifest.webmanifest`, `service-worker.js`, `package.json`, `LICENSE`, `NOTICE`, `src/`, `fonts/`, `icons/`, and `web/` from one directory of a static host.
+To publish it, run `npm run site`, which gathers the page into `site/` (or `node scripts/site.js DIR` for another directory), and upload that directory to a static host as it is.
+The page is what the desktop app packages (`build.files` in `package.json`), less `electron/`, plus `service-worker.js`, so a file added to the page is added to that list; the browser tests serve the page from such a directory, so a file left out fails there.
 `LICENSE` and `NOTICE` go with every copy, as quiver's and KaTeX's MIT licences ask, and the help's About lines read the version from `package.json`.
 `service-worker.js` keeps what the page fetches, for opening without a network, and must sit beside `index.html` to cover it.
 `sagitta` is the launcher, which checks the arguments and picks an Electron.

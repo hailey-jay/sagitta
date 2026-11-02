@@ -21,6 +21,7 @@ import functools
 import http.server
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -2450,10 +2451,22 @@ class _QuietHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+def _build_site(directory):
+    """Gather the page into `directory`, as `npm run site` does."""
+    subprocess.run([node, os.path.join(_APP, "scripts", "site.js"), str(directory)],
+                   capture_output=True, text=True, check=True)
+
+
 @pytest.fixture(scope="module")
-def site():
-    """The repository, served over HTTP on a free port, as a static host would serve it."""
-    handler = functools.partial(_QuietHandler, directory=_APP)
+def site(tmp_path_factory):
+    """The page as `npm run site` gathers it, served over HTTP on a free port, as a static host
+    would serve it, so that a file the page needs and the list leaves out fails here. Without
+    node, the repository itself."""
+    directory = _APP
+    if node:
+        directory = tmp_path_factory.mktemp("site")
+        _build_site(directory)
+    handler = functools.partial(_QuietHandler, directory=str(directory))
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -2660,6 +2673,19 @@ def test_the_page_keeps_its_files_to_open_offline(browser):
         return kept !== undefined && (await kept.text()).includes("--ui-black");
     })()""")
     assert result
+
+
+@pytest.mark.skipif(not node, reason="node not installed")
+def test_the_site_holds_the_page_and_nothing_else(tmp_path):
+    """Everything `index.html` names, and none of the desktop shell, the tests, or the packages."""
+    _build_site(tmp_path)
+    with open(tmp_path / "index.html", encoding="utf-8") as page:
+        named = re.findall(r'(?:src|href)="([^"#]+)"', page.read())
+    assert named and all((tmp_path / name).is_file() for name in named), named
+    for name in ["service-worker.js", "package.json", "LICENSE", "NOTICE"]:
+        assert (tmp_path / name).is_file(), name
+    for name in ["electron", "tests", "node_modules", "dist", "scratch", "docs"]:
+        assert not (tmp_path / name).exists(), name
 
 
 def _square_link(browser):

@@ -30,6 +30,7 @@
 - The web page starts sooner: its scripts load together rather than one after another, KaTeX's styles and its two commonest fonts load with them, and offline use no longer holds each file back until it is stored.
 - Turning the wheel, or swiping a trackpad, redraws the grid once a frame, however many turns arrive in it.
 - KaTeX is the minified build its release ships, half the size, so the web page has half as much to download and parse.
+- `npm run site` gathers the web page into `site/`, to upload to a static host as it is, rather than serving the whole repository.
 
 ## 0.7.1
 
