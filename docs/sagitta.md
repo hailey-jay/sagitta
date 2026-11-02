@@ -330,6 +330,33 @@ Two commands carry on from what is there:
 - `:continue` (`:cont`) adds the next term after each selected cell at the end of a sequence (a cell with one arrow), along that arrow, with the indices stepped as they step along it: from `C_2 → C_1`, it adds `C_1 → C_0`, the arrow drawn and labelled as the last, `\partial_2` stepping to `\partial_1`. Where the labels do not step so, the new cell is empty, for Tab. Where two selected ends would go on to the same cell, it refuses.
 - `:reindex K` moves every index of the selected labels by `K`: `C_{n+1}` to `C_{n+2}` for `K = 1`. An index is a subscript or superscript that is a number, a lower-case letter, or a multiple of one plus a number; anything else, as `X_\alpha` or `\Omega^n_X`, is left alone, as is one inside brackets (the `2` of `H^n(X;\mathbb{Z}_2)`, the `0` of `\pi_n(X,x_0)`) or a letter a script binds (the `i` of `\sum_{i=1}^n x_i`).
 
+## Limits and colimits
+
+`:limit` (`:lim`) and `:colimit` (`:colim`) add the cone, or cocone, over the selection: its objects, with the ends of its arrows, and the arrows among them, are the diagram.
+One object is added, beyond the diagram's top-left corner for a limit and its bottom-right for a colimit, with a leg to (or from) each object that no arrow of the diagram reaches (or leaves), since the other legs are composites.
+It is one step to undo, selected, and queued for labels, as a preset is.
+
+The label and legs are guessed from the shape:
+
+| Selected | `:lim` | `:colim` |
+|---|---|---|
+| two or more objects, no arrows | `A \times B`, legs `\pi_1`, `\pi_2` | `A \sqcup B`, legs `\iota_1`, `\iota_2` |
+| a cospan `A → C ← B` | `A \times_C B`, completing the square, with a pullback corner | (the general case) |
+| a span `A ← C → B` | (the general case) | `A \sqcup_C B`, completing the square, with a pushout corner |
+| a parallel pair `f, g : A ⇉ B` | `\mathrm{eq}(f, g)`, a mono into `A` | `\mathrm{coeq}(f, g)`, an epi out of `B` |
+| one arrow `f`, with `additive` | `\ker f`, a mono | `\operatorname{coker} f`, an epi |
+| nothing | `1`, at the focus point | `0`, at the focus point |
+| anything else | `\lim` | `\operatorname{colim}` |
+
+A factor longer than one symbol is bracketed, as `(A \oplus B) \times C`, and the corner is the kind `diagram.var_corner` names.
+The options:
+
+- `all` draws every leg, composites too.
+- `universal` adds a second cone `X`, further out, with its own legs, and the unique arrow from it, dashed and labelled `\exists !`.
+- `additive` writes direct sums `\oplus` for products and coproducts, and takes a kernel or cokernel of one arrow.
+
+In amscd, a cone that needs a diagonal or long arrow is refused; a pullback or pushout square of neighbours, which needs neither, is drawn without its corner, which amscd has no way to draw.
+
 ## Spectral sequences
 
 `:spectral-sequence` (`:ss`) stamps a page at the focus point, which takes its top-left entry: a column of ticks for `q` on its left, a row of ticks for `p` below it, and axes between the ticks and the entries.

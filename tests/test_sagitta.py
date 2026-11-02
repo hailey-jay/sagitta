@@ -3663,3 +3663,26 @@ def test_a_transformation_amscd_cannot_draw_is_refused(sagitta, home):
     after, _ = _transform(sagitta, home, "transpose", ["A", "B"], amscd,
                           expected_error="amscd has no")
     assert after == ["\tA @>>> B @>>> C"]
+
+
+# ── Limits and colimits ───────────────────────────────────────────────────────────────
+
+COSPAN = "\\[\\begin{tikzcd}\n\t& B \\\\\n\tA & C\n\t\\arrow[from=1-2, to=2-2]\n" \
+    "\t\\arrow[from=2-1, to=2-2]\n\\end{tikzcd}\\]\n"
+
+
+def test_lim_on_the_command_line_draws_the_pullback(sagitta, home):
+    diagram = _diagram(home / "paper", COSPAN, "cospan.cd.tex")
+    sagitta("commands", diagram, json.dumps(["lim"]))
+    text = diagram.read_text()
+    assert "\t{A \\times_C B} & B \\\\\n" in text
+    assert '\\arrow["\\lrcorner"{anchor=center, pos=0.125}, draw=none, from=1-1, to=2-2]' in text
+
+
+def test_colim_universal_draws_the_cocone_and_the_unique_arrow(sagitta, home):
+    diagram = _diagram(home / "paper", "\\[\\begin{tikzcd}\n\tA & B\n\\end{tikzcd}\\]\n",
+                       "pair.cd.tex")
+    sagitta("commands", diagram, json.dumps(["colim universal"]))
+    text = diagram.read_text()
+    assert "{A \\sqcup B}" in text
+    assert '\\arrow["{\\exists !}", dashed' in text

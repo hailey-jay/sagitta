@@ -26,6 +26,7 @@ There is no build step.
 - `history.js`, `colours.js`, `cell.js`, `modes.js`, `options.js`: undo, the colour picker, vertices and edges, the UI's modes, and the selection's arrow options.
 - `modeline.js`: the mode line and the named actions.
 - `layers.js`, `keymap.js`, `bindings.js`, `commands.js`, `prompt.js`, `keys.js`: the keyboard, and the named bindings the keys file rebinds.
+- `presets.js`, `spectral.js`, `universal.js`: the presets, spectral sequences, and limits and colimits, loaded after `commands.js`, whose table they add to.
 - `pointer.js`: the pointer and the scroll wheel.
 - `file.js`: the diagram's file and its macros file.
 - `ui.js`, `main.js`: the `UI` that holds the rest, and the startup.

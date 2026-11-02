@@ -36,6 +36,7 @@ const SOURCES = [
     "src/commands.js",
     "src/presets.js",
     "src/spectral.js",
+    "src/universal.js",
     "src/keys.js",
     "src/keymap.js",
     "src/bindings.js",

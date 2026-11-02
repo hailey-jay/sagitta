@@ -1900,3 +1900,74 @@ pending.push((async () => {
 // Transposing turns a loop's angle `a` to `90 - a`, kept within (-180, 180].
 check("a transposed loop's angle stays within a turn", [0, 90, -90, 180, -135, 45]
     .map((angle) => Transforms.angle(90 - angle)), [90, 0, 180, -90, -135, 45]);
+
+// `:limit` and `:colimit`: the cone over the selection, its label and legs guessed from its shape.
+{
+    const run = (code, select, command, words = []) => {
+        const { ui } = load(code);
+        ui.focus_position = new Position(0, 3);
+        ui.select(...ui.quiver.all_cells().filter((cell) => select.includes(cell.label)));
+        Commands.TABLE[command].run(new Commands(ui), words);
+        return ui;
+    };
+    const body = (ui) => ui.text().split("\n").slice(1, -2);
+    const added = (ui) => Array.from(ui.selection).map((cell) => cell.label);
+    const row = "\\begin{tikzcd}\n\tA & B\n\\end{tikzcd}\n";
+    const cospan = "\\begin{tikzcd}\n\t& B \\\\\n\tA & C\n\t\\arrow[from=1-2, to=2-2]\n"
+        + "\t\\arrow[from=2-1, to=2-2]\n\\end{tikzcd}\n";
+    const span = "\\begin{tikzcd}\n\tC & B \\\\\n\tA\n\t\\arrow[from=1-1, to=1-2]\n"
+        + "\t\\arrow[from=1-1, to=2-1]\n\\end{tikzcd}\n";
+    const pair = "\\begin{tikzcd}\n\tA & B\n\t\\arrow[\"f\", shift left, from=1-1, to=1-2]\n"
+        + "\t\\arrow[\"g\"', shift right, from=1-1, to=1-2]\n\\end{tikzcd}\n";
+    const one = "\\begin{tikzcd}\n\tA & B\n\t\\arrow[\"f\", from=1-1, to=1-2]\n\\end{tikzcd}\n";
+
+    const pullback = run(cospan, ["A", "B", "C"], "limit");
+    check(":limit of a cospan completes the square as its pullback, with the corner",
+        body(pullback), ["\t{A \\times_C B} & B \\\\", "\tA & C",
+            "\t\\arrow[\"{\\pi_2}\", from=1-1, to=1-2]", "\t\\arrow[\"{\\pi_1}\", from=1-1, to=2-1]",
+            "\t\\arrow[\"\\lrcorner\"{anchor=center, pos=0.125}, draw=none, from=1-1, to=2-2]",
+            "\t\\arrow[from=1-2, to=2-2]", "\t\\arrow[from=2-1, to=2-2]"]);
+    check("as one step, selected", [added(pullback).length, pullback.history.present], [4, 1]);
+    pullback.history.undo(pullback);
+    check("and undoes to the cospan", counts(pullback), [3, 2]);
+    check(":colimit of a span is its pushout", added(run(span, ["A", "B", "C"], "colimit")),
+        ["A \\sqcup_C B", "\\iota_1", "\\iota_2", ""]);
+    check("two objects take a product, a coproduct, or with additive a direct sum", [
+        added(run(row, ["A", "B"], "limit"))[0], added(run(row, ["A", "B"], "colimit"))[0],
+        added(run(row, ["A", "B"], "limit", ["additive"]))[0],
+    ], ["A \\times B", "A \\sqcup B", "A \\oplus B"]);
+    check("beyond the diagram's corner", body(run(row, ["A", "B"], "limit")).slice(0, 2),
+        ["\t{A \\times B} \\\\", "\t& A & B"]);
+    check("a parallel pair takes its equaliser, by a mono, or coequaliser, by an epi", [
+        body(run(pair, ["A", "B"], "limit")).slice(0, 3),
+        added(run(pair, ["A", "B"], "colimit"))[0],
+    ], [["\t{\\mathrm{eq}(f, g)} \\\\", "\t& A & B", "\t\\arrow[tail, from=1-1, to=2-2]"],
+        "\\mathrm{coeq}(f, g)"]);
+    check("an arrow takes its kernel or cokernel when additive, and otherwise a plain lim", [
+        added(run(one, ["A", "B"], "limit", ["additive"]))[0],
+        added(run(one, ["A", "B"], "colimit", ["additive"]))[0],
+        added(run(one, ["A", "B"], "limit"))[0],
+        added(run(one, ["A", "B"], "colimit"))[0],
+    ], ["\\ker f", "\\operatorname{coker} f", "\\lim", "\\operatorname{colim}"]);
+    check("a leg goes only where no arrow of the diagram does, unless all",
+        [added(run(cospan, ["A", "B", "C"], "limit")).length,
+            added(run(cospan, ["A", "B", "C"], "limit", ["all"])).length], [4, 5]);
+    check("nothing selected takes a terminal or initial object at the focus point",
+        [added(run(row, [], "limit")), added(run(row, [], "colimit"))], [["1"], ["0"]]);
+    check("universal adds a cone X and its unique arrow, dashed",
+        body(run(row, ["A", "B"], "limit", ["universal"])).slice(3, 4),
+        ["\t\\arrow[\"{\\exists !}\", dashed, from=1-1, to=2-2]"]);
+    check("a factor of more than one symbol is bracketed",
+        ["A", "X_1", "\\mathbb{Z}", "A \\oplus B", "H^{n}"].map(Universal.factor),
+        ["A", "X_1", "(\\mathbb{Z})", "(A \\oplus B)", "H^{n}"]);
+    const refused = (() => {
+        try {
+            run("\\begin{CD}\n\tA @. B\n\\end{CD}\n", ["A", "B"], "limit");
+        } catch (error) {
+            return error.message;
+        }
+        return null;
+    })();
+    check("amscd refuses a cone it cannot draw", refused?.startsWith("amscd has no diagonal"),
+        true);
+}
