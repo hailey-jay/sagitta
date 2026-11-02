@@ -721,3 +721,61 @@ Commands.ALIASES = {
     "u": "undo",
     "claire": "text-labels",
 };
+
+/// What the flips, `rotate`, and `transpose` act on, and when they refuse (see `ModeLine`).
+class Transforms {
+    /// The vertices a transformation of `ui` moves, and the cells it carries along whole: with a
+    /// selection, its vertices and the ends of its arrows (down to the vertices an arrow on arrows
+    /// hangs from), and every arrow all of whose ends are among them; with none, everything.
+    static moving(ui) {
+        const all = ui.quiver.all_cells();
+        if (ui.selection.size === 0) {
+            return { vertices: all.filter((cell) => cell.is_vertex()), inside: all };
+        }
+        const ends = (cell) => cell.is_vertex() ? [cell] : [...ends(cell.source), ...ends(cell.target)];
+        const vertices = new Set(Array.from(ui.selection).flatMap(ends));
+        return {
+            vertices: Array.from(vertices),
+            inside: all.filter((cell) => cell.is_edge() && ends(cell).every((end) => vertices.has(end))),
+        };
+    }
+
+    /// The rectangle round `vertices`, as `[[x_min, y_min], [x_max, y_max]]`, or `null` if there
+    /// are none.
+    static bounds(vertices) {
+        if (vertices.length === 0) {
+            return null;
+        }
+        const xs = vertices.map((vertex) => vertex.position.x);
+        const ys = vertices.map((vertex) => vertex.position.y);
+        return [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]];
+    }
+
+    /// Why the transformation called `label` cannot move vertices as `displacements` say, or
+    /// `null` if it can: a vertex would land on one left in place, the spectral sequence's
+    /// bidegrees would be scrambled, or the diagram's format could not draw the result.
+    static refuses(ui, label, displacements) {
+        const moving = new Set(displacements.map(({ vertex }) => vertex));
+        for (const { to } of displacements) {
+            const there = ui.positions.get(`${to}`);
+            if (there !== undefined && !moving.has(there)) {
+                return `${label} would land on ${there.label === "" ? "a cell" : there.label} at (${
+                    to.x}, ${to.y}): select it too, or make room.`;
+            }
+        }
+        if (SpectralSequence.follow(ui, displacements) === null) {
+            return `${label} would scramble the spectral sequence's bidegrees.`;
+        }
+        const problem = Formats.refuses_move(ui.format, ui.quiver, displacements);
+        if (problem !== null) {
+            return `${ui.format} has no ${problem}.`;
+        }
+        return null;
+    }
+
+    /// `angle`, in degrees, brought into (-180, 180].
+    static angle(angle) {
+        const turned = ((angle % 360) + 360) % 360;
+        return turned > 180 ? turned - 360 : turned;
+    }
+}

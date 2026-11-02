@@ -7,7 +7,12 @@ It edits `.cd.tex` files that a paper `\input`s directly.
 
 ```
 sagitta [--macros FILE] [--devtools] [DIAGRAM.cd.tex] [-- SWITCHES]
+sagitta --check [--macros FILE] [DIR]
 ```
+
+`--check` opens no window: it reads every `.cd.tex` and `.tikzcd` file under `DIR` (or the directory it is run from, leaving out hidden directories and `node_modules`) as Sagitta opens it, and prints a line for each problem: a part Sagitta cannot read, which saving would drop; a file saving would change, with the first line that differs; and a label KaTeX cannot read, or one using a macro that neither KaTeX nor the nearest `macros.tex` (or `--macros FILE`) defines.
+It ends with a count, and exits 1 if it found anything, so a paper's CI can run it.
+The launcher runs it as plain Node, needing no display.
 
 `DIAGRAM` need not exist yet.
 `sagitta --help` lists the options, and `--version` gives the version, as `:version` does inside.
@@ -104,6 +109,8 @@ The rest live one key away:
   Other colours are drawn exactly, and nothing saved changes.
   It follows the system's colour scheme until it is first set.
 - `C-arrows` move the selection; on arrows alone they bend or shift them, and on loops alone they resize or turn them.
+- `:flip-hor`, `:flip-ver`, `:rotate` (a quarter turn anticlockwise), and `:transpose` (rows into columns) act on the selection's objects, and the ends of its arrows, within the rectangle round them, or on the whole diagram with nothing selected.
+  Arrows among them turn with them, and an arrow to a cell left in place follows its end; landing on a cell left in place, or leaving what amscd cannot draw, is refused.
 - `S-arrows` walk the diagram: from a cell (the one under the focus point, or the one selected), they select the arrow at it that leaves nearest that way, within a right angle, outgoing before incoming; from one selected arrow, they go to its target along it, to its source against it, and across it to the arrow beside it on that side, or else to an arrow attached to it.
   A cell walked to takes the focus point; an arrow hides it, so that RET labels the arrow.
   While the command layer is setting a number, `S-arrows` step it, as the arrows do.
@@ -184,7 +191,7 @@ The names and their defaults:
 | `delete`, `clear` | `<delete>`, none |
 | `reverse`, `flip`, `flip-labels` | `; r` `C-r`, `; f`, none |
 | `search` | `C-f` (and `/`, which cannot be rebound) |
-| `flip-hor`, `flip-ver`, `rotate` | none |
+| `flip-hor`, `flip-ver`, `rotate`, `transpose` | none |
 | `centre-view`, `go-home`, `hide-grid` | `; z`, `; g`, `; #` |
 | `zoom-out`, `zoom-in`, `reset-zoom` | `C--`, `C-=`, `C-0` |
 | `dark-mode`, `hide-mode-line`, `shortcuts`, `settings` | none, `C-\`, `C-/` `<f1>`, `C-,` |
@@ -291,7 +298,7 @@ A connecting morphism is one arrow: curved (`; b`, and `; -` for dashed), or rou
 
 ## Presets
 
-A preset stamps a ready-made diagram at the focus point: a chain complex, or an exact sequence.
+A preset stamps a ready-made diagram at the focus point: a chain complex, an exact sequence, or a 2-cell.
 What it stamps is ordinary cells, selected, as one step to undo; nothing remembers the preset afterwards.
 Its cells are queued for labelling, as cells just drawn are: Tab goes to the first of them, and on through the rest in the order the diagram reads, each object followed by the arrows from it, each leaving the queue once labelled, though S-TAB still goes back to it.
 
@@ -303,6 +310,8 @@ Its cells are queued for labelling, as cells just drawn are: Tab goes to the fir
 | `:long-exact-sequence N` (`:les`) | `H_n(A) → H_n(B) → H_n(C)`, a row for each `n`, `\delta` routed from each row to the next |
 | `:triangle` (`:tri`) | `X → Y → Z`, with `Z → X` marked `+1`; `row` for `X → Y → Z → X[1]` |
 | `:spectral-sequence` (`:ss`) | a page of a spectral sequence, with ticks and axes (see Spectral sequences) |
+| `:natural-transformation` (`:nat`) | `F, G : \mathcal{C} → \mathcal{D}` curving apart, and a 2-cell `\alpha : F ⇒ G` between them |
+| `:adjoint-pair` (`:adj`) | `L : \mathcal{C} → \mathcal{D}` over `R` back, and `⊣` between them |
 
 Each opens its setup layer, which draws a ghost of what it would stamp, laid out as the diagram's format lays it out.
 The arrow keys move the focus point, and the ghost with it; RET stamps it; ESC or `;` leaves without stamping.
@@ -321,12 +330,40 @@ The options, as `key=value` after the command, quoted (`obj="H_#(X; Y)"`) where 
 - `obj` and `d` (`maps` for `:ses`): the labels, as templates. `#` is the index, `#{#-1}` arithmetic on it (`+`, `-`, `*`, brackets), and after `_` or `^` an index longer than a character is braced. A comma list cycles, keeping one index for each cycle through it, as the long exact sequence does; commas inside brackets do not split. `\#` is TeX's own `#`. `d=none` leaves the arrows unlabelled.
 - `aug`: an augmentation `\varepsilon` onto `aug` and then `0` where the indices start, as `:cc obj=P_# aug=M` gives `\cdots → P_1 → P_0 → M → 0`; a cochain complex starts `0 → M → I^0`.
 - `step`: cells between terms. `wrap`: terms a row, the next row two cells on, with the arrow between rows routed through the row between.
+- `:nat` and `:adj` take `obj` (two objects), `maps` (two arrows), and `dir` (`r` or `d`); `:nat` takes `cell`, the 2-cell's label.
 - `:ses` takes `plain` for plain arrows, and `split` for a dashed section `s` back from `C` to `B`, curving over the epi, or under it with `under`; `:les` takes `cohom` for `H^n`, with the indices rising.
 
 Two commands carry on from what is there:
 
 - `:continue` (`:cont`) adds the next term after each selected cell at the end of a sequence (a cell with one arrow), along that arrow, with the indices stepped as they step along it: from `C_2 → C_1`, it adds `C_1 → C_0`, the arrow drawn and labelled as the last, `\partial_2` stepping to `\partial_1`. Where the labels do not step so, the new cell is empty, for Tab. Where two selected ends would go on to the same cell, it refuses.
 - `:reindex K` moves every index of the selected labels by `K`: `C_{n+1}` to `C_{n+2}` for `K = 1`. An index is a subscript or superscript that is a number, a lower-case letter, or a multiple of one plus a number; anything else, as `X_\alpha` or `\Omega^n_X`, is left alone, as is one inside brackets (the `2` of `H^n(X;\mathbb{Z}_2)`, the `0` of `\pi_n(X,x_0)`) or a letter a script binds (the `i` of `\sum_{i=1}^n x_i`).
+
+## Limits and colimits
+
+`:limit` (`:lim`) and `:colimit` (`:colim`) add the cone, or cocone, over the selection: its objects, with the ends of its arrows, and the arrows among them, are the diagram.
+One object is added, beyond the diagram's top-left corner for a limit and its bottom-right for a colimit, with a leg to (or from) each object that no arrow of the diagram reaches (or leaves), since the other legs are composites.
+It is one step to undo, selected, and queued for labels, as a preset is.
+
+The label and legs are guessed from the shape:
+
+| Selected | `:lim` | `:colim` |
+|---|---|---|
+| two or more objects, no arrows | `A \times B`, legs `\pi_1`, `\pi_2` | `A \sqcup B`, legs `\iota_1`, `\iota_2` |
+| a cospan `A → C ← B` | `A \times_C B`, completing the square, with a pullback corner | (the general case) |
+| a span `A ← C → B` | (the general case) | `A \sqcup_C B`, completing the square, with a pushout corner |
+| a parallel pair `f, g : A ⇉ B` | `\mathrm{eq}(f, g)`, a mono into `A` | `\mathrm{coeq}(f, g)`, an epi out of `B` |
+| one arrow `f`, with `additive` | `\ker f`, a mono | `\operatorname{coker} f`, an epi |
+| nothing | `1`, at the focus point | `0`, at the focus point |
+| anything else | `\lim` | `\operatorname{colim}` |
+
+A factor longer than one symbol is bracketed, as `(A \oplus B) \times C`, and the corner is the kind `diagram.var_corner` names.
+The options:
+
+- `all` draws every leg, composites too.
+- `universal` adds a second cone `X`, further out, with its own legs, and the unique arrow from it, dashed and labelled `\exists !`.
+- `additive` writes direct sums `\oplus` for products and coproducts, and takes a kernel or cokernel of one arrow.
+
+In amscd, a cone that needs a diagonal or long arrow is refused; a pullback or pushout square of neighbours, which needs neither, is drawn without its corner, which amscd has no way to draw.
 
 ## Spectral sequences
 
@@ -348,7 +385,7 @@ The page leaves a frame behind, which the file keeps in a comment inside the env
 - The axes run from the corner between the ticks and the entries to a little past the last tick on each, drawn from the tick nodes in TikZ (`execute at end picture`, with `calc`, which `quiver.sty` loads) and by the same rule on the canvas; deleting a tick at either end of a range drops them.
 - `:diagonal n` (`:diag n`) selects the entries of total degree `n`, those with `p+q = n` in the ranges; `:diagonal n line` also draws that diagonal dashed through them, a little past each end (or takes it away, if it is drawn), kept in the frame as `lines=n` and drawn in TikZ beside the axes.
 - The frame moves with its ticks, by the arrow keys, by dragging, or by opening a column or row before the page; opening one inside the page (or between its ticks and its entries) is refused, as are flipping and rotating it. Deleting the last cells takes the frame, as Clear does.
-- A diagram keeps one spectral sequence, so a second `:ss` in it is refused: put the next page in a diagram of its own.
+- A diagram holds as many pages as fit side by side, as `E_2` beside `E_\infty`: each keeps its own comment and draws its own axes. A page that would overlap another, ticks and axes' names included, is refused. The page in use (for `; D`, `:diagonal`, `:frame`, and the mode line's `[E_2 coh]`) is the one holding the first selected object, or else the focus point, or else the first in the file; the mode line reads each cell's bidegree by the page that holds it. Clear, and deleting the last cells, take every page.
 - A comment Sagitta cannot read (as `page=two`) is listed among the problems on opening, and left out; so are the axes, without their comment. An edit by hand inside Sagitta's `execute at end picture` is not kept: the axes are written afresh from the frame.
 - amscd has no axes: switching to it drops the frame, after asking, and leaves the entries and ticks.
 

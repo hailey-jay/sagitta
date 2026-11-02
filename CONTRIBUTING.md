@@ -26,6 +26,7 @@ There is no build step.
 - `history.js`, `colours.js`, `cell.js`, `modes.js`, `options.js`: undo, the colour picker, vertices and edges, the UI's modes, and the selection's arrow options.
 - `modeline.js`: the mode line and the named actions.
 - `layers.js`, `keymap.js`, `bindings.js`, `commands.js`, `prompt.js`, `keys.js`: the keyboard, and the named bindings the keys file rebinds.
+- `presets.js`, `spectral.js`, `universal.js`: the presets, spectral sequences, and limits and colimits, loaded after `commands.js`, whose table they add to.
 - `pointer.js`: the pointer and the scroll wheel.
 - `file.js`: the diagram's file and its macros file.
 - `ui.js`, `main.js`: the `UI` that holds the rest, and the startup.
@@ -55,7 +56,7 @@ npm run test:fast
 ```
 
 The fast suite (`node tests/tikzcd.js`) is the round trip of a diagram's file in tikz-cd and in amscd, over the examples and generated diagrams, the encoded first line of older files, the parser, amscd and inline maths, the export settings, and the command line's settings, in a few seconds.
-It loads the sources that touch the diagram into a `vm` over a stub DOM (`tests/stub.js`), so it needs neither Electron nor a display, and the checks are in `tests/tikzcd-checks.js`.
+It loads the sources that touch the diagram into a `vm` over a stub DOM (`electron/headless.js`, which `sagitta --check` runs in too), so it needs neither Electron nor a display, and the checks are in `tests/tikzcd-checks.js`.
 A parser or export regression shows here before the slow suite starts.
 
 ```

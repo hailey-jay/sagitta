@@ -96,6 +96,7 @@ sagitta [--macros FILE] [--devtools] [DIAGRAM.cd.tex] [-- SWITCHES]
 ```
 
 `sagitta --help` explains the options.
+`sagitta --check DIR` reads every diagram under `DIR` without a window, and lists what Sagitta cannot read, what saving would change, and undefined macros, for a paper's CI.
 `DIAGRAM` need not exist yet.
 
 Keys work as in quiver: a letter runs a command, and `RET` edits the label of the cell under the cursor.

@@ -469,8 +469,8 @@ class History {
                     ui.format = action[to];
                     break;
                 case "frame":
-                    // A spectral sequence's frame (see `SpectralSequence`).
-                    ui.frame = action[to];
+                    // A spectral sequence page's frame (see `SpectralSequence.replace`).
+                    SpectralSequence.replace(ui, action[from], action[to]);
                     break;
             }
             for (const cell of ui.quiver.transitive_dependencies(cells)) {

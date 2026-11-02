@@ -1,5 +1,6 @@
 #!/bin/sh
 # sagitta [--macros FILE] [--devtools] [DIAGRAM.cd.tex] [-- SWITCHES]
+# sagitta --check [--macros FILE] [DIR]
 #
 # Runs the app on Electron: $SAGITTA_ELECTRON if set, else the first of
 # electron43 and electron on PATH, else the one `npm install` puts in
@@ -19,4 +20,13 @@ if [ -z "$electron" ]; then
     echo "sagitta: no Electron found; install electron43, or run npm install in $app" >&2
     exit 1
 fi
+# --check runs as plain Node, so that it needs no display (see electron/check.js).
+for argument in "$@"; do
+    if [ "$argument" = "--check" ]; then
+        ELECTRON_RUN_AS_NODE=1 exec "$electron" "$app/electron/check.js" "$@"
+    fi
+    if [ "$argument" = "--" ]; then
+        break
+    fi
+done
 exec "$electron" "$app" "$@"

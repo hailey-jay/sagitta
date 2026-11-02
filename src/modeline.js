@@ -243,9 +243,7 @@ class ModeLine {
             () => {
                 ui.deselect();
                 const actions = [{ kind: "delete", cells: new Set(ui.quiver.all_cells()) }];
-                if (ui.frame !== null) {
-                    actions.push({ kind: "frame", from: ui.frame, to: null });
-                }
+                actions.push(...SpectralSequence.clearing(ui));
                 ui.history.add(ui, actions, true);
                 ui.update_selection();
             },
@@ -268,37 +266,41 @@ class ModeLine {
             ui.update_selection();
         }, () => ui.in_mode(...default_pan) && doomed().size > 0);
 
-        // Transformations of the whole diagram. Each moves the vertices, and fixes up the edges
-        // (including loops, whose angles are absolute).
+        // Transformations of the selection's objects (those selected, and the ends of selected
+        // arrows) within the rectangle round them, or, with nothing selected, of the whole
+        // diagram. Each moves the vertices, and fixes up the arrows among them (loops too, whose
+        // angles are absolute); an arrow from one of them to a cell left in place follows its end.
         const transform = (name, label, move, edges) => {
             this.add_action(ui, name, label, () => {
-                const vertices = ui.quiver.all_cells().filter((cell) => cell.is_vertex());
-                const bounding_rect = ui.quiver.bounding_rect();
+                const { vertices, inside } = Transforms.moving(ui);
+                const bounding_rect = Transforms.bounds(vertices);
                 if (bounding_rect === null) {
                     return;
                 }
-                const loops = ui.quiver.all_cells().filter((cell) => cell.is_loop());
+                const loops = inside.filter((cell) => cell.is_loop());
                 const displacements = vertices.map((vertex) => ({
                     vertex,
                     from: vertex.position,
                     to: move(bounding_rect, vertex.position),
                 }));
-                // A spectral sequence's page has its axes one way round.
-                if (SpectralSequence.follow(ui, displacements) === null) {
-                    UI.display_error(`${label} would scramble the spectral sequence's bidegrees.`);
+                const refused = Transforms.refuses(ui, label, displacements);
+                if (refused !== null) {
+                    UI.display_error(refused);
                     return;
                 }
                 ui.history.add(ui, [{
                     kind: "move",
                     displacements,
+                    // Only the routes of arrows carried along whole are turned with them.
                     routes: ui.quiver.moved_routes(
-                        displacements, (position) => move(bounding_rect, position)),
-                }, ...edges(loops)], true);
+                        displacements, (position) => move(bounding_rect, position))
+                        .filter(({ edge }) => inside.includes(edge)),
+                }, ...edges(loops, inside)], true);
             }, () => ui.in_mode(...default_pan) && any_cells());
         };
-        const reflect = (angle) => (loops) => [{
+        const reflect = (angle) => (loops, inside) => [{
             kind: "flip",
-            cells: ui.quiver.all_cells().filter((cell) => cell.is_edge() && !cell.is_loop()),
+            cells: inside.filter((cell) => cell.is_edge() && !cell.is_loop()),
         }, {
             kind: "reverse",
             cells: loops,
@@ -339,6 +341,14 @@ class ModeLine {
                     return { edge, from: edge.options.angle, to };
                 }),
             }],
+        );
+        // Across the diagonal from the top-left corner: rows become columns.
+        transform("transpose", "Transpose",
+            ([[x_min, y_min]], position) => new Position(
+                x_min + (position.y - y_min),
+                y_min + (position.x - x_min),
+            ),
+            reflect((angle) => Transforms.angle(90 - angle)),
         );
 
         this.add_action(ui, "centre-view", "Centre view", () => {
@@ -677,8 +687,10 @@ class ModeLine {
     target(ui) {
         // Within a spectral sequence, a cell's bidegree too (see `SpectralSequence`), but for the
         // ticks and the axes' names, which have none.
-        const page = (position) => ui.frame !== null
-            && !SpectralSequence.on_ticks(ui.frame, position);
+        const page = (position) => {
+            const frame = SpectralSequence.at(ui, position);
+            return frame !== null && !SpectralSequence.on_ticks(frame, position);
+        };
         // A position is given as the export names it, row then column from the diagram's
         // top-left object (`from=2-1`), so that it reads the same in the file; one above or left
         // of the diagram is at 0 or less.
@@ -688,7 +700,7 @@ class ModeLine {
             return `${position.y - corner[1] + 1}-${position.x - corner[0] + 1}`;
         };
         const where = (position) => `${cell_name(position)}${!page(position)
-            ? "" : `  ${SpectralSequence.describe(ui.frame, position)}`}`;
+            ? "" : `  ${SpectralSequence.describe(SpectralSequence.at(ui, position), position)}`}`;
         const describe = (cell) => {
             const label = cell.label.trim() === "" ? "∅" : cell.label;
             return cell.is_vertex() ? `${label}  ${where(cell.position)}` : label;
@@ -716,7 +728,8 @@ class ModeLine {
                 // In a spectral sequence, where the focus point is, by bidegree, even while it is
                 // hidden.
                 return !page(ui.focus_position) ? ""
-                    : `focus  ${SpectralSequence.describe(ui.frame, ui.focus_position)}`;
+                    : `focus  ${SpectralSequence.describe(SpectralSequence.at(ui, ui.focus_position),
+                        ui.focus_position)}`;
             case 1:
                 return describe(ui.selection.values().next().value);
             default:

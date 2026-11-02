@@ -418,7 +418,7 @@ class Presets {
     /// (see `place`). Its cells are queued for labelling, as cells just drawn are, so that Tab
     /// walks them (see `Keys.next_queued`) until each is labelled or the queue is let go.
     static stamp(ui, spec) {
-        Presets.one_frame(ui, spec);
+        Presets.frame_room(ui, spec);
         const cells = Presets.place(ui, spec);
         Presets.order(ui, cells);
         // A spectral sequence's ticks and axis names are set, so Tab passes them by.
@@ -428,9 +428,10 @@ class Presets {
                 cell.element.query_selector("kbd")?.class_list.add("queue");
             }
         }
-        // A spectral sequence's frame comes with it, in the same step (see `SpectralSequence`).
+        // A spectral sequence's frame comes with it, in the same step, as a new page (see
+        // `SpectralSequence`).
         const frame = spec.frame === undefined ? []
-            : [{ kind: "frame", from: ui.frame ?? null, to: Presets.frame(ui, spec.frame) }];
+            : [{ kind: "frame", from: null, to: Presets.frame(ui, spec.frame) }];
         if (frame.length > 0) {
             ui.history.effect(ui, frame, false);
         }
@@ -464,12 +465,22 @@ class Presets {
         ui.recode();
     }
 
-    /// Throw if `spec` brings a spectral sequence's frame to a diagram that has one: a diagram
-    /// keeps one frame, and a second would take the first's axes and bidegrees.
-    static one_frame(ui, spec) {
-        if (spec.frame !== undefined && ui.frame !== null && ui.frame !== undefined) {
-            throw new Error("This diagram has a spectral sequence already, and keeps only one:"
-                + " put the next page in a diagram of its own.");
+    /// Throw if `spec` brings a spectral sequence page whose frame, with its ticks and the axes'
+    /// names, would overlap a page the diagram has: each cell has one bidegree at most.
+    static frame_room(ui, spec) {
+        if (spec.frame === undefined) {
+            return;
+        }
+        const frame = Presets.frame(ui, spec.frame);
+        const bounds = ({ origin, p, q }) => [origin.x + p[0] - 1, origin.x + p[1] + 1,
+            origin.y - q[1] - 1, origin.y - q[0] + 1];
+        const [x0, x1, y0, y1] = bounds(frame);
+        for (const other of ui.frames ?? []) {
+            const [a0, a1, b0, b1] = bounds(other);
+            if (x0 <= a1 && a0 <= x1 && y0 <= b1 && b0 <= y1) {
+                throw new Error(`That page would overlap the E_${other.page} page already here:`
+                    + " move the focus point clear of it.");
+            }
         }
     }
 

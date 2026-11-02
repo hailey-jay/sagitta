@@ -3489,12 +3489,12 @@ def test_a_problem_runs_across_the_key_list_and_wraps(sagitta, home):
         %s
         ui.reposition_focus_point(new Position(2, 2));
         Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1"]);
-        ui.reposition_focus_point(new Position(12, 2));
+        ui.reposition_focus_point(new Position(3, 2));
         ui.commands.run("ss");
         const line = document.querySelector(".which-key .entry.wide");
         const group = line.closest(".group").getBoundingClientRect();
         const value = line.querySelector(".value");
-        return [line.textContent.includes("keeps only one"),
+        return [line.textContent.includes("would overlap the E_2 page"),
             line.getBoundingClientRect().width > group.width / 2,
             value.scrollWidth <= value.clientWidth + 1];
     })()""" % PRESS
@@ -3607,3 +3607,159 @@ def test_two_fingers_pan_and_pinch_to_zoom(sagitta, home):
         return [Math.round(zoomed * 100) / 100, panned > 0, ui.quiver.all_cells().length];
     })()"""
     assert sagitta("evaluate", _diagram(home / "paper"), script) == [-1, True, 8]
+
+
+# ── Transforming the selection ────────────────────────────────────────────────────────────
+
+ROW = "\\[\\begin{tikzcd}\n\tA & B && X\n\t\\arrow[\"f\", from=1-1, to=1-2]\n" \
+    "\t\\arrow[\"g\", from=1-2, to=1-4]\n\\end{tikzcd}\\]\n"
+
+
+def _transform(sagitta, home, name, select, text=ROW, expected_error=None):
+    """Select the cells labelled `select` (none for the whole diagram), run the action `name`,
+    and return the file's body, and the body again after undo."""
+    diagram = _diagram(home / "paper", text, "row.cd.tex")
+    script = """(async () => {
+        const wanted = %s;
+        ui.select(...ui.quiver.all_cells().filter((cell) => wanted.includes(cell.label)));
+        ui.mode_line.run(ui, %s);
+        const body = (text) => text.split("\\n").slice(1, -2);
+        const after = body(ui.file.text());
+        ui.history.undo(ui);
+        return [after, body(ui.file.text())];
+    })()""" % (json.dumps(select), json.dumps(name))
+    return sagitta("evaluate", diagram, script, expected_error=expected_error)
+
+
+def test_transposing_the_diagram_turns_its_row_into_a_column(sagitta, home):
+    after, undone = _transform(sagitta, home, "transpose", [])
+    assert after == ["\tA \\\\", "\tB \\\\", "\t\\\\", "\tX",
+                     "\t\\arrow[\"f\"', from=1-1, to=2-1]", "\t\\arrow[\"g\"', from=2-1, to=4-1]"]
+    assert undone == ROW.split("\n")[1:-2]
+
+
+def test_transposing_the_selection_leaves_the_rest_in_place(sagitta, home):
+    """A and B turn about A; X stays, and g, from B to X, follows B without being flipped."""
+    after, _ = _transform(sagitta, home, "transpose", ["A", "B", "f"])
+    assert after == ["\tA &&& X \\\\", "\tB",
+                     "\t\\arrow[\"f\"', from=1-1, to=2-1]", "\t\\arrow[\"g\", from=2-1, to=1-4]"]
+
+
+def test_rotating_the_selection_turns_it_within_its_rectangle(sagitta, home):
+    after, _ = _transform(sagitta, home, "rotate", ["A", "B"])
+    assert after == ["\tB &&& X \\\\", "\tA",
+                     "\t\\arrow[\"g\", from=1-1, to=1-4]", "\t\\arrow[\"f\", from=2-1, to=1-1]"]
+
+
+def test_a_transformation_onto_an_unselected_cell_is_refused(sagitta, home):
+    square = "\\[\\begin{tikzcd}\n\tA & B \\\\\n\tC & D\n\\end{tikzcd}\\]\n"
+    after, _ = _transform(sagitta, home, "transpose", ["A", "B"], square,
+                          expected_error="Transpose would land on C at (0, 1)")
+    assert after == ["\tA & B \\\\", "\tC & D"]
+
+
+def test_a_transformation_amscd_cannot_draw_is_refused(sagitta, home):
+    amscd = "\\[\\begin{CD}\n\tA @>>> B @>>> C\n\\end{CD}\\]\n"
+    after, _ = _transform(sagitta, home, "transpose", ["A", "B"], amscd,
+                          expected_error="amscd has no")
+    assert after == ["\tA @>>> B @>>> C"]
+
+
+# ── Limits and colimits ───────────────────────────────────────────────────────────────
+
+COSPAN = "\\[\\begin{tikzcd}\n\t& B \\\\\n\tA & C\n\t\\arrow[from=1-2, to=2-2]\n" \
+    "\t\\arrow[from=2-1, to=2-2]\n\\end{tikzcd}\\]\n"
+
+
+def test_lim_on_the_command_line_draws_the_pullback(sagitta, home):
+    diagram = _diagram(home / "paper", COSPAN, "cospan.cd.tex")
+    sagitta("commands", diagram, json.dumps(["lim"]))
+    text = diagram.read_text()
+    assert "\t{A \\times_C B} & B \\\\\n" in text
+    assert '\\arrow["\\lrcorner"{anchor=center, pos=0.125}, draw=none, from=1-1, to=2-2]' in text
+
+
+def test_colim_universal_draws_the_cocone_and_the_unique_arrow(sagitta, home):
+    diagram = _diagram(home / "paper", "\\[\\begin{tikzcd}\n\tA & B\n\\end{tikzcd}\\]\n",
+                       "pair.cd.tex")
+    sagitta("commands", diagram, json.dumps(["colim universal"]))
+    text = diagram.read_text()
+    assert "{A \\sqcup B}" in text
+    assert '\\arrow["{\\exists !}", dashed' in text
+
+
+def test_nat_opens_its_setup_layer_and_stamps_the_two_cell(sagitta, home):
+    diagram = _diagram(home / "paper", "", "new.cd.tex")
+    script = """(async () => {
+        %s
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.commands.run("nat");
+        const opened = [ui.keymap.layer === ui.keymap.layers.preset, ghosts(), cells()];
+        await press("Enter");
+        return { opened, stamped: [cells(), ui.history.present, ui.selection.size,
+            ui.file.text().includes("Rightarrow, from=0, to=1")] };
+    })()""" % PRESS
+    assert sagitta("evaluate", diagram, script) == {
+        "opened": [True, 5, 5],
+        "stamped": [5, 1, 5, True],
+    }
+
+
+# ── sagitta --check ─────────────────────────────────────────────────────────────
+
+def _paper(home):
+    """A paper whose diagrams have one problem each, but for the first: a square as Sagitta saves
+    it, a label with macros neither `macros.tex` nor KaTeX defines, a file written by hand, and a
+    label KaTeX cannot read."""
+    paper = home / "paper"
+    (paper / "figures").mkdir(parents=True)
+    (paper / ".git").mkdir()
+    (paper / "macros.tex").write_text("\\newcommand{\\pr}{\\mathrm{pr}}\n")
+    square = "\\[\\begin{tikzcd}\n\tA & B\n\t\\arrow[\"{\\pr_1}\", from=1-1, to=1-2]\n" \
+        "\\end{tikzcd}\\]\n"
+    (paper / "good.cd.tex").write_text(square)
+    (paper / "figures" / "macros.cd.tex").write_text(
+        square.replace("{\\pr_1}", "{\\foo \\baz_1}"))
+    (paper / "figures" / "hand.tikzcd").write_text(
+        "\\begin{tikzcd}\n  A \\arrow[r] & B\n\\end{tikzcd}\n")
+    (paper / "figures" / "broken.cd.tex").write_text(square.replace("{\\pr_1}", "{x^}"))
+    return paper
+
+
+_REPORT = [
+    'figures/broken.cd.tex: KaTeX cannot read the label "x^"',
+    'figures/hand.tikzcd: saving would change line 1: "\\\\begin{tikzcd}" to'
+    ' "\\\\[\\\\begin{tikzcd}"',
+    'figures/macros.cd.tex: \\foo is not defined, in "\\\\foo \\\\baz_1"',
+    'figures/macros.cd.tex: \\baz is not defined, in "\\\\foo \\\\baz_1"',
+    "4 diagrams checked, 3 with problems",
+]
+
+
+def test_check_lists_what_a_paper_would_suffer_from(home):
+    paper = _paper(home)
+    env = dict(os.environ, HOME=str(home), SAGITTA_ELECTRON=electron)
+    completed = subprocess.run([os.path.join(_APP, "sagitta"), "--check"], cwd=paper, env=env,
+                               capture_output=True, text=True, timeout=60, check=False)
+    assert completed.stdout.splitlines() == _REPORT
+    assert completed.returncode == 1
+
+
+def test_check_in_the_app_reports_the_same_without_a_window(home):
+    """The AppImage and Windows packages start `electron/main.js` directly, not the launcher."""
+    paper = _paper(home)
+    env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"))
+    command = [electron, "--ozone-platform=headless", _APP, "--check", str(paper)]
+    if os.environ.get("CI"):
+        command.insert(1, "--no-sandbox")
+    completed = subprocess.run(command, cwd=paper, env=env, capture_output=True, text=True,
+                               timeout=60, check=False)
+    assert completed.stdout.splitlines() == _REPORT
+    assert completed.returncode == 1
+
+
+def test_check_is_quiet_about_a_paper_with_nothing_wrong(home):
+    env = dict(os.environ, HOME=str(home), SAGITTA_ELECTRON=electron)
+    completed = subprocess.run([os.path.join(_APP, "sagitta"), "--check", "examples"], cwd=_APP,
+                               env=env, capture_output=True, text=True, timeout=60, check=False)
+    assert (completed.stdout, completed.returncode) == ("3 diagrams checked, all well\n", 0)

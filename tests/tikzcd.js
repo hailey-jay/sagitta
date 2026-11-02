@@ -5,9 +5,9 @@
 ///
 /// `tests/test_sagitta.py` drives the real app, which takes minutes; this takes seconds, so
 /// a parser or export regression shows before the slow suite starts. It loads the sources that
-/// touch the diagram itself (nothing of the keymap, the mode line, or KaTeX) into a `vm` context,
-/// over a stub DOM (`stub.js`) and a stub `UI` that holds only what the parse and export paths
-/// reach for.
+/// touch the diagram itself (nothing of the mode line, the pointer, or KaTeX) into a `vm`
+/// context, over a stub DOM (`electron/headless.js`) and a stub `UI` that holds only what the
+/// parse and export paths reach for.
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -15,35 +15,9 @@ const vm = require("node:vm");
 
 const ROOT = path.join(__dirname, "..");
 
-/// The sources the diagram itself needs, in the order `index.html` loads them.
-const SOURCES = [
-    "src/ds.js",
-    "src/dom.js",
-    "src/grid.js",
-    "src/curve.js",
-    "src/arrow.js",
-    "src/constants.js",
-    "src/parser.js",
-    "src/quiver.js",
-    "src/formats.js",
-    "src/settings.js",
-    "src/schema.js",
-    "src/delimiters.js",
-    "src/history.js",
-    "src/colours.js",
-    "src/cell.js",
-    "src/options.js",
-    "src/commands.js",
-    "src/presets.js",
-    "src/spectral.js",
-    "src/keys.js",
-    "src/keymap.js",
-    "src/bindings.js",
-    "src/file.js",
-];
+const headless = require("../electron/headless.js");
 
-const source = SOURCES
-    .map((file) => fs.readFileSync(path.join(ROOT, file), "utf8")).join("\n");
+const source = headless.source(ROOT);
 
 const failures = [];
 const check = (what, got, wanted) => {
@@ -57,15 +31,11 @@ const check = (what, got, wanted) => {
 
 const example = (name) => fs.readFileSync(path.join(ROOT, "examples", name), "utf8");
 
-const context = Object.assign(
-    {
-        console, check, example, process, setTimeout, clearTimeout,
-        // The encoding is base64 over UTF-8, which the page takes from the browser.
-        TextEncoder, TextDecoder, btoa, atob, URL, URLSearchParams,
-    },
-    require("./stub.js"),
-);
-vm.createContext(context);
+/// Each file of `tests/corpus/`, as `[name, contents]`.
+const corpus = () => fs.readdirSync(path.join(__dirname, "corpus")).sort()
+    .map((name) => [name, fs.readFileSync(path.join(__dirname, "corpus", name), "utf8")]);
+
+const context = headless.sandbox({ check, example, corpus });
 
 /// The checks, as a function compiled in the context, so that they are ordinary source rather
 /// than a template literal (and so may hold backticks and `${}`).

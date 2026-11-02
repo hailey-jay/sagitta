@@ -25,6 +25,25 @@
 
 - The blank preset (`; _`, `:blank`) draws nothing, with the label over the line, as `\cong` between objects, written as `draw=none`; the canvas shows it faintly.
 
+### Universal constructions
+
+- `:limit` (`:lim`) and `:colimit` (`:colim`) add the cone, or cocone, over the selection, with its label and legs guessed from the shape: a product or coproduct, a pullback or pushout completing the square with its corner, an equaliser or coequaliser, a kernel or cokernel with `additive`, a terminal or initial object with nothing selected, and `\lim` or `\operatorname{colim}` otherwise. Legs go only where no arrow of the diagram does, or everywhere with `all`; `universal` adds a second cone and the dashed `\exists !`. One step to undo, queued for labels.
+- `:natural-transformation` (`:nat`) stamps two parallel functors curving apart with a 2-cell between them, and `:adjoint-pair` (`:adj`) an adjoint pair with `⊣` between its arrows, each from the setup layer, as the other presets are.
+
+### Spectral sequences
+
+- A diagram holds several pages side by side, as `E_2` beside `E_\infty`, each in a comment of its own, drawing its own axes. `; D`, `:diagonal`, `:frame`, and the mode line use the page holding the selection or the focus point. A page that would overlap another is refused, where a second page was refused outright.
+
+### Moving
+
+- `:transpose` turns rows into columns. It, the flips, and `:rotate` act on the selection's objects within the rectangle round them, or on the whole diagram with nothing selected; an arrow to a cell left in place follows its end. Landing on a cell left in place, or leaving what amscd cannot draw, is refused, where amscd went unchecked before.
+
+### Files
+
+- `sagitta --check [DIR]` reads every diagram under `DIR` without a window and lists what Sagitta cannot read, what saving would change, and labels KaTeX cannot read or whose macros the nearest `macros.tex` lacks, exiting 1 if it finds any, for a paper's CI.
+- A file's own `cramped` and `ampersand replacement` are kept when it is saved; they were dropped unless the export settings asked for them.
+- `tests/corpus/` holds a file for every style and edge type as Sagitta saves it, and the fast suite checks that each saves back byte for byte.
+
 ### The mode line
 
 - Undo and redo say what they took back or did again, as `undone: delete 2 objects, 1 arrow`.

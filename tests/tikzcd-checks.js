@@ -1,6 +1,13 @@
 /// The checks `tests/tikzcd.js` runs, in the context it builds: the sources are already loaded,
 /// and `check`, `example`, and `make_ui` are in scope.
 
+// The stub `UI` reads its page in use as the real one does, by `SpectralSequence`, which only
+// the sources loaded here can give it.
+{
+    const bare = make_ui;
+    make_ui = (deps) => bare({ ...deps, SpectralSequence });
+}
+
 /// A diagram loaded from the contents of its file, as opening it does (see `DiagramFile.read`):
 /// parsed, unless it has an encoded line, as older files do, that still reproduces its picture.
 function load(text) {
@@ -1720,9 +1727,9 @@ const pending = [];
         new Set(inside.quiver.all_cells())).map(({ to }) => to), [null]);
     check("and deleting some leaves it", SpectralSequence.deleting(inside,
         new Set(inside.quiver.all_cells().slice(1))), []);
-    check("a second page in one diagram is refused", refuse(() => Presets.run(inside,
-        "spectral-sequence", [])), "This diagram has a spectral sequence already, and keeps only"
-        + " one: put the next page in a diagram of its own.");
+    check("a second page over the first is refused", refuse(() => Presets.run(inside,
+        "spectral-sequence", [])), "That page would overlap the E_2 page already here: move the"
+        + " focus point clear of it.");
 
     const directive = (words) => {
         const { ui, diagnostics } = parse(text.replace(/grading=.*$/m, words));
@@ -1859,3 +1866,183 @@ const pending = [];
         Presets.steps(Presets.CHAIN_COMPLEX.step, 2), Presets.amscd("split",
             Presets.SHORT_EXACT_SEQUENCE.split)], [[1], [3, 1], "no split"]);
 }
+
+// The corpus: a file for each kind of thing a diagram can hold (every tail, body, and head, the
+// edge types, curves, shifts, loops, colours, 2-cells, the environment's options, amscd, and a
+// spectral sequence), each as Sagitta saves it. Opening and saving each must give back its bytes,
+// and the corpus must name every style, so that a new one comes with a file that holds it.
+pending.push((async () => {
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const changed = [];
+    const seen = new Set();
+    for (const [name, text] of corpus()) {
+        const { ui, diagnostics } = load(text);
+        await tick();
+        if (diagnostics.length > 0 || ui.text() !== text) {
+            changed.push(name);
+        }
+        for (const edge of ui.quiver.all_cells().filter((cell) => cell.is_edge())) {
+            const style = edge.options.style;
+            seen.add(`type ${style.name}`);
+            if (style.name !== "arrow") {
+                continue;
+            }
+            for (const component of ["tail", "body", "head"]) {
+                const { name: kind, side } = style[component];
+                seen.add(`${component} ${kind === "cell" ? "solid"
+                    : kind === "hook" || kind === "harpoon" ? `${side}-${kind}` : kind}`);
+            }
+        }
+    }
+    check("every file of the corpus saves back byte for byte", changed, []);
+    const wanted = [
+        ...["arrow", "adjunction", "corner", "corner-inverse"].map((type) => `type ${type}`),
+        ...["tail", "body", "head"].flatMap((component) =>
+            Object.values(Commands.STYLES[component]).map((value) => `${component} ${value}`)),
+    ];
+    check("and the corpus holds every style and edge type",
+        Array.from(new Set(wanted)).filter((style) => !seen.has(style)), []);
+})());
+
+// Transposing turns a loop's angle `a` to `90 - a`, kept within (-180, 180].
+check("a transposed loop's angle stays within a turn", [0, 90, -90, 180, -135, 45]
+    .map((angle) => Transforms.angle(90 - angle)), [90, 0, 180, -90, -135, 45]);
+
+// `:limit` and `:colimit`: the cone over the selection, its label and legs guessed from its shape.
+{
+    const run = (code, select, command, words = []) => {
+        const { ui } = load(code);
+        ui.focus_position = new Position(0, 3);
+        ui.select(...ui.quiver.all_cells().filter((cell) => select.includes(cell.label)));
+        Commands.TABLE[command].run(new Commands(ui), words);
+        return ui;
+    };
+    const body = (ui) => ui.text().split("\n").slice(1, -2);
+    const added = (ui) => Array.from(ui.selection).map((cell) => cell.label);
+    const row = "\\begin{tikzcd}\n\tA & B\n\\end{tikzcd}\n";
+    const cospan = "\\begin{tikzcd}\n\t& B \\\\\n\tA & C\n\t\\arrow[from=1-2, to=2-2]\n"
+        + "\t\\arrow[from=2-1, to=2-2]\n\\end{tikzcd}\n";
+    const span = "\\begin{tikzcd}\n\tC & B \\\\\n\tA\n\t\\arrow[from=1-1, to=1-2]\n"
+        + "\t\\arrow[from=1-1, to=2-1]\n\\end{tikzcd}\n";
+    const pair = "\\begin{tikzcd}\n\tA & B\n\t\\arrow[\"f\", shift left, from=1-1, to=1-2]\n"
+        + "\t\\arrow[\"g\"', shift right, from=1-1, to=1-2]\n\\end{tikzcd}\n";
+    const one = "\\begin{tikzcd}\n\tA & B\n\t\\arrow[\"f\", from=1-1, to=1-2]\n\\end{tikzcd}\n";
+
+    const pullback = run(cospan, ["A", "B", "C"], "limit");
+    check(":limit of a cospan completes the square as its pullback, with the corner",
+        body(pullback), ["\t{A \\times_C B} & B \\\\", "\tA & C",
+            "\t\\arrow[\"{\\pi_2}\", from=1-1, to=1-2]", "\t\\arrow[\"{\\pi_1}\", from=1-1, to=2-1]",
+            "\t\\arrow[\"\\lrcorner\"{anchor=center, pos=0.125}, draw=none, from=1-1, to=2-2]",
+            "\t\\arrow[from=1-2, to=2-2]", "\t\\arrow[from=2-1, to=2-2]"]);
+    check("as one step, selected", [added(pullback).length, pullback.history.present], [4, 1]);
+    pullback.history.undo(pullback);
+    check("and undoes to the cospan", counts(pullback), [3, 2]);
+    check(":colimit of a span is its pushout", added(run(span, ["A", "B", "C"], "colimit")),
+        ["A \\sqcup_C B", "\\iota_1", "\\iota_2", ""]);
+    check("two objects take a product, a coproduct, or with additive a direct sum", [
+        added(run(row, ["A", "B"], "limit"))[0], added(run(row, ["A", "B"], "colimit"))[0],
+        added(run(row, ["A", "B"], "limit", ["additive"]))[0],
+    ], ["A \\times B", "A \\sqcup B", "A \\oplus B"]);
+    check("beyond the diagram's corner", body(run(row, ["A", "B"], "limit")).slice(0, 2),
+        ["\t{A \\times B} \\\\", "\t& A & B"]);
+    check("a parallel pair takes its equaliser, by a mono, or coequaliser, by an epi", [
+        body(run(pair, ["A", "B"], "limit")).slice(0, 3),
+        added(run(pair, ["A", "B"], "colimit"))[0],
+    ], [["\t{\\mathrm{eq}(f, g)} \\\\", "\t& A & B", "\t\\arrow[tail, from=1-1, to=2-2]"],
+        "\\mathrm{coeq}(f, g)"]);
+    check("an arrow takes its kernel or cokernel when additive, and otherwise a plain lim", [
+        added(run(one, ["A", "B"], "limit", ["additive"]))[0],
+        added(run(one, ["A", "B"], "colimit", ["additive"]))[0],
+        added(run(one, ["A", "B"], "limit"))[0],
+        added(run(one, ["A", "B"], "colimit"))[0],
+    ], ["\\ker f", "\\operatorname{coker} f", "\\lim", "\\operatorname{colim}"]);
+    check("a leg goes only where no arrow of the diagram does, unless all",
+        [added(run(cospan, ["A", "B", "C"], "limit")).length,
+            added(run(cospan, ["A", "B", "C"], "limit", ["all"])).length], [4, 5]);
+    check("nothing selected takes a terminal or initial object at the focus point",
+        [added(run(row, [], "limit")), added(run(row, [], "colimit"))], [["1"], ["0"]]);
+    check("universal adds a cone X and its unique arrow, dashed",
+        body(run(row, ["A", "B"], "limit", ["universal"])).slice(3, 4),
+        ["\t\\arrow[\"{\\exists !}\", dashed, from=1-1, to=2-2]"]);
+    check("a factor of more than one symbol is bracketed",
+        ["A", "X_1", "\\mathbb{Z}", "A \\oplus B", "H^{n}"].map(Universal.factor),
+        ["A", "X_1", "(\\mathbb{Z})", "(A \\oplus B)", "H^{n}"]);
+    const refused = (() => {
+        try {
+            run("\\begin{CD}\n\tA @. B\n\\end{CD}\n", ["A", "B"], "limit");
+        } catch (error) {
+            return error.message;
+        }
+        return null;
+    })();
+    check("amscd refuses a cone it cannot draw", refused?.startsWith("amscd has no diagonal"),
+        true);
+}
+
+// The 2-cell presets: a natural transformation between parallel functors, and an adjoint pair.
+{
+    const stamp = (name, words = []) => {
+        const { ui } = parse("");
+        ui.focus_position = Position.zero();
+        Presets.run(ui, name, words);
+        return ui.text().split("\n").slice(1, -2);
+    };
+    check(":nat stamps F and G curving apart, and alpha between them", stamp("natural-transformation"), [
+        "\t{\\mathcal{C}} && {\\mathcal{D}}",
+        "\t\\arrow[\"\"{name=0, anchor=center, inner sep=0}, \"F\", curve={height=-18pt},"
+            + " from=1-1, to=1-3]",
+        "\t\\arrow[\"\"{name=1, anchor=center, inner sep=0}, \"G\"', curve={height=18pt},"
+            + " from=1-1, to=1-3]",
+        "\t\\arrow[\"\\alpha\", between={0.2}{0.8}, Rightarrow, from=0, to=1]",
+    ]);
+    check("down a column, with its own labels",
+        stamp("natural-transformation", ["dir=d", "obj=C,D", "maps=U,V", "cell=\\eta"]).slice(0, 3),
+        ["\tC \\\\", "\t\\\\", "\tD"]);
+    check(":adj stamps L over R, and the adjunction between them", stamp("adjoint-pair").slice(1), [
+        "\t\\arrow[\"\"{name=0, anchor=center, inner sep=0}, \"L\", curve={height=-12pt},"
+            + " from=1-1, to=1-3]",
+        "\t\\arrow[\"\"{name=1, anchor=center, inner sep=0}, \"R\", curve={height=-12pt},"
+            + " from=1-3, to=1-1]",
+        "\t\\arrow[\"\\dashv\"{anchor=center, rotate=-90}, draw=none, from=0, to=1]",
+    ]);
+    const refused = (() => {
+        try {
+            stamp("adjoint-pair", ["maps=L"]);
+        } catch (error) {
+            return error.message;
+        }
+        return null;
+    })();
+    check("and each takes two maps", refused, "An adjoint pair has two arrows: maps gives 1.");
+}
+
+// Several spectral sequence pages in one diagram: each keeps its frame, in a comment of its own,
+// and draws its own axes; the page in use is the one holding the selection or the focus point.
+pending.push((async () => {
+    const ui = make_ui({ DOM, Quiver, Grid, Settings, SETTINGS, Offset, History, ArrowOptions });
+    ui.focus_position = new Position(1, 0);
+    Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1", "obj=\\bullet"]);
+    ui.focus_position = new Position(6, 0);
+    Presets.run(ui, "spectral-sequence", ["p=0..1", "q=0..1", "page=3", "obj=\\bullet"]);
+    check("a second page beside the first is kept", ui.frames.map((frame) => frame.page), [2, 3]);
+    check("the page in use is the one just stamped, selected", ui.frame.page, 3);
+    ui.deselect();
+    check("or with nothing selected, the one the focus point is in", ui.frame.page, 3);
+    ui.focus_position = new Position(0, 0);
+    check("and the first, from its own", ui.frame.page, 2);
+    const text = ui.text();
+    check("each is written in a comment of its own", text.split("\n")
+        .filter((line) => line.includes("% sagitta: spectral-sequence")).length, 2);
+    check("and both draw their axes in the one option",
+        text.split("\\coordinate (sagitta-corner)").length - 1, 2);
+    const back = load(text);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    check("both are read back", [back.diagnostics.length, back.ui.frames.map((frame) => frame.page),
+        back.ui.text() === text], [0, [2, 3], true]);
+    ui.history.undo(ui);
+    check("undoing the second leaves the first", ui.frames.map((frame) => frame.page), [2]);
+    ui.history.redo(ui);
+    check("and redoing brings it back", ui.frames.map((frame) => frame.page), [2, 3]);
+    check("deleting everything takes every page", SpectralSequence.deleting(ui,
+        new Set(ui.quiver.all_cells())).map(({ to }) => to), [null, null]);
+})());

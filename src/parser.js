@@ -427,7 +427,10 @@ class Parser {
             // A spectral sequence's frame, which Sagitta keeps in a comment (see
             // `SpectralSequence`). One that cannot be read is said so, and left out.
             try {
-                this.frame = SpectralSequence.read(comment) ?? this.frame ?? null;
+                const frame = SpectralSequence.read(comment);
+                if (frame !== null) {
+                    this.frames = [...(this.frames ?? []), frame];
+                }
             } catch (error) {
                 this.unread_frame = true;
                 this.log(this.warn(`Spectral sequence ignored: ${error.message}`,
