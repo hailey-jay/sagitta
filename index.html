@@ -9,40 +9,45 @@
     <link rel="icon" href="icon.svg">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" type="text/css" media="screen" href="main.css">
-    <script src="web/host.js"></script>
-    <script src="src/katex.js"></script>
-    <script src="src/ds.js"></script>
-    <script src="src/dom.js"></script>
-    <script src="src/grid.js"></script>
-    <script src="src/curve.js"></script>
-    <script src="src/arrow.js"></script>
-    <script src="src/constants.js"></script>
-    <script src="src/parser.js"></script>
-    <script src="src/quiver.js"></script>
-    <script src="src/formats.js"></script>
-    <script src="src/settings.js"></script>
-    <script src="src/schema.js"></script>
-    <script src="src/macros.js"></script>
-    <script src="src/delimiters.js"></script>
-    <script src="src/history.js"></script>
-    <script src="src/colours.js"></script>
-    <script src="src/cell.js"></script>
-    <script src="src/modes.js"></script>
-    <script src="src/options.js"></script>
-    <script src="src/modeline.js"></script>
-    <script src="src/layers.js"></script>
-    <script src="src/keymap.js"></script>
-    <script src="src/bindings.js"></script>
-    <script src="src/commands.js"></script>
-    <script src="src/presets.js"></script>
-    <script src="src/spectral.js"></script>
-    <script src="src/prompt.js"></script>
-    <script src="src/keys.js"></script>
-    <script src="src/pointer.js"></script>
-    <script src="src/svg.js"></script>
-    <script src="src/file.js"></script>
-    <script src="src/ui.js"></script>
-    <script src="src/main.js"></script>
+    <link rel="stylesheet" type="text/css" href="katex.css">
+    <!-- Nearly every label uses these two, so they load alongside the scripts rather than after
+         the first label asks for them. -->
+    <link rel="preload" href="fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin>
+    <script defer src="web/host.js"></script>
+    <script defer src="src/katex.js"></script>
+    <script defer src="src/ds.js"></script>
+    <script defer src="src/dom.js"></script>
+    <script defer src="src/grid.js"></script>
+    <script defer src="src/curve.js"></script>
+    <script defer src="src/arrow.js"></script>
+    <script defer src="src/constants.js"></script>
+    <script defer src="src/parser.js"></script>
+    <script defer src="src/quiver.js"></script>
+    <script defer src="src/formats.js"></script>
+    <script defer src="src/settings.js"></script>
+    <script defer src="src/schema.js"></script>
+    <script defer src="src/macros.js"></script>
+    <script defer src="src/delimiters.js"></script>
+    <script defer src="src/history.js"></script>
+    <script defer src="src/colours.js"></script>
+    <script defer src="src/cell.js"></script>
+    <script defer src="src/modes.js"></script>
+    <script defer src="src/options.js"></script>
+    <script defer src="src/modeline.js"></script>
+    <script defer src="src/layers.js"></script>
+    <script defer src="src/keymap.js"></script>
+    <script defer src="src/bindings.js"></script>
+    <script defer src="src/commands.js"></script>
+    <script defer src="src/presets.js"></script>
+    <script defer src="src/spectral.js"></script>
+    <script defer src="src/prompt.js"></script>
+    <script defer src="src/keys.js"></script>
+    <script defer src="src/pointer.js"></script>
+    <script defer src="src/svg.js"></script>
+    <script defer src="src/file.js"></script>
+    <script defer src="src/ui.js"></script>
+    <script defer src="src/main.js"></script>
 </head>
 <body>
 </body>

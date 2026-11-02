@@ -21,8 +21,9 @@ self.addEventListener("fetch", (event) => {
         const cache = await caches.open(CACHE);
         try {
             const response = await fetch(request);
+            // Kept in the background, so that the page has the response as it streams in.
             if (response.ok) {
-                await cache.put(request, response.clone());
+                event.waitUntil(cache.put(request, response.clone()));
             }
             return response;
         } catch (error) {
