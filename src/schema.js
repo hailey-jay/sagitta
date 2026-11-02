@@ -22,6 +22,9 @@ const SETTINGS = {
         // Whether the canvas is grey, with the default colour drawn in white (see `main.css`). Until
         // it is set, it follows the system's colour scheme (see `UI.initialise`).
         "ui.dark_mode": false,
+        // Whether the mode line, the key list, the command line, and the tips are light rather
+        // than dark (see `body.light-panels` in `main.css`).
+        "ui.light_panels": false,
         // The zoom the view starts at, and that `reset-zoom` returns to, in percent.
         "ui.zoom": 100,
         // The size of the labels, in pixels.
@@ -31,6 +34,10 @@ const SETTINGS = {
         // The characters of the codes that select cells, in the order they are given out (see
         // `UI.recode`): the keyboard's home row, then the bottom row, the top, and the digits.
         "ui.hint_characters": "ASDFGHJKLZXCVBNMQWERTYUIOP1234567890",
+        // Whether labels are typed as text, and stored wrapped (see `TextLabels`).
+        "ui.text_labels": false,
+        // What text labels are wrapped in.
+        "ui.text_wrapper": "\\textnormal",
     },
 
     /// The numbers a numeric setting may be, as `[least, most]`.
@@ -48,6 +55,10 @@ const SETTINGS = {
         "diagram.arrow_preset": [
             (value) => Object.hasOwn(Commands.PRESETS, value),
             () => `one of ${Object.keys(Commands.PRESETS).join(", ")}`,
+        ],
+        "ui.text_wrapper": [
+            (value) => TextLabels.WRAPPERS.includes(value),
+            () => `one of ${TextLabels.WRAPPERS.join(", ")}`,
         ],
         "ui.hint_characters": [
             (value) => /^[A-Z0-9]{2,}$/.test(value) && new Set(value).size === value.length,

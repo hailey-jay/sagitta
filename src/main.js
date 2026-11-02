@@ -14,10 +14,4 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Open the diagram and macros named on the command line (see `DiagramFile`).
     // The test drivers wait on this.
     ui.started = ui.file.initialise();
-
-    // Load the style sheet needed for KaTeX.
-    document.head.appendChild(new DOM.Element("link", {
-        rel: "stylesheet",
-        href: "katex.css",
-    }).element);
 });

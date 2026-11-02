@@ -10,7 +10,7 @@ sagitta [--macros FILE] [--devtools] [DIAGRAM.cd.tex] [-- SWITCHES]
 ```
 
 `DIAGRAM` need not exist yet.
-`sagitta --help` lists the options, and `--version` gives the version.
+`sagitta --help` lists the options, and `--version` gives the version, as `:version` does inside.
 Anything after `--` goes to Electron and Chromium, such as `-- --ozone-platform=wayland`.
 `.cd.tex` files, and the `.tikzcd` files of earlier versions, are registered as `text/x-tikzcd` and open in Sagitta from the file manager; other `.tex` files do not.
 
@@ -70,6 +70,9 @@ There are no global macros, by design.
 `--macros FILE`, `f` in the macros layer, or `:macros FILE` choose another file.
 The macros reload whenever the file changes.
 
+KaTeX draws a macro it does not know in red.
+While any label uses one, or cannot be read at all, the mode line shows `⚠ N undefined`, with the macros as its tooltip; clicking it, or `:undefined`, selects those cells, centres the view on them, and names the macros.
+
 ## Keys
 
 Sagitta's keys work as quiver's do: the command layer stays open by itself, so its keys work without `;`, and a label is typed only after RET, which selects the whole label, so that typing replaces it and an arrow key edits it in place; RET again, or ESC, puts it down.
@@ -78,6 +81,9 @@ Backspace, like `<delete>`, deletes the selection, or, with nothing selected, th
 The layer's keys are listed only on `;`, never by waiting, though a list of choices, such as after `t`, shows at once.
 The mode line's badge says what the keys do now: `NORMAL` at rest; `;`, or what the layer is setting, such as `; CURVE`, while it awaits a key; `EDIT` while a label is edited; and `MARK` or `CHECKPOINT`, in yellow, while one waits.
 A `●` after the file's name marks unsaved changes.
+A cell's position is given as the export names it, row then column from the diagram's top-left object, as `2-1` for `from=2-1`; a position above or left of the diagram has a row or column of 0 or less.
+Undo and redo say what they took back or did again, as `undone: delete 2 objects, 1 arrow`.
+A message stays for three seconds, and longer the longer it is, up to ten; `:messages` lists the last hundred, newest first, each with its time, and ESC leaves the list.
 
 The rest live one key away:
 
@@ -85,23 +91,36 @@ The rest live one key away:
   `?` shows or hides the list too.
   Its capitals act on the label, and curve and offset set a loop's radius and angle instead.
   A preset with no arrow selected sets `diagram.arrow_preset`, the preset new arrows take, and the list marks the one they take now; a style still needs an arrow to apply to.
+  The blank preset (`; _`) draws no tail, body, or head, with the label over where the line would be, as `\cong` set between two objects; it is written with `draw=none`, and the canvas alone shows it faintly, so it can be found. amscd cannot draw it.
 - `:` the command line: named commands, with Tab completion.
 - `/` (or `C-f`) search: selects the cells whose label is (or else contains) what is typed, or else the cells whose codes are typed.
   Each vertex has a code of one character, given out row by row (`asdfghjkl`, `zxcvbnm`, `qwertyuiop`, then the digits), and two once those run out; removing a vertex frees its code.
   An arrow's code is its source's then its target's, so the arrow from `A` to `S` is `AS`, and a second one `AS2`.
   An arrow whose code would be longer than three characters, as between arrows, takes one of its own, as a vertex does.
 - `C-/` (or `<f1>`, or `:help`, where a browser or one of its extensions keeps the keys) help, which ends with what Sagitta is made from and where its source is, `C-e` export, `C-i` import (paste tikz-cd), `C-m` macros (paste definitions), `C-,` settings, and `C-s` save.
+  Typing in the help searches it, keeping the lines whose key or description hold what is typed; Backspace takes a character back, and ESC clears the search, then leaves.
+  Before anything is typed, `:` and `;` do what they do outside the help.
 - `:dark-mode`: a grey canvas, with the default colour drawn in white.
   Other colours are drawn exactly, and nothing saved changes.
   It follows the system's colour scheme until it is first set.
 - `C-arrows` move the selection; on arrows alone they bend or shift them, and on loops alone they resize or turn them.
+- `S-arrows` walk the diagram: from a cell (the one under the focus point, or the one selected), they select the arrow at it that leaves nearest that way, within a right angle, outgoing before incoming; from one selected arrow, they go to its target along it, to its source against it, and across it to the arrow beside it on that side, or else to an arrow attached to it.
+  A cell walked to takes the focus point; an arrow hides it, so that RET labels the arrow.
+  While the command layer is setting a number, `S-arrows` step it, as the arrows do.
+- `; v`, or `:select-mode`, starts select mode: the focus point gathers the cells it passes over into a buffer, outlined in blue, starting with the cell under it, and the arrows between them come too.
+  RET then replaces the selection with the buffer, `+` (or `=`) adds it, and `-` takes it away, each leaving select mode; ESC, or `; v` again, leaves it with the selection as it was.
+  The mode line shows `SELECT` meanwhile.
 - `SPC` makes a cell at the focus point, or takes the one there, joined by arrows from the selected cells, and `S-SPC` selects or deselects the cell there.
   The new cell is selected with the arrows just drawn to it, so a preset or a style restyles them at once, while RET labels the cell alone; the arrows are selected again once the label is put down.
-- `C-SPC` marks one corner of a rectangle of cells, as Emacs sets a mark: press it, move the focus point, and press it again to select every cell between the two corners, along with the arrows whose both ends are among them.
-  `C-S-SPC` adds that rectangle to the selection rather than replacing it, and ESC lets go of the mark.
+  S-RET labels the arrows instead, and the mode line names both, as `B  S-RET f`.
+- Cells just drawn, or stamped by a preset, are queued for labels: Tab goes to the next one waiting, and S-TAB back, to any cell of the queue, labelled or not, so that a typo can be fixed; Tab then goes on to the next one waiting.
+  ESC, with nothing selected and the focus point hidden, lets go of the queue.
+- `C-SPC` marks one corner of a rectangle of cells, as Emacs sets a mark: press it, move the focus point, and press it again to put every cell between the two corners, along with the arrows whose both ends are among them, into select mode's buffer.
+  Select mode opens if it is not on, so RET then selects the rectangle, `+` adds it, and `-` takes it away; in select mode, the rectangle joins what is gathered already, and the path to its other corner is not gathered.
+  ESC lets go of the mark.
   While there is a mark, the mode line shows `MARK`, and a dashed rectangle runs from it to the focus point, over the cells it would take.
-  `:mark` and `:mark-add` do the same from the command line.
-  The keys file can move it (`mark`, and `mark-add` for a key of its own that adds); Space alone cannot be bound, but its chords can.
+  `:mark` does the same from the command line.
+  The keys file can move it (`mark`); Space alone cannot be bound, but its chords can.
   Input methods such as IBus and Fcitx take Control-Space to switch input method, so where one runs, `C-SPC` never reaches Sagitta: bind `mark` to another key in the keys file (`mark C-g`, say, which is free), or change the input method's own key.
 
 In a label, `(`, `[`, and `{` wrap the selected part of it, and otherwise bring their closing delimiter, as in most editors, unless it is already next; typing the closing one steps over it, and Backspace in an empty pair deletes both.
@@ -112,6 +131,7 @@ After `\left`, the closing delimiter comes with `\right`.
 The mouse works too.
 Click a cell to select it, and again to edit its label; click an empty space twice for a new cell; drag from a cell to draw an arrow, by the edge of its space to move it, an arrow's end to reconnect it, and a selected arrow's checkpoint, by its ring, to move it.
 The wheel pans, and zooms with Shift or Control held; dragging with the middle button pans, over a cell as well as over empty space, as does dragging with Control or Option held.
+On a touch screen, two fingers pan the view and pinch to zoom; whatever the first finger had begun, such as an arrow, is let go.
 Right-click, or the `; commands` button in the mode line, opens the command layer, listing its keys at once, and clicking a line of its list presses that key; the sliders have `−` and `+` buttons.
 The mode line's `⚙` button opens the settings.
 The help lists all this under Mouse.
@@ -145,7 +165,7 @@ Keys are written as the help shows them:
   A capital letter means Shift too.
   Other characters are written as typed, as in `C-+`, without `S-`.
 - `<delete>`, `<insert>`, `<home>`, `<end>`, `<prior>`, `<next>`, and `<f1>` to `<f12>` work alone or with `C-` and `S-`.
-- RET, TAB, SPC (with any modifier), ESC, DEL, and the arrows cannot be rebound.
+- RET, TAB, SPC (with any modifier), ESC, DEL, and the arrows cannot be rebound, with Shift or without.
 
 A key that a line binds is taken from whatever had it by default.
 A name alone unbinds it, and `unbind` frees keys from whatever has them.
@@ -176,13 +196,13 @@ The names and their defaults:
 | `differential`, of a spectral sequence's page (see Spectral sequences) | `; D` |
 | `align-left`, `align-centre`, `align-over` | none |
 | `plain`, `equals`, `inclusion`, `mono`, `epi` | `; !`, `; =`, `; (`, `; <`, `; >` |
-| `maps-to`, `dashed`, `dotted`, `squiggly` | `; \|`, `; -`, none, `; ~` |
+| `maps-to`, `dashed`, `dotted`, `squiggly`, `blank` | `; \|`, `; -`, none, `; ~`, `; _` |
 | `align-source`, `align-target` | `; [`, `; ]` |
 | `crossing-over` | `; x` |
 | `route`, `checkpoint`, `move-checkpoint`, `rounding` | `; w`, `; k`, `; m`, none |
-| `mark`, `mark-add` | `C-SPC` (with `S-`, adding), none |
+| `mark` | `C-SPC` |
 | `colour`, `label-colour` | `; c`, `; C` |
-| `select-at-focus`, `toggle-selection`, `create-arrows` | none (`S-SPC` does it), `; s`, `; e` |
+| `select-at-focus`, `toggle-selection`, `select-mode`, `create-arrows` | none (`S-SPC` does it), `; s`, `; v`, `; e` |
 | `change-source`, `change-target` | `; ,`, `; .` |
 
 The arrow options take the units the export writes: `curve` and `rounding` in pt, `radius` (a loop's distance, negative for anticlockwise) in mm, `angle` in degrees, and `offset` in tikz-cd's shifts.
@@ -194,6 +214,19 @@ All but `angle` take a fraction, as `:curve 7.5`, up to TeX's largest dimension;
 A browser keeps `C-n` for a new window, so there `:new` starts a new diagram.
 
 Any other command (Tab at `:` lists them) can be bound too, and its keys run it with no arguments.
+
+## Text labels
+
+`:text-labels` turns text-label mode on, `:text-labels off` turns it off, and `:text-labels` alone flips it; it is kept as `ui.text_labels`, and the mode line follows the file's name with `[text labels]` while it is on.
+In it, a label is typed as text, and stored wrapped, as `\textnormal{exact sequence}`, which the canvas and the export draw as they would any label:
+
+- Typing over a whole label, as RET leaves it selected, types text; the label input then shows a wrapped label without its wrapper, and wraps what is typed.
+  A label that is not one wrapped group, as `\text{a} \text{b}`, or a selection of different labels, is edited as it is.
+- `_`, `^`, `&`, `#`, and `~`, which would stop TeX in text, or split a tikz-cd cell, are typed as text: `\_`, `\textasciicircum{}`, `\&`, `\#`, and `\textasciitilde{}`.
+  Between `$ $`, and after a backslash, they are typed as they are, so `$x_1$` is maths inside the text.
+- `\textnormal` is the document's upright text even in an italic theorem, and shrinks in an arrow's script style; it needs `amsmath`, as `\text` does.
+  `ui.text_wrapper` chooses `\text` (the surrounding text's font) or `\textrm` (roman, of the surrounding shape) instead, and a label wrapped in any of the three is edited as text.
+- `/` finds a text label by its text.
 
 ## Crossing over
 
@@ -260,7 +293,7 @@ A connecting morphism is one arrow: curved (`; b`, and `; -` for dashed), or rou
 
 A preset stamps a ready-made diagram at the focus point: a chain complex, or an exact sequence.
 What it stamps is ordinary cells, selected, as one step to undo; nothing remembers the preset afterwards.
-Its cells are queued for labelling, as cells just drawn are: Tab goes to the first of them, and on through the rest in the order the diagram reads, each object followed by the arrows from it, each leaving the queue once labelled.
+Its cells are queued for labelling, as cells just drawn are: Tab goes to the first of them, and on through the rest in the order the diagram reads, each object followed by the arrows from it, each leaving the queue once labelled, though S-TAB still goes back to it.
 
 | Command | Stamps |
 |---|---|
@@ -357,12 +390,15 @@ A value the setting cannot take is refused, with what it may be.
 | `export.cramped` | `false` | export with `cramped` |
 | `export.standalone` | `false` | wrap the export in a standalone document |
 | `diagram.var_corner` | `false` | the corner `; p` gives first, which follows the last one used |
-| `diagram.arrow_preset` | `"plain"` | the preset new arrows take, from `plain`, `equals`, `inclusion`, `mono`, `epi`, `maps-to`, `dashed`, `dotted`, and `squiggly` |
+| `diagram.arrow_preset` | `"plain"` | the preset new arrows take, from `plain`, `equals`, `inclusion`, `mono`, `epi`, `maps-to`, `dashed`, `dotted`, `squiggly`, and `blank` |
 | `ui.dark_mode` | the system's | the grey canvas, which follows the system's colour scheme, and is left out of the file, until it is set |
+| `ui.light_panels` | `false` | light panels (the mode line, the key list, the command line, and the tips), with dark writing |
 | `ui.zoom` | `100` | the zoom the view starts at, and `reset-zoom` returns to, in percent (20 to 200) |
 | `ui.label_size` | `26` | the size of labels, in pixels (8 to 72), which the whole diagram is drawn to the scale of (see The canvas) |
 | `ui.which_key_compact` | `false` | list only the command layer's keys and their values, with what each does on hovering |
 | `ui.hint_characters` | `"ASDF...7890"` | the characters of the codes `/` selects cells by, in order |
+| `ui.text_labels` | `false` | type labels as text (see Text labels) |
+| `ui.text_wrapper` | `"\\textnormal"` | what text labels are wrapped in: `\textnormal`, `\text`, or `\textrm` |
 
 The export layer (`C-e`) toggles the `export.` settings, `:dark-mode` toggles dark mode, and the corners set `diagram.var_corner`.
 A setting of the wrong kind or out of range is reported in the mode line and left at its default.

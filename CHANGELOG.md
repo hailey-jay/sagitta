@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.8.0 (unreleased)
+
+### Upgrading
+
+- `S-arrows` walk the diagram rather than extending the selection. `; v` (select mode) gathers cells as the arrows pass over them, as `S-arrows` did, then RET, `+`, or `-` applies them.
+- The second `C-SPC` puts the rectangle into select mode's buffer rather than selecting it, so RET selects it, `+` adds it, and `-` takes it away. `C-S-SPC`, `mark-add`, and `:mark-add` are gone, since `+` adds; a keys file that binds `mark-add` says `no command "mark-add"` until the line is taken out.
+
+### Labels
+
+- S-RET labels the selected arrows rather than the cell: after Space draws to a cell, RET labels the cell and S-RET the arrows, and the mode line names both.
+- S-TAB goes back through the queue to cells already labelled, so a typo can be fixed; Tab then goes on to the next one waiting. ESC lets go of the queue, as before.
+- Styling, reversing, or flipping an arrow leaves it, and its cell, in the queue, since neither is labelled.
+- `:text-labels` types labels as text, stored as `\textnormal{...}` (or `\text`, or `\textrm`, by `ui.text_wrapper`): the label input shows the text alone, `_`, `^`, `&`, `#`, and `~` are typed as text outside `$ $`, and `/` finds a label by its text.
+- Labels are set by KaTeX 0.19.1 rather than 0.16.25, which adds `\mapsfrom`, `\reflectbox`, `\underbracket`, and `\overbracket`, and fixes, among others, the size of a big `[` and the spacing of `\*frac`.
+
+### Selecting
+
+- `S-arrows` walk from a cell to the arrow at it that leaves nearest that way, and from an arrow to its source, its target, or the arrow beside it.
+- `; v`, or `:select-mode`, gathers a buffer, outlined in blue, that RET puts in place of the selection, `+` adds to it, and `-` takes from it.
+- A mark's rectangle (`C-SPC`) goes into the same buffer, and joins what select mode has gathered, so rectangles and cells walked over can be taken together, or a rectangle taken away.
+
+### Arrows
+
+- The blank preset (`; _`, `:blank`) draws nothing, with the label over the line, as `\cong` between objects, written as `draw=none`; the canvas shows it faintly.
+
+### The mode line
+
+- Undo and redo say what they took back or did again, as `undone: delete 2 objects, 1 arrow`.
+- A message stays longer the longer it is, up to ten seconds, and `:messages` lists the last hundred, newest first, each with its time.
+- A cell's position reads as the export names it, row then column from the diagram's top-left object (`2-1`), rather than in the canvas's own coordinates.
+- While a label uses a macro KaTeX does not know, or cannot be read, the mode line shows `⚠ N undefined`; clicking it, or `:undefined`, selects those cells and names the macros.
+- The buttons have tooltips naming their keys, and screen readers a name for each glyph and each message as it comes.
+
+### The help and the key list
+
+- Typing in the help searches it; ESC clears the search, then leaves.
+- A key list line cut short has the whole of what it says as its tooltip, and a list taller than the window scrolls.
+- In a narrow window, each group's title goes above its lines, and the lines narrow, so that nothing runs off the right.
+
+### Elsewhere
+
+- `:version` says which version of Sagitta this is.
+- `ui.light_panels` (`p` in the settings layer) makes the panels light, with dark writing.
+- A button reached by the keyboard is ringed.
+- On a touch screen, two fingers pan and pinch to zoom.
+- The web page starts sooner: its scripts load together rather than one after another, KaTeX's styles and its two commonest fonts load with them, and it opens from the files it kept, refreshing them behind for the next visit, rather than waiting on the network for each. A version just published therefore shows from the second visit after it.
+- Turning the wheel, or swiping a trackpad, redraws the grid once a frame, however many turns arrive in it.
+- KaTeX is the minified build its release ships, half the size, so the web page has half as much to download and parse.
+- `npm run site` gathers the web page into `site/`, to upload to a static host as it is, rather than serving the whole repository.
+
 ## 0.7.1
 
 ### Arrow options

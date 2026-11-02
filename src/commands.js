@@ -302,6 +302,9 @@ class Commands {
         if (preset.level !== undefined) {
             this.slide("level", [preset.level]);
         }
+        if (preset.label_alignment !== undefined) {
+            ui.arrow_options.set_label_alignment(ui, preset.label_alignment);
+        }
     }
 }
 
@@ -348,6 +351,8 @@ Commands.PRESETS = {
     "dashed": { body: "dashed" },
     "dotted": { body: "dotted" },
     "squiggly": { body: "squiggly" },
+    // Nothing drawn, and the label over where the arrow would be, as `\cong` between objects.
+    "blank": { tail: "none", body: "none", head: "none", level: 1, label_alignment: "over" },
 };
 
 /// The command line's commands. `completions` lists the arguments offered by Tab.
@@ -435,6 +440,31 @@ Commands.TABLE["help"] = {
 };
 
 // Open the settings file, or the keys file, in the desktop's editor (in a browser, both, in the page).
+/// `undefined` selects the cells whose labels use macros KaTeX does not know, or cannot be read,
+/// and says which macros, so that a large diagram's can be found (see `UI.broken`).
+Commands.undefined_macros = (ui) => {
+    const { cells, macros } = ui.broken();
+    if (cells.length === 0) {
+        ui.mode_line.flash("every label's macros are defined");
+        return;
+    }
+    ui.deselect();
+    ui.select(...cells.map(([cell]) => cell));
+    ui.centre_view();
+    const one = cells.length === 1;
+    const labels = `${cells.length} label${one ? "" : "s"}`;
+    ui.mode_line.flash(macros.length > 0
+        ? `${labels} ${one ? "uses" : "use"} what is not defined: ${macros.join(" ")}`
+        : `${labels} cannot be read`);
+};
+Commands.TABLE["undefined"] = {
+    run: (commands) => Commands.undefined_macros(commands.ui),
+};
+
+/// `messages` lists what the mode line has said, newest first (see `Layer.Messages`).
+Commands.TABLE["messages"] = {
+    run: (commands) => commands.ui.keymap.layers.messages.toggle(),
+};
 Commands.TABLE["settings-file"] = {
     run: (commands) => commands.ui.keymap.layers.settings.open_file(),
 };
@@ -535,17 +565,52 @@ Commands.TABLE["move-checkpoint"] = {
     run: (commands) => commands.ui.keys.carry(),
 };
 
-/// `mark` and `mark-add` do what their keys do (see `Keys.mark`), from the command line.
-for (const [name, add] of [["mark", false], ["mark-add", true]]) {
-    Commands.TABLE[name] = {
-        run: (commands) => {
-            const ui = commands.ui;
-            if (!ui.keys.mark(add)) {
-                throw new Error(`The mark cannot be set in the ${ui.mode.name} mode.`);
-            }
-        },
-    };
-}
+/// `version` says which version of Sagitta this is, as the help's About lines do.
+Commands.TABLE["version"] = {
+    run: (commands) => {
+        host.version().then((version) => commands.ui.mode_line.flash(
+            version === null ? "Sagitta, of an unknown version" : `Sagitta ${version}`));
+    },
+};
+
+/// `text-labels` turns text-label mode on or off (see `TextLabels`), or, with no argument, flips
+/// it. `claire` is its alias, and undocumented.
+Commands.TABLE["text-labels"] = {
+    arguments: true,
+    completions: ["on", "off"],
+    run: (commands, [value]) => {
+        const ui = commands.ui;
+        const on = value === undefined ? !ui.settings.get("ui.text_labels")
+            : ui.settings.parse("ui.text_labels", value.toLowerCase());
+        if (on === undefined) {
+            throw new Error(`text-labels takes on or off, not "${value}".`);
+        }
+        ui.change_setting("ui.text_labels", on);
+        ui.update_selection();
+        ui.mode_line.update(ui);
+        ui.mode_line.flash(on ? "text labels: typing writes text" : "text labels off");
+    },
+};
+
+/// `select-mode` does what `; v` does (see `Keys.select_mode`).
+Commands.TABLE["select-mode"] = {
+    run: (commands) => {
+        if (!commands.ui.in_mode(UIMode.Default)) {
+            throw new Error(`Select mode cannot start in the ${commands.ui.mode.name} mode.`);
+        }
+        commands.ui.keys.select_mode();
+    },
+};
+
+/// `mark` does what its key does (see `Keys.mark`), from the command line.
+Commands.TABLE["mark"] = {
+    run: (commands) => {
+        const ui = commands.ui;
+        if (!ui.keys.mark()) {
+            throw new Error(`The mark cannot be set in the ${ui.mode.name} mode.`);
+        }
+    },
+};
 
 /// `crossing-over` toggles whether the selected arrows cut a gap in the arrows they cross, and
 /// `crossing-over on` or `off` sets it.
@@ -654,4 +719,5 @@ Commands.ALIASES = {
     "help": "shortcuts",
     "w": "save",
     "u": "undo",
+    "claire": "text-labels",
 };

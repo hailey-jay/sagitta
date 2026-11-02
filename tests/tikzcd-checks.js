@@ -907,7 +907,7 @@ const pending = [];
         check("each is reported in the schema's own words", settings.problems, [
             "ui.zoom should be a number from 20 to 200",
             "diagram.arrow_preset should be one of plain, equals, inclusion, mono, epi, maps-to,"
-                + " dashed, dotted, squiggly",
+                + " dashed, dotted, squiggly, blank",
             "ui.dark_mode should be true or false",
         ]);
 
@@ -1025,7 +1025,8 @@ const pending = [];
         .map((combination) => Bindings.signature(combination));
     check("the mark is C-SPC by default", signatures(null, "mark"), ["C- "]);
     check("and may be rebound", signatures("mark C-q", "mark"), ["C-q"]);
-    check("as may the mark that adds", signatures("mark-add C-S-q", "mark-add"), ["C-S-q"]);
+    check("and the mark that added is gone, and says so", Bindings.resolve("mark-add C-S-q").problems,
+        ['line 1: no command "mark-add"']);
     check("but Space alone is still refused", Bindings.resolve("mark SPC").problems,
         ['line 1: "SPC": SPC keeps its own meaning']);
 
@@ -1626,6 +1627,13 @@ const pending = [];
         [["\tA & {50\\%}", "\t\\arrow[\"{x\\%y}\", from=1-1, to=1-2]"], ["A", "50\\%", "x\\%y"], 0]);
     check("an escaped one is left as it is", [Delimiters.percent("\\%"), Delimiters.percent("%%"),
         Delimiters.percent("a\\\\%")], ["\\%", "\\%\\%", "a\\\\\\%"]);
+    check("a $ is the sign in maths, and goes into maths in text", [
+        "a$b", "\\$", "\\textnormal{Hi $\\sum$}", "\\text{$x$ and $y$} $",
+        "\\textnormal{$\\text{$z$}$}", "\\mathbb{R}$",
+    ].map(Delimiters.dollars), [
+        "a\\$b", "\\$", "\\textnormal{Hi $\\sum$}", "\\text{$x$ and $y$} \\$",
+        "\\textnormal{$\\text{$z$}$}", "\\mathbb{R}\\$",
+    ]);
     check("braces balance, escaped ones aside", ["{B", "B}", "}{", "\\{", "{\\}}", "\\frac{a}{b}"]
         .map(Delimiters.balanced), [false, false, false, true, true, true]);
 }

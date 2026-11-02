@@ -21,6 +21,7 @@ import functools
 import http.server
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -860,7 +861,7 @@ def test_a_cells_node_is_tikz_cds(sagitta, home):
                 const point = Arrow.border(shape, -degrees * Math.PI / 180);
                 return [point.x / pt, -point.y / pt];
             };
-            const strut = vertex.element.query_selector(".label .strut").element;
+            const strut = vertex.element.query_selector(".label .katex-strut").element;
             const depth = -(parseFloat(strut.style.verticalAlign) || 0)
                 * parseFloat(getComputedStyle(strut).fontSize);
             const content = vertex.element.query_selector(".content").element
@@ -955,15 +956,13 @@ def test_a_chord_in_the_keys_file_takes_the_key_from_its_default(sagitta, home):
 
 
 def test_the_keys_file_rebinds_the_mark(sagitta, home):
-    _keys(home, "mark C-q\nmark-add C-j\n")
-    # The top row with the new key, then the bottom row added with the other.
+    _keys(home, "mark C-q\n")
+    # The top row with the new key, selected with RET.
     rebound = sagitta("pressed", _diagram(home / "rebound"), json.dumps([
-        ["q", ["control"]], ["Right"], ["q", ["control"]],
-        ["Down"], ["j", ["control"]], ["Left"], ["j", ["control"]],
+        ["q", ["control"]], ["Right"], ["q", ["control"]], ["Enter"],
     ]))
-    # Each row's two vertices and its arrow; the arrows down the sides have their ends in
-    # different rectangles, so neither takes them.
-    assert rebound["counts"]["selected"] == 6, rebound
+    # The row's two vertices and its arrow.
+    assert rebound["counts"]["selected"] == 3, rebound
     # `C-SPC` is free now, and does nothing: no mark, and no vertex made by the Space in it.
     freed = sagitta("pressed", _diagram(home / "freed"), json.dumps([["Space", ["control"]]]))
     assert "MARK" not in freed["mode_line"]
@@ -992,7 +991,7 @@ def test_the_help_layer_shows_rebound_chords(sagitta, home):
     _keys(home, "copy C-S-y\nshortcuts C-/ <f1>\n")
     help = dict(sagitta("help", _diagram(home / "paper")))
     assert ["C-S-y", "copy"] in help["Chords"]
-    assert help["Help"] == [["C-/ RET ; ESC", "leave"]]
+    assert help["Help"] == [["type", "search the help, ESC to clear"], ["C-/ RET ; ESC", "leave"]]
 
 
 def test_the_keys_file_reports_its_problems_and_keeps_the_rest(sagitta, home):
@@ -1683,29 +1682,38 @@ def test_space_selects_the_arrow_it_draws_and_return_labels_the_cell(sagitta, ho
         "drawn": [2, True], "editing": [True], "after": 2, "labels": [""]}
 
 
-def test_the_mark_selects_a_rectangle_of_cells(sagitta, home):
-    """`C-SPC` at two corners takes every cell between them, and the arrows whose ends are both
-    among them; Shift adds that region to the selection; Escape drops a mark."""
+def test_the_mark_gathers_a_rectangle_into_the_buffer(sagitta, home):
+    """`C-SPC` at two corners puts every cell between them, and the arrows whose ends are both
+    among them, into select mode's buffer, which RET, `+`, and `-` then use; Escape drops a mark."""
     steps = sagitta("mark", _diagram(home / "paper"))
     assert "MARK" in steps["mark at A"]["mode_line"]
     assert steps["mark at A"]["counts"]["selected"] == 0
     # The rectangle shows from the mark, with `A` marked as one it would take, and grows to `B`,
-    # taking `B` and the arrow between them, before anything is selected.
+    # taking `B` and the arrow between them, before anything is gathered.
     assert steps["mark at A"]["region"] == {"shown": True, "size": [1, 1], "inside": 1}
     assert steps["towards B"]["region"] == {"shown": True, "size": [2, 1], "inside": 3}
-    assert steps["towards B"]["counts"]["selected"] == 0
-    assert steps["top row"]["region"] == {"shown": False, "size": None, "inside": 0}
-    # `A`, `B`, and the arrow between them.
+    assert steps["towards B"]["buffered"] == 0
+    # The second corner fills the buffer, in select mode, and selects nothing yet.
+    row = steps["row in the buffer"]
+    assert row["region"] == {"shown": False, "size": None, "inside": 0}
+    assert row["buffered"] == 3 and row["counts"]["selected"] == 0
+    assert "SELECT" in row["mode_line"] and "MARK" not in row["mode_line"]
+    # RET selects `A`, `B`, and the arrow between them, and leaves select mode.
     assert steps["top row"]["counts"]["selected"] == 3
-    assert "MARK" not in steps["top row"]["mode_line"]
+    assert steps["top row"]["buffered"] == 0
+    assert "SELECT" not in steps["top row"]["mode_line"]
     # The whole square: four vertices and four arrows.
     assert steps["square"]["counts"]["selected"] == 8
-    # Shift adds, so the square is still selected after the row is added to it.
-    assert steps["adding the row"]["counts"]["selected"] == 8
-    # A mark dropped with Escape selects nothing, and leaves the selection as it was.
-    assert "MARK" not in steps["mark dropped"]["mode_line"]
-    assert not steps["mark dropped"]["region"]["shown"]
-    assert steps["mark dropped"]["counts"]["selected"] == 8
+    # `-` takes away `A`, `B`, and the arrow between them.
+    assert steps["row taken away"]["counts"]["selected"] == 5
+    # A mark dropped with Escape gathers nothing, and leaves the selection as it was.
+    dropped = steps["mark dropped"]
+    assert "MARK" not in dropped["mode_line"] and "SELECT" not in dropped["mode_line"]
+    assert not dropped["region"]["shown"]
+    assert dropped["counts"]["selected"] == 5
+    # In select mode, a mark gathers its rectangle, not the path to its other corner.
+    assert steps["rectangle in select mode"]["buffered"] == 3
+    assert steps["left column"]["counts"]["selected"] == 3
     # Nothing was created or deleted along the way.
     for step in steps.values():
         assert (step["counts"]["vertices"], step["counts"]["edges"]) == (4, 4)
@@ -2443,10 +2451,22 @@ class _QuietHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+def _build_site(directory):
+    """Gather the page into `directory`, as `npm run site` does."""
+    subprocess.run([node, os.path.join(_APP, "scripts", "site.js"), str(directory)],
+                   capture_output=True, text=True, check=True)
+
+
 @pytest.fixture(scope="module")
-def site():
-    """The repository, served over HTTP on a free port, as a static host would serve it."""
-    handler = functools.partial(_QuietHandler, directory=_APP)
+def site(tmp_path_factory):
+    """The page as `npm run site` gathers it, served over HTTP on a free port, as a static host
+    would serve it, so that a file the page needs and the list leaves out fails here. Without
+    node, the repository itself."""
+    directory = _APP
+    if node:
+        directory = tmp_path_factory.mktemp("site")
+        _build_site(directory)
+    handler = functools.partial(_QuietHandler, directory=str(directory))
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -2649,10 +2669,51 @@ def test_the_page_keeps_its_files_to_open_offline(browser):
                 .addEventListener("controllerchange", resolve, { once: true }));
         }
         await fetch("main.css");
-        const kept = await (await caches.open("sagitta")).match("main.css");
+        // The copy is kept behind the response, so it may not be in yet.
+        const cache = await caches.open("sagitta");
+        let kept;
+        for (let tries = 0; tries < 50 && kept === undefined; ++tries) {
+            kept = await cache.match("main.css");
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        }
         return kept !== undefined && (await kept.text()).includes("--ui-black");
     })()""")
     assert result
+
+
+def test_a_kept_file_is_served_at_once_and_refreshed_behind(browser):
+    """What the cache holds is served without waiting on the network, which then replaces it,
+    so that a version published since is taken up on the next visit."""
+    result = browser("""(async () => {
+        await navigator.serviceWorker.ready;
+        if (navigator.serviceWorker.controller === null) {
+            await new Promise((resolve) => navigator.serviceWorker
+                .addEventListener("controllerchange", resolve, { once: true }));
+        }
+        const cache = await caches.open("sagitta");
+        await cache.put("main.css", new Response("/* kept */"));
+        const served = await (await fetch("main.css")).text();
+        let refreshed = "/* kept */";
+        for (let tries = 0; tries < 50 && refreshed === "/* kept */"; ++tries) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            refreshed = await (await cache.match("main.css")).text();
+        }
+        return { served, refreshed: refreshed.includes("--ui-black") };
+    })()""")
+    assert result == {"served": "/* kept */", "refreshed": True}
+
+
+@pytest.mark.skipif(not node, reason="node not installed")
+def test_the_site_holds_the_page_and_nothing_else(tmp_path):
+    """Everything `index.html` names, and none of the desktop shell, the tests, or the packages."""
+    _build_site(tmp_path)
+    with open(tmp_path / "index.html", encoding="utf-8") as page:
+        named = re.findall(r'(?:src|href)="([^"#]+)"', page.read())
+    assert named and all((tmp_path / name).is_file() for name in named), named
+    for name in ["service-worker.js", "package.json", "LICENSE", "NOTICE"]:
+        assert (tmp_path / name).is_file(), name
+    for name in ["electron", "tests", "node_modules", "dist", "scratch", "docs"]:
+        assert not (tmp_path / name).exists(), name
 
 
 def _square_link(browser):
@@ -2889,6 +2950,212 @@ def test_undoing_a_stamp_puts_the_focus_point_back(sagitta, home):
         return [ui.focus_position.x, ui.focus_position.y, cells()];
     })()""" % PRESS
     assert sagitta("evaluate", diagram, script) == [3, 2, 0]
+
+
+def test_shift_tab_goes_back_to_a_labelled_cell(sagitta, home):
+    """After `:ses`, Tab to the first cell, label it `X`, Tab on and label the next `Y`: S-TAB goes
+    back to `X`, which left the queue when labelled, and Tab then goes on past `Y`. ESC lets go of
+    the walk, so S-TAB has nowhere to go."""
+    diagram = _diagram(home / "paper", "", "new.cd.tex")
+    script = """(async () => {
+        %s
+        const label = (text) => {
+            ui.label_input.element.value = text;
+            ui.label_input.element.dispatchEvent(new Event("input", { bubbles: true }));
+        };
+        const selected = () => Array.from(ui.selection, (cell) => cell.label);
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.commands.run("ses");
+        await press("Enter");
+        await press("Tab");
+        label("X");
+        await press("Tab");
+        label("Y");
+        await press("Tab", { shiftKey: true });
+        const back = selected();
+        await press("Tab");
+        const on = selected();
+        for (let i = 0; i < 4; ++i) {
+            await press("Escape");
+        }
+        await press("Tab", { shiftKey: true });
+        return [back, on, ui.selection.size];
+    })()""" % PRESS
+    back, on, after = sagitta("evaluate", diagram, script)
+    assert back == ["X"]
+    assert on not in (["X"], ["Y"])
+    assert after == 0
+
+
+def test_shift_return_labels_the_arrows_space_drew(sagitta, home):
+    """Space from `A` to an empty cell selects the new cell and its arrow; S-RET labels the arrow
+    alone, the mode line saying so beforehand, and the cell comes back into the selection after.
+    A style applied first leaves both queued."""
+    script = """(async () => {
+        %s
+        ui.deselect();
+        ui.select(ui.positions.get("0 0"));
+        ui.reposition_focus_point(new Position(2, 0));
+        ui.focus_point.class_list.add("focused");
+        await press(" ");
+        ui.commands.run("dashed");
+        const queued = document.querySelectorAll(".cell kbd.queue").length;
+        const hint = ui.mode_line.target(ui);
+        await press("Enter", { shiftKey: true });
+        const editing = Array.from(ui.selection, (cell) => cell.is_edge());
+        ui.label_input.element.value = "f";
+        ui.label_input.element.dispatchEvent(new Event("input", { bubbles: true }));
+        await press("Enter");
+        const edge = ui.quiver.all_cells().find((cell) => cell.is_edge()
+            && cell.source.position.x === 0 && cell.target.position.x === 2);
+        return [queued, hint, editing, edge.label, edge.target.label, ui.selection.size];
+    })()""" % PRESS
+    queued, hint, editing, edge, target, size = sagitta("evaluate", _diagram(home / "paper"), script)
+    assert queued == 2
+    assert "S-RET" in hint
+    assert editing == [True]
+    assert (edge, target, size) == ("f", "\\bullet", 2)
+
+
+def test_shift_arrows_walk_the_square(sagitta, home):
+    """On the square, from `A`: S-→ takes `f`, S-→ again its target `B`, S-↓ `h`, S-↑ back to
+    `B`, S-← the incoming `f`, which RET would label, and S-← its source `A`; S-↑ from `A` has no
+    arrow to take, and leaves `A` selected."""
+    script = """(async () => {
+        %s
+        const at = (shift) => {
+            const labels = Array.from(ui.selection, (cell) => cell.label);
+            return labels.join(",");
+        };
+        ui.deselect();
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.focus_point.class_list.add("focused");
+        const steps = [];
+        for (const key of ["ArrowRight", "ArrowRight", "ArrowDown", "ArrowUp", "ArrowLeft"]) {
+            await press(key, { shiftKey: true });
+            steps.push(at());
+        }
+        steps.push(ui.mode_line.target(ui));
+        await press("ArrowLeft", { shiftKey: true });
+        steps.push(at(), `${ui.focus_position}`);
+        await press("ArrowUp", { shiftKey: true });
+        steps.push(at());
+        return steps;
+    })()""" % PRESS
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == [
+        "f", "B", "h", "B", "f", "f", "A", "0 0", "A"]
+
+
+def test_select_mode_gathers_a_buffer_then_replaces_adds_or_takes_away(sagitta, home):
+    """With `D` selected and the focus point on `A`: `v`, then → gathers `A` and `B` (and `f`),
+    and `+` adds them; `v`, ↓ from `B` gathers `B` and `D` (and `h`), and `-` takes them away,
+    without making anything dashed; `v`, ← from `D` gathers `D` and `C` (and the arrow between),
+    and RET replaces the selection with them. ESC in select mode leaves the selection alone."""
+    script = """(async () => {
+        %s
+        const selected = () => Array.from(ui.selection, (cell) => cell.label).sort().join(",");
+        ui.deselect();
+        ui.select(ui.positions.get("1 1"));
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.focus_point.class_list.add("focused");
+        const steps = [];
+        await press("v");
+        await press("ArrowRight");
+        steps.push(ui.mode_line.mode(ui)[0],
+            document.querySelectorAll(".cell.in-buffer").length);
+        await press("+");
+        steps.push(selected(), ui.buffer === null);
+        await press("v");
+        await press("ArrowDown");
+        await press("-");
+        steps.push(selected());
+        await press("v");
+        await press("ArrowLeft");
+        await press("Enter");
+        steps.push(selected());
+        await press("v");
+        await press("ArrowUp");
+        await press("Escape");
+        steps.push(selected(), ui.buffer === null,
+            ui.quiver.all_cells().some((cell) => cell.is_edge()
+                && cell.options.style.body?.name === "dashed"));
+        return steps;
+    })()""" % PRESS
+    steps = sagitta("evaluate", _diagram(home / "paper"), script)
+    assert steps[:2] == ["SELECT", 3]
+    assert steps[2:] == ["A,B,D,f", True, "A,f", "C,D,\\alpha", "C,D,\\alpha", True, False]
+
+
+def test_text_labels_wrap_what_is_typed_and_unwrap_to_edit(sagitta, home):
+    """`:claire` turns text-label mode on, as `:text-labels` does: typing `R&D_1` on `A` stores
+    `\textnormal{R\&D\_1}`, while `$x_1$` stays maths inside; the input shows the text alone; a
+    label of two groups is edited as it is; and `:text-labels off` leaves labels alone."""
+    script = """(async () => {
+        %s
+        const type = async (text) => {
+            const input = ui.label_input.element;
+            for (const data of text) {
+                const event = new InputEvent("beforeinput", { data, inputType: "insertText",
+                    cancelable: true });
+                if (input.dispatchEvent(event)) {
+                    input.setRangeText(data, input.selectionStart, input.selectionEnd, "end");
+                    input.dispatchEvent(new Event("input"));
+                }
+            }
+        };
+        const a = ui.positions.get("0 0");
+        const b = ui.positions.get("1 0");
+        ui.commands.run("claire");
+        const on = ui.settings.get("ui.text_labels");
+        ui.deselect();
+        ui.select(a);
+        ui.label_input.element.focus();
+        ui.label_input.element.value = "";
+        ui.label_input.element.dispatchEvent(new Event("input"));
+        await type("R&D_1 $x_1$");
+        ui.label_input.element.blur();
+        const stored = a.label;
+        ui.deselect();
+        ui.select(b);
+        ui.deselect();
+        ui.select(a);
+        const shown = ui.label_input.element.value;
+        b.label = "\\\\text{a} \\\\text{b}";
+        ui.deselect();
+        ui.select(b);
+        const raw = ui.label_input.element.value;
+        ui.commands.run("text-labels off");
+        ui.deselect();
+        ui.select(a);
+        return [on, stored, shown, raw, ui.label_input.element.value,
+            ui.settings.get("ui.text_labels")];
+    })()""" % PRESS
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == [
+        True, "\\textnormal{R\\&D\\_1 $x_1$}", "R\\&D\\_1 $x_1$", "\\text{a} \\text{b}",
+        "\\textnormal{R\\&D\\_1 $x_1$}", False]
+
+
+def test_the_blank_preset_draws_nothing_and_reads_back(sagitta, home):
+    """`:blank` on `f` leaves no tail, body, or head, and the label over the line; it is written
+    with `draw=none`, read back as blank, and shown faintly on the canvas alone."""
+    diagram = _diagram(home / "paper")
+    script = """(async () => {
+        const f = ui.quiver.all_cells().find((cell) => cell.label === "f");
+        ui.deselect();
+        ui.select(f);
+        ui.commands.run("blank");
+        await ui.file.save();
+        return [f.options.label_alignment, f.element.class_list.contains("blank")];
+    })()"""
+    assert sagitta("evaluate", diagram, script) == ["over", True]
+    text = diagram.read_text()
+    assert "draw=none" in text and "marking" in text, text
+    again = sagitta("evaluate", diagram, """(() => {
+        const f = ui.quiver.all_cells().find((cell) => cell.label === "f");
+        const { style } = f.options;
+        return [style.tail.name, style.body.name, style.head.name, f.options.label_alignment];
+    })()""")
+    assert again == ["none", "none", "none", "over"]
 
 
 def test_tab_walks_a_stamp_in_the_order_it_reads(sagitta, home):
@@ -3232,3 +3499,111 @@ def test_a_problem_runs_across_the_key_list_and_wraps(sagitta, home):
             value.scrollWidth <= value.clientWidth + 1];
     })()""" % PRESS
     assert sagitta("evaluate", diagram, script) == [True, True, True]
+
+
+# ── The interface: messages, the help's search, and the mode line ─────────────
+
+_MESSAGE = 'document.querySelector(".mode-line .message").textContent'
+_SUBMENU = '[...document.querySelectorAll(".which-key .submenu .entry")].map((e) => e.textContent)'
+
+
+def test_undo_and_redo_say_what_they_did(sagitta, home):
+    found = sagitta("script", _diagram(home / "paper"), json.dumps([
+        ["press", "Backspace"],
+        ["press", "z", ["control"]],
+        ["eval", _MESSAGE],
+        ["press", "z", ["control", "shift"]],
+        ["eval", _MESSAGE],
+    ]))
+    assert found == ["undone: delete 1 object, 2 arrows", "redone: delete 1 object, 2 arrows"]
+
+
+def test_typing_in_the_help_searches_it(sagitta, home):
+    found = sagitta("script", _diagram(home / "paper"), json.dumps([
+        ["press", "/", ["control"]],
+        *_presses("e", "x", "p", "o", "r", "t"),
+        ["eval", _SUBMENU],
+        ["eval", 'document.querySelector(".mode-line .mode").textContent'],
+        ["press", "Escape"],
+        ["eval", f"{_SUBMENU}.length"],
+        ["press", "Escape"],
+        ["eval", _LIST_HIDDEN],
+    ]))
+    lines, badge, everything, hidden = found
+    assert lines and all("export" in line.lower() for line in lines)
+    assert badge == "HELP/export_"
+    assert everything > len(lines)
+    assert hidden is True
+
+
+def test_the_help_says_when_nothing_matches(sagitta, home):
+    found = sagitta("script", _diagram(home / "paper"), json.dumps([
+        ["press", "/", ["control"]], *_presses("q", "q", "q", "q"), ["eval", _SUBMENU],
+    ]))
+    assert found == [['nothing holds "qqqq"']]
+
+
+def test_messages_lists_what_the_mode_line_said(sagitta, home):
+    found = sagitta("script", _diagram(home / "paper"), json.dumps([
+        ["press", "Backspace"],
+        ["press", "z", ["control"]],
+        ["command", "messages"],
+        ["eval", _SUBMENU],
+        ["eval", "[ModeLine.flash_duration('short'), ModeLine.flash_duration('x'.repeat(500))]"],
+    ]))
+    assert any("undone: delete 1 object, 2 arrows" in line for line in found[0])
+    assert found[1] == [3000, 10000]
+
+
+def test_the_mode_line_counts_and_selects_undefined_macros(sagitta, home):
+    text = "\\begin{tikzcd}\n\t{\\nosuch A} \\arrow[r] & B\n\\end{tikzcd}\n"
+    found = sagitta("script", _diagram(home / "paper", text), json.dumps([
+        ["wait", 200],
+        ["eval", 'document.querySelector(".mode-line .broken").textContent'],
+        ["command", "undefined"],
+        ["eval", "[ui.selection.size, [...ui.selection][0].label]"],
+        ["eval", _MESSAGE],
+    ]))
+    assert found[0] == "⚠ 1 undefined"
+    assert found[1] == [1, "\\nosuch A"]
+    assert found[2] == "1 label uses what is not defined: \\nosuch"
+
+
+def test_the_mode_line_names_positions_as_the_export_does(sagitta, home):
+    found = sagitta("script", _diagram(home / "paper"), json.dumps([
+        *_presses("Right", "Down"),
+        ["eval", 'document.querySelector(".mode-line .target").textContent'],
+        *_presses("Right"),
+        ["eval", 'document.querySelector(".mode-line .target").textContent'],
+    ]))
+    assert found == ["D  2-2", "new vertex  2-3"]
+
+
+def test_light_panels_is_a_setting(sagitta, home):
+    found = sagitta("script", _diagram(home / "paper"), json.dumps([
+        ["eval", 'document.body.classList.contains("light-panels")'],
+        ["command", "set ui.light_panels true"],
+        ["eval", 'document.body.classList.contains("light-panels")'],
+    ]))
+    assert found == [False, True]
+    assert _saved_settings(home)["ui.light_panels"] is True
+
+
+def test_two_fingers_pan_and_pinch_to_zoom(sagitta, home):
+    script = """(async () => {
+        const touch = (type, id, x, y) => document.elementFromPoint(200, 200).dispatchEvent(
+            new PointerEvent(type, { pointerId: id, pointerType: "touch", clientX: x,
+                clientY: y, bubbles: true, cancelable: true }));
+        const [scale, view] = [ui.scale, ui.view.y];
+        touch("pointerdown", 1, 100, 200);
+        touch("pointerdown", 2, 300, 200);
+        touch("pointermove", 2, 200, 200);
+        const zoomed = ui.scale - scale;
+        touch("pointermove", 1, 100, 100);
+        touch("pointermove", 2, 200, 100);
+        const panned = ui.view.y - view;
+        touch("pointerup", 1, 100, 100);
+        touch("pointerup", 2, 200, 100);
+        return [Math.round(zoomed * 100) / 100, panned > 0, ui.quiver.all_cells().length];
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == [-1, True, 8]

@@ -26,6 +26,17 @@
     --ui-disabled: 0.3;
     --ui-text: hsla(0, 0%, 100%, var(--ui-dim));
 
+    /* The panels (the mode line, the key list, the command line, and the tips) and what is
+       written on them; the label being edited, and its prompt, stand out from them; and the
+       accents in text, which light panels darken so that they can be read. */
+    --ui-panel: var(--ui-black);
+    --ui-on-panel: var(--ui-white);
+    --ui-edit: var(--ui-white);
+    --ui-on-edit: var(--ui-black);
+    --ui-accent-text: var(--ui-accent);
+    --ui-secondary-text: var(--ui-secondary);
+    --ui-warning-text: var(--ui-warning);
+
     /* The canvas: its background, the grid, and the ink that the default colour (black) is
        drawn in. Every other colour is drawn exactly. */
     --canvas: white;
@@ -60,6 +71,25 @@ body.dark {
     --cell-selected: hsla(0, 0%, 100%, 0.2);
     --cell-source: color-mix(in srgb, var(--ui-secondary) 45%, transparent);
     --cell-target: color-mix(in srgb, var(--ui-accent) 45%, transparent);
+}
+
+/* Light panels (`ui.light_panels`): the panels light, with dark writing, and the accents in text
+   darkened. The badges keep their pastel backgrounds, with dark writing, as on dark panels. */
+body.light-panels {
+    --ui-raised: hsl(0, 0%, 84%);
+    --ui-border: hsla(0, 0%, 0%, 0.2);
+    --ui-rule: hsla(0, 0%, 0%, 0.1);
+    --ui-hover: hsla(0, 0%, 0%, 0.07);
+    --ui-active: hsla(0, 0%, 0%, 0.14);
+    --ui-text: hsla(0, 0%, 0%, var(--ui-dim));
+
+    --ui-panel: hsl(0, 0%, 96%);
+    --ui-on-panel: hsl(0, 0%, 10%);
+    --ui-edit: hsl(0, 0%, 18%);
+    --ui-on-edit: hsl(0, 0%, 96%);
+    --ui-accent-text: hsl(345, 60%, 40%);
+    --ui-secondary-text: hsl(215, 65%, 38%);
+    --ui-warning-text: hsl(40, 100%, 28%);
 }
 
 /* Arrows draw in their colour's exact `hsla`, as SVG attributes, which these override for black
@@ -173,6 +203,22 @@ kbd {
     background: var(--cell-hover);
 }
 
+/* An arrow that draws nothing (the blank preset): its highlight, faintly, so it can be found. */
+.arrow.blank:not(.selected):not(.in-buffer) > svg:first-child > .arrow-background {
+    opacity: 0.08 !important;
+}
+
+/* Select mode's buffer: outlined in blue, apart from the selection's grey, the mark's pink, and
+   the yellow of what waits. */
+.vertex.in-buffer .content {
+    outline: var(--ui-secondary) 2px dashed;
+    outline-offset: -2px;
+}
+.arrow.in-buffer > svg:first-child > path.arrow-background {
+    opacity: 1 !important;
+    stroke: var(--ui-secondary) !important;
+}
+
 /* Vertices */
 
 .vertex {
@@ -254,9 +300,9 @@ line. It is only visible while focused. */
     height: 32px;
     z-index: 151;
 
-    background: var(--ui-black);
+    background: var(--ui-panel);
 
-    color: var(--ui-white);
+    color: var(--ui-on-panel);
 
     transition: opacity 0.1s;
 }
@@ -304,11 +350,11 @@ line. It is only visible while focused. */
     width: 80px; height: 32px;
     line-height: 32px;
 
-    background: var(--ui-white);
+    background: var(--ui-edit);
 
     font-family: monospace;
     font-size: 16px;
-    color: var(--ui-black);
+    color: var(--ui-on-edit);
     text-align: center;
 }
 
@@ -337,7 +383,7 @@ line. It is only visible while focused. */
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 2px 12px;
 
-    background: var(--ui-black);
+    background: var(--ui-panel);
     border-bottom: var(--ui-border) solid 1px;
 
     font-family: monospace;
@@ -382,9 +428,9 @@ line. It is only visible while focused. */
 }
 
 .label-input::selection {
-    background: var(--ui-white);
+    background: var(--ui-edit);
 
-    color: var(--ui-black);
+    color: var(--ui-on-edit);
 }
 
 .label-input-container .colour-indicator {
@@ -632,11 +678,11 @@ button.flash {
     display: flex;
     align-items: stretch;
 
-    background: var(--ui-black);
+    background: var(--ui-panel);
 
     font: 12px monospace;
     line-height: var(--mode-line-height);
-    color: var(--ui-white);
+    color: var(--ui-on-panel);
     white-space: nowrap;
 }
 
@@ -690,9 +736,9 @@ button.flash {
 }
 
 .mode-line[data-mode="edit"] .mode {
-    background: var(--ui-white);
+    background: var(--ui-edit);
 
-    color: var(--ui-black);
+    color: var(--ui-on-edit);
 }
 
 .mode-line[data-mode="prompt"] .mode {
@@ -730,12 +776,12 @@ button.flash {
 }
 
 .mode-line .file .unsaved {
-    color: var(--ui-warning);
+    color: var(--ui-warning-text);
 }
 
 /* The export options other than the defaults, which saving writes too. */
 .mode-line .file .export-options {
-    color: var(--ui-secondary);
+    color: var(--ui-secondary-text);
 }
 
 .mode-line .target {
@@ -746,7 +792,7 @@ button.flash {
     max-width: 40vw;
     padding: 0 8px;
 
-    color: var(--ui-secondary);
+    color: var(--ui-secondary-text);
 }
 
 .mode-line .arrow:empty {
@@ -815,7 +861,7 @@ button.flash {
 }
 
 .mode-line kbd {
-    color: var(--ui-accent);
+    color: var(--ui-accent-text);
 }
 
 .mode-line .zoom {
@@ -851,7 +897,7 @@ button.flash {
     gap: 20px;
     padding: 0 14px;
 
-    background: var(--ui-black);
+    background: var(--ui-panel);
     border-radius: 0 0 4px 4px;
 
     font: 12px monospace;
@@ -863,7 +909,7 @@ button.flash {
 }
 
 .tip kbd {
-    color: var(--ui-accent);
+    color: var(--ui-accent-text);
 }
 
 .tip.hidden {
@@ -879,11 +925,11 @@ button.flash {
     z-index: 140;
     padding: 12px 16px;
 
-    background: var(--ui-black);
+    background: var(--ui-panel);
     border-bottom: var(--ui-border) solid 1px;
 
     font: 12px monospace;
-    color: var(--ui-white);
+    color: var(--ui-on-panel);
 }
 
 /* One row per group: its title in a column on the left, then its bindings in a grid of equal
@@ -944,7 +990,7 @@ button.flash {
     flex: none;
     min-width: 4ch;
 
-    color: var(--ui-accent);
+    color: var(--ui-accent-text);
 }
 
 /* What the line does takes the room left, so that the values and buttons line up on the right. */
@@ -963,7 +1009,7 @@ button.flash {
 
 /* The help's About links. */
 .which-key a {
-    color: var(--ui-secondary);
+    color: var(--ui-secondary-text);
 }
 
 /* The chord also bound to a command layer binding. */
@@ -994,7 +1040,7 @@ button.flash {
 .which-key .entry .value {
     flex: none;
 
-    color: var(--ui-secondary);
+    color: var(--ui-secondary-text);
 }
 
 .which-key .entry .value:empty {
@@ -1015,7 +1061,7 @@ button.flash {
 .which-key .entry.current span:first-of-type::after {
     content: " ●";
 
-    color: var(--ui-secondary);
+    color: var(--ui-secondary-text);
 }
 
 /* A line whose key a click presses. */
@@ -1042,7 +1088,7 @@ button.flash {
 
     font: inherit;
     line-height: 12px;
-    color: var(--ui-white);
+    color: var(--ui-on-panel);
 
     cursor: pointer;
 }
@@ -1143,5 +1189,85 @@ svg.frame-axes .hit {
 .which-key.compact .main .entry.current kbd::after {
     content: " ●";
 
-    color: var(--ui-secondary);
+    color: var(--ui-secondary-text);
+}
+
+/* Light panels meet a light canvas, so a line marks where they start. */
+body.light-panels .mode-line {
+    box-shadow: 0 -1px 0 var(--ui-border);
+}
+body.light-panels .which-key, body.light-panels .prompt-completions {
+    border-top: var(--ui-border) solid 1px;
+}
+body.light-panels .tip {
+    box-shadow: 0 1px 0 var(--ui-border);
+}
+
+/* What the keyboard has reached (a button, or a link in the help) is ringed, though a press with
+   the pointer leaves no ring. */
+.mode-line button:focus-visible,
+.which-key button:focus-visible,
+.which-key a:focus-visible {
+    outline: 2px solid var(--ui-focus);
+    outline-offset: -2px;
+}
+
+/* A key list taller than the window scrolls, rather than running off its top. */
+.which-key {
+    max-height: calc(100vh - var(--mode-line-height) - var(--message-height));
+    overflow-y: auto;
+}
+
+/* A narrow window: each group's title goes above its lines, rather than in a column beside them,
+   and the lines may be narrower, so that nothing runs off the right. */
+@media (max-width: 720px) {
+    .which-key {
+        padding: 8px 10px;
+    }
+
+    .which-key .group,
+    .which-key.compact .main .group {
+        padding-left: 0;
+    }
+
+    .which-key .group {
+        grid-template-columns: repeat(auto-fill, minmax(min(24ch, 100%), 1fr));
+    }
+
+    .which-key.descriptive .group {
+        grid-template-columns: repeat(auto-fill, minmax(min(40ch, 100%), 1fr));
+    }
+
+    .which-key h3,
+    .which-key.compact .main h3 {
+        position: static;
+        grid-column: 1 / -1;
+        width: auto;
+    }
+
+    .which-key.compact .main h3 {
+        flex-basis: 100%;
+    }
+
+    .tip {
+        max-width: 100vw;
+        overflow: hidden;
+    }
+
+    .tip > :nth-child(n+3) {
+        display: none;
+    }
+
+    .mode-line .mode {
+        min-width: 0;
+    }
+}
+
+/* The labels using macros KaTeX does not know (see `ModeLine.update`). */
+.mode-line .broken {
+    color: var(--ui-warning-text);
+}
+
+.mode-line .broken.hidden {
+    display: none;
 }

@@ -16,7 +16,7 @@ A diagram that does not round-trip (opening and saving changes it) is a bug wort
 There is no build step.
 `index.html` loads the scripts in `src/` in dependency order, each after what it uses:
 
-- `katex.js`: KaTeX, vendored.
+- `katex.min.js`: KaTeX 0.19.1, vendored as its release ships it; `katex.css` is its `katex.min.css`, with the woff and ttf fonts left out.
 - `ds.js`, `dom.js`: points, colours, and DOM wrappers.
 - `grid.js`: column and row sizes, and positions to and from pixels.
 - `curve.js`, `arrow.js`, `constants.js`: curves, drawing arrows, and the editor's parameters.
@@ -33,9 +33,11 @@ There is no build step.
 `electron/` is the desktop shell, which the page reaches through `window.host`.
 `web/host.js` is the same `window.host` for a browser, and does nothing under the shell, which defines it first.
 To try the page in a browser, run `npm run web` and open <http://127.0.0.1:8000>.
-To publish it, serve `index.html`, `main.css`, `katex.css`, `icon.svg`, `icon.png`, `manifest.webmanifest`, `service-worker.js`, `package.json`, `LICENSE`, `NOTICE`, `src/`, `fonts/`, `icons/`, and `web/` from one directory of a static host.
+To publish it, run `npm run site`, which gathers the page into `site/` (or `node scripts/site.js DIR` for another directory), and upload that directory to a static host as it is.
+The page is what the desktop app packages (`build.files` in `package.json`), less `electron/`, plus `service-worker.js`, so a file added to the page is added to that list; the browser tests serve the page from such a directory, so a file left out fails there.
 `LICENSE` and `NOTICE` go with every copy, as quiver's and KaTeX's MIT licences ask, and the help's About lines read the version from `package.json`.
 `service-worker.js` keeps what the page fetches, for opening without a network, and must sit beside `index.html` to cover it.
+It serves what it has kept at once and refreshes it behind, so a version just published shows on the second visit after it, not the first.
 `sagitta` is the launcher, which checks the arguments and picks an Electron.
 
 Match the code around a change: `///` doc comments on functions, `//` comments in full sentences, snake_case names, and lines of about 100 characters at most.
