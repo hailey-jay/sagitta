@@ -520,8 +520,9 @@ module.exports = {
     /// A Control key whose release the window never sees, as when a file dialog or another window
     /// takes the focus while it is held: Control goes down and stays down as far as the page knows,
     /// which pans. Then plain keys, with Control up, as the next real key press reports: Right
-    /// moves the focus point from `A`, and `C-SPC` twice takes the top row. Returns the mode after
-    /// the stuck key, after Right, and the counts at the end.
+    /// moves the focus point from `A`, and `C-SPC` twice puts the top row into select mode's
+    /// buffer, which RET selects. Returns the mode after the stuck key, after Right, and the counts
+    /// at the end.
     stale_pan: async (ctx) => {
         ctx.contents.sendInputEvent({ type: "keyDown", keyCode: "Control", modifiers: ["control"] });
         await ctx.wait(50);
@@ -532,6 +533,7 @@ module.exports = {
         await ctx.press("Space", ["control"]);
         await ctx.press("Right");
         await ctx.press("Space", ["control"]);
+        await ctx.press("Enter");
         return { stuck, after, counts: await ctx.counts() };
     },
 
