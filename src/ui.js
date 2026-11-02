@@ -603,7 +603,7 @@ class UI {
         }
         const width = katex.element.offsetWidth;
         const outer = label.element.getBoundingClientRect();
-        const struts = Array.from(katex.element.querySelectorAll(".katex-html .strut"))
+        const struts = Array.from(katex.element.querySelectorAll(".katex-html .katex-strut"))
             .map((strut) => strut.getBoundingClientRect());
         if (struts.length === 0 || outer.height === 0) {
             const height = katex.element.offsetHeight;
@@ -615,7 +615,7 @@ class UI {
         const bottom = Math.max(...struts.map(({ bottom }) => bottom));
         // How far the label reaches below its baseline, as KaTeX sets each strut as far below the
         // baseline as the box goes, which amscd sets a label above an arrow by.
-        const elements = Array.from(katex.element.querySelectorAll(".katex-html .strut"));
+        const elements = Array.from(katex.element.querySelectorAll(".katex-html .katex-strut"));
         const em = parseFloat(getComputedStyle(elements[0]).fontSize);
         const descent = Math.max(0, ...elements.map((strut) =>
             -(parseFloat(strut.style.verticalAlign) || 0) * em));
@@ -638,7 +638,7 @@ class UI {
         const label = vertex.element.query_selector(".label");
         const katex = vertex.element.query_selector(".label .katex-html");
         const struts = katex === null ? []
-            : Array.from(katex.element.querySelectorAll(".strut"));
+            : Array.from(katex.element.querySelectorAll(".katex-strut"));
         const outer = label.element.getBoundingClientRect();
         if (struts.length === 0 || outer.height === 0) {
             return null;

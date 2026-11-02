@@ -13,6 +13,7 @@
 - S-TAB goes back through the queue to cells already labelled, so a typo can be fixed; Tab then goes on to the next one waiting. ESC lets go of the queue, as before.
 - Styling, reversing, or flipping an arrow leaves it, and its cell, in the queue, since neither is labelled.
 - `:text-labels` types labels as text, stored as `\textnormal{...}` (or `\text`, or `\textrm`, by `ui.text_wrapper`): the label input shows the text alone, `_`, `^`, `&`, `#`, and `~` are typed as text outside `$ $`, and `/` finds a label by its text.
+- Labels are set by KaTeX 0.19.1 rather than 0.16.25, which adds `\mapsfrom`, `\reflectbox`, `\underbracket`, and `\overbracket`, and fixes, among others, the size of a big `[` and the spacing of `\*frac`.
 
 ### Selecting
 

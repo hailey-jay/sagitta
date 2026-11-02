@@ -861,7 +861,7 @@ def test_a_cells_node_is_tikz_cds(sagitta, home):
                 const point = Arrow.border(shape, -degrees * Math.PI / 180);
                 return [point.x / pt, -point.y / pt];
             };
-            const strut = vertex.element.query_selector(".label .strut").element;
+            const strut = vertex.element.query_selector(".label .katex-strut").element;
             const depth = -(parseFloat(strut.style.verticalAlign) || 0)
                 * parseFloat(getComputedStyle(strut).fontSize);
             const content = vertex.element.query_selector(".content").element
