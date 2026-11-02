@@ -80,13 +80,13 @@ class Pointer {
                 CONSTANTS.MIN_ZOOM,
                 ui.scale - event.deltaY / 100,
                 CONSTANTS.MAX_ZOOM,
-            ));
+            ), true);
             ui.mode_line.update(ui);
         } else {
             ui.pan_view(new Offset(
                 event.deltaX * 2 ** -ui.scale,
                 event.deltaY * 2 ** -ui.scale,
-            ));
+            ), 0, true);
         }
     }
 

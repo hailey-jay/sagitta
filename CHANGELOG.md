@@ -27,6 +27,8 @@
 ### Elsewhere
 
 - `:version` says which version of Sagitta this is.
+- The web page starts sooner: its scripts load together rather than one after another, KaTeX's styles and its two commonest fonts load with them, and offline use no longer holds each file back until it is stored.
+- Turning the wheel, or swiping a trackpad, redraws the grid once a frame, however many turns arrive in it.
 
 ## 0.7.1
 

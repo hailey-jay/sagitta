@@ -149,6 +149,10 @@ class UI {
         // change of extent is animated, and the frame of that animation (see `animate_layout`).
         this.layout_settled = false;
         this.layout_frame = null;
+        // The frame a wheel's pan or zoom is to be drawn in, and the grid's colour, with whether
+        // it is dark mode's (see `pan_to` and `update_grid`).
+        this.view_frame = null;
+        this.grid_colour = null;
     }
 
     /// The diagram's column and row separation, in em.
@@ -1599,8 +1603,10 @@ class UI {
         return effectful;
     }
 
-    /// Repositions the view by an absolute offset.
-    pan_to(offset, zoom = this.scale) {
+    /// Repositions the view by an absolute offset. The view moves at once; with `queue`, the grid
+    /// and the axes behind it are redrawn in the next frame instead, once for however many turns
+    /// of the wheel arrive before it, as a trackpad sends far more than the screen shows.
+    pan_to(offset, zoom = this.scale, queue = false) {
         this.view.x = offset.x;
         this.view.y = offset.y;
         this.scale = zoom;
@@ -1608,16 +1614,30 @@ class UI {
         this.canvas.set_style({
             transform: `translate(${-view.x}px, ${-view.y}px) scale(${2 ** this.scale})`,
         });
+        if (queue) {
+            this.view_frame ??= requestAnimationFrame(() => {
+                this.view_frame = null;
+                this.draw_view();
+            });
+            return;
+        }
+        cancelAnimationFrame(this.view_frame);
+        this.view_frame = null;
+        this.draw_view();
+    }
+
+    /// Redraw what follows the view: the grid, and the axes of a spectral sequence, which follow
+    /// its ticks wherever the layout puts them.
+    draw_view() {
         this.update_grid();
-        // The axes of a spectral sequence follow its ticks wherever the layout puts them.
         SpectralSequence.draw(this);
     }
 
     /// Repositions the view by a relative offset.
     /// If `offset` is positive, then everything will appear to move towards the top left.
     /// If `zoom` is positive, then everything will grow larger.
-    pan_view(offset, zoom = 0) {
-        this.pan_to(this.view.add(offset), this.scale + zoom);
+    pan_view(offset, zoom = 0, queue = false) {
+        this.pan_to(this.view.add(offset), this.scale + zoom, queue);
     }
 
     /// Centre the view with respect to the selection, or the entire quiver if no cells are
@@ -1846,8 +1866,16 @@ class UI {
         // Constants for parameters of the grid pattern.
         // The (average) length of the dashes making up the cell border lines.
         const DASH_LENGTH = this.grid.gap.x;
-        // The border colour, which dark mode changes.
-        const BORDER_COLOUR = getComputedStyle(document.body).getPropertyValue("--grid");
+        // The border colour, which only dark mode changes, so it is looked up again only then,
+        // rather than on every turn of the wheel.
+        const dark = document.body.classList.contains("dark");
+        if (this.grid_colour?.dark !== dark) {
+            this.grid_colour = {
+                dark,
+                value: getComputedStyle(document.body).getPropertyValue("--grid"),
+            };
+        }
+        const BORDER_COLOUR = this.grid_colour.value;
 
         const [width, height] = [document.body.offsetWidth, document.body.offsetHeight];
         const canvas = this.grid_canvas;
