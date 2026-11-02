@@ -111,6 +111,10 @@ class UI {
         // sizing them is scheduled.
         this.unsized_labels = new Set();
         this.sizing_labels = false;
+
+        // The cells whose labels KaTeX could not draw whole, as they were last drawn: each to the
+        // macros it does not know, or `null` where the label cannot be read (see `render_maths`).
+        this.broken_labels = new Map();
         // How many times in a row each edge's label has measured nothing, though it has text (see
         // `size_labels`).
         this.unmeasured = new WeakMap();
@@ -555,9 +559,33 @@ class UI {
                         .includes(context.command),
                 },
             );
+            // KaTeX draws a macro it does not know in the error colour, as text, and a label it
+            // cannot read at all as a `katex-error`.
+            if (label.element.querySelector(".katex-error") !== null) {
+                this.broken_labels.set(cell, null);
+            } else {
+                const unknown = Array.from(
+                    label.element.querySelectorAll('.mord.text[style*="--ui-error"]'),
+                    (element) => element.textContent,
+                );
+                if (unknown.length > 0) {
+                    this.broken_labels.set(cell, unknown);
+                } else {
+                    this.broken_labels.delete(cell);
+                }
+            }
             this.unsized_labels.add(cell);
         }
         this.queue_sizing();
+    }
+
+    /// The cells of the diagram whose labels use macros KaTeX does not know, or cannot be read,
+    /// as `[[cell, macros or null]]`, and every unknown macro among them, once each, in order.
+    broken() {
+        const cells = Array.from(this.broken_labels)
+            .filter(([cell]) => this.quiver.cells[cell.level]?.has(cell));
+        const macros = [...new Set(cells.flatMap(([, unknown]) => unknown ?? []))];
+        return { cells, macros };
     }
 
     /// Size the labels in `unsized_labels` (see `size_labels`), once the fonts they need have
@@ -892,6 +920,7 @@ class UI {
             });
         }
         document.body.classList.toggle("dark", this.settings.get("ui.dark_mode"));
+        document.body.classList.toggle("light-panels", this.settings.get("ui.light_panels"));
         document.body.style.setProperty("--label-size", `${this.settings.get("ui.label_size")}px`);
         this.update_scale();
         this.scale = this.default_scale();
@@ -1726,6 +1755,9 @@ class UI {
             case "ui.dark_mode":
                 document.body.classList.toggle("dark", value);
                 this.update_grid();
+                break;
+            case "ui.light_panels":
+                document.body.classList.toggle("light-panels", value);
                 break;
             case "ui.zoom":
                 this.scale = this.default_scale();

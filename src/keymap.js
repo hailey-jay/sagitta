@@ -55,6 +55,7 @@ class Keymap {
             import: new Layer.Import(this),
             macros: new Layer.Macros(this),
             help: new Layer.Help(this),
+            messages: new Layer.Messages(this),
             export: new Layer.Export(this),
             settings: new Layer.Settings(this),
             colour: new Layer.Colour(this),
@@ -626,11 +627,14 @@ class Keymap {
         // The compact list shows only the keys and their values, and what each does on hovering.
         const compact = ui.settings.get("ui.which_key_compact");
         this.which_key.class_list.toggle("compact", compact);
-        for (const entry of this.which_key.query_selector_all(".main .entry")) {
-            if (compact) {
-                entry.set_attributes({ title: entry.query_selector("kbd + span").element.textContent });
-            } else {
-                entry.remove_attributes("title");
+        // A line cut short, or with only its key showing, has the whole of what it does as its
+        // tooltip.
+        if (!this.which_key_titled) {
+            this.which_key_titled = true;
+            for (const entry of this.which_key.query_selector_all(".main .entry")) {
+                entry.set_attributes({
+                    title: entry.query_selector("kbd + span").element.textContent,
+                });
             }
         }
 
@@ -721,6 +725,10 @@ class Keymap {
                     wide ? " wide" : ""}` })
                     .add(new DOM.Element("kbd").add(key))
                     .add_to(group);
+                // A line cut short has the whole of what it says as its tooltip.
+                if (typeof description === "string" && !wide) {
+                    entry.set_attributes({ title: description });
+                }
                 if (swatch !== null) {
                     entry.add(new DOM.Element("i", { class: "swatch" }, {
                         background: swatch.css(),
@@ -1274,6 +1282,8 @@ Keymap.HELP_ELSEWHERE = {
         // from empty space, which the modifiers cannot.
         ["Mouse", "pan", "scroll"],
         ["Mouse", "pan", "C-drag  A-drag  middle-drag"],
+        // `Pointer.touch_move`.
+        ["Mouse", "pan, and pinch to zoom", "two fingers"],
         ["Mouse", "zoom", "S-scroll  C-scroll"],
     ],
 };

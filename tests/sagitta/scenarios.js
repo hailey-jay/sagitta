@@ -448,6 +448,9 @@ module.exports = {
                 case "wait":
                     await ctx.wait(rest[0]);
                     break;
+                case "command":
+                    await ctx.command(rest[0]);
+                    break;
                 case "eval":
                     found.push(await ctx.js(rest[0]));
                     break;

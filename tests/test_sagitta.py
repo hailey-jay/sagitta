@@ -991,7 +991,7 @@ def test_the_help_layer_shows_rebound_chords(sagitta, home):
     _keys(home, "copy C-S-y\nshortcuts C-/ <f1>\n")
     help = dict(sagitta("help", _diagram(home / "paper")))
     assert ["C-S-y", "copy"] in help["Chords"]
-    assert help["Help"] == [["C-/ RET ; ESC", "leave"]]
+    assert help["Help"] == [["type", "search the help, ESC to clear"], ["C-/ RET ; ESC", "leave"]]
 
 
 def test_the_keys_file_reports_its_problems_and_keeps_the_rest(sagitta, home):
@@ -3499,3 +3499,111 @@ def test_a_problem_runs_across_the_key_list_and_wraps(sagitta, home):
             value.scrollWidth <= value.clientWidth + 1];
     })()""" % PRESS
     assert sagitta("evaluate", diagram, script) == [True, True, True]
+
+
+# ── The interface: messages, the help's search, and the mode line ─────────────
+
+_MESSAGE = 'document.querySelector(".mode-line .message").textContent'
+_SUBMENU = '[...document.querySelectorAll(".which-key .submenu .entry")].map((e) => e.textContent)'
+
+
+def test_undo_and_redo_say_what_they_did(sagitta, home):
+    found = sagitta("script", _diagram(home / "paper"), json.dumps([
+        ["press", "Backspace"],
+        ["press", "z", ["control"]],
+        ["eval", _MESSAGE],
+        ["press", "z", ["control", "shift"]],
+        ["eval", _MESSAGE],
+    ]))
+    assert found == ["undone: delete 1 object, 2 arrows", "redone: delete 1 object, 2 arrows"]
+
+
+def test_typing_in_the_help_searches_it(sagitta, home):
+    found = sagitta("script", _diagram(home / "paper"), json.dumps([
+        ["press", "/", ["control"]],
+        *_presses("e", "x", "p", "o", "r", "t"),
+        ["eval", _SUBMENU],
+        ["eval", 'document.querySelector(".mode-line .mode").textContent'],
+        ["press", "Escape"],
+        ["eval", f"{_SUBMENU}.length"],
+        ["press", "Escape"],
+        ["eval", _LIST_HIDDEN],
+    ]))
+    lines, badge, everything, hidden = found
+    assert lines and all("export" in line.lower() for line in lines)
+    assert badge == "HELP/export_"
+    assert everything > len(lines)
+    assert hidden is True
+
+
+def test_the_help_says_when_nothing_matches(sagitta, home):
+    found = sagitta("script", _diagram(home / "paper"), json.dumps([
+        ["press", "/", ["control"]], *_presses("q", "q", "q", "q"), ["eval", _SUBMENU],
+    ]))
+    assert found == [['nothing holds "qqqq"']]
+
+
+def test_messages_lists_what_the_mode_line_said(sagitta, home):
+    found = sagitta("script", _diagram(home / "paper"), json.dumps([
+        ["press", "Backspace"],
+        ["press", "z", ["control"]],
+        ["command", "messages"],
+        ["eval", _SUBMENU],
+        ["eval", "[ModeLine.flash_duration('short'), ModeLine.flash_duration('x'.repeat(500))]"],
+    ]))
+    assert any("undone: delete 1 object, 2 arrows" in line for line in found[0])
+    assert found[1] == [3000, 10000]
+
+
+def test_the_mode_line_counts_and_selects_undefined_macros(sagitta, home):
+    text = "\\begin{tikzcd}\n\t{\\nosuch A} \\arrow[r] & B\n\\end{tikzcd}\n"
+    found = sagitta("script", _diagram(home / "paper", text), json.dumps([
+        ["wait", 200],
+        ["eval", 'document.querySelector(".mode-line .broken").textContent'],
+        ["command", "undefined"],
+        ["eval", "[ui.selection.size, [...ui.selection][0].label]"],
+        ["eval", _MESSAGE],
+    ]))
+    assert found[0] == "⚠ 1 undefined"
+    assert found[1] == [1, "\\nosuch A"]
+    assert found[2] == "1 label uses what is not defined: \\nosuch"
+
+
+def test_the_mode_line_names_positions_as_the_export_does(sagitta, home):
+    found = sagitta("script", _diagram(home / "paper"), json.dumps([
+        *_presses("Right", "Down"),
+        ["eval", 'document.querySelector(".mode-line .target").textContent'],
+        *_presses("Right"),
+        ["eval", 'document.querySelector(".mode-line .target").textContent'],
+    ]))
+    assert found == ["D  2-2", "new vertex  2-3"]
+
+
+def test_light_panels_is_a_setting(sagitta, home):
+    found = sagitta("script", _diagram(home / "paper"), json.dumps([
+        ["eval", 'document.body.classList.contains("light-panels")'],
+        ["command", "set ui.light_panels true"],
+        ["eval", 'document.body.classList.contains("light-panels")'],
+    ]))
+    assert found == [False, True]
+    assert _saved_settings(home)["ui.light_panels"] is True
+
+
+def test_two_fingers_pan_and_pinch_to_zoom(sagitta, home):
+    script = """(async () => {
+        const touch = (type, id, x, y) => document.elementFromPoint(200, 200).dispatchEvent(
+            new PointerEvent(type, { pointerId: id, pointerType: "touch", clientX: x,
+                clientY: y, bubbles: true, cancelable: true }));
+        const [scale, view] = [ui.scale, ui.view.y];
+        touch("pointerdown", 1, 100, 200);
+        touch("pointerdown", 2, 300, 200);
+        touch("pointermove", 2, 200, 200);
+        const zoomed = ui.scale - scale;
+        touch("pointermove", 1, 100, 100);
+        touch("pointermove", 2, 200, 100);
+        const panned = ui.view.y - view;
+        touch("pointerup", 1, 100, 100);
+        touch("pointerup", 2, 200, 100);
+        return [Math.round(zoomed * 100) / 100, panned > 0, ui.quiver.all_cells().length];
+    })()"""
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == [-1, True, 8]

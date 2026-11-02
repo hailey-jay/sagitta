@@ -9,12 +9,24 @@ class Pointer {
         // Where the pointer last was in the window, as `[x, y]`, or `null` once it has left, for
         // the keys that act on what is under it (see `hovered_checkpoint`).
         this.client = null;
+        // The fingers on the screen, by pointer, at `[x, y]` (see `touch_down`).
+        this.touches = new Map();
+        // While two fingers pan and zoom, their midpoint and distance apart, as last seen, or
+        // `null`; and whether the fingers left of a pinch are still to be lifted.
+        this.pinch = null;
+        this.pinched = false;
     }
 
     /// Start listening, once the UI's elements exist.
     initialise() {
         const ui = this.ui;
         window.addEventListener("wheel", (event) => this.scroll(event), { passive: false });
+        // Two fingers pan and zoom, ahead of whatever else would take their presses.
+        document.addEventListener("pointerdown", (event) => this.touch_down(event), true);
+        document.addEventListener("pointermove", (event) => this.touch_move(event), true);
+        for (const type of ["pointerup", "pointercancel"]) {
+            document.addEventListener(type, (event) => this.touch_up(event), true);
+        }
         document.addEventListener("pointermove", (event) => {
             this.client = [event.clientX, event.clientY];
             this.stop_stale_pan(event);
@@ -87,6 +99,79 @@ class Pointer {
                 event.deltaX * 2 ** -ui.scale,
                 event.deltaY * 2 ** -ui.scale,
             ), 0, true);
+        }
+    }
+
+    /// A finger down. A second one starts a pinch: whatever the first began (a drag, an arrow
+    /// being drawn) is let go, and the two pan and zoom the view until both are lifted.
+    touch_down(event) {
+        if (event.pointerType !== "touch") {
+            return;
+        }
+        this.touches.set(event.pointerId, [event.clientX, event.clientY]);
+        if (this.touches.size === 2 && this.pinch === null) {
+            const ui = this.ui;
+            if (!ui.in_mode(UIMode.Default)) {
+                ui.switch_mode(UIMode.default);
+            }
+            this.pinch = this.pinch_of();
+            this.pinched = true;
+        }
+        if (this.pinched) {
+            event.stopPropagation();
+            event.preventDefault();
+        }
+    }
+
+    /// The two fingers' midpoint and distance apart.
+    pinch_of() {
+        const [[ax, ay], [bx, by]] = Array.from(this.touches.values()).slice(0, 2);
+        return { x: (ax + bx) / 2, y: (ay + by) / 2, distance: Math.hypot(bx - ax, by - ay) };
+    }
+
+    /// A finger moving: while two pinch, the view follows their midpoint, and zooms as they
+    /// spread or close.
+    touch_move(event) {
+        if (event.pointerType !== "touch" || !this.touches.has(event.pointerId)) {
+            return;
+        }
+        this.touches.set(event.pointerId, [event.clientX, event.clientY]);
+        if (!this.pinched) {
+            return;
+        }
+        event.stopPropagation();
+        if (this.pinch === null || this.touches.size < 2) {
+            return;
+        }
+        const ui = this.ui;
+        const now = this.pinch_of();
+        const zoom = this.pinch.distance > 0 && now.distance > 0
+            ? Math.log2(now.distance / this.pinch.distance) : 0;
+        const scale = 2 ** -ui.scale;
+        ui.pan_to(
+            ui.view.add(new Offset((this.pinch.x - now.x) * scale, (this.pinch.y - now.y) * scale)),
+            clamp(CONSTANTS.MIN_ZOOM, ui.scale + zoom, CONSTANTS.MAX_ZOOM),
+            true,
+        );
+        ui.mode_line.schedule_update(ui);
+        this.pinch = now;
+    }
+
+    /// A finger lifted. A pinch ends with the second finger, and the first, still down, does
+    /// nothing until it too is lifted.
+    touch_up(event) {
+        if (event.pointerType !== "touch" || !this.touches.has(event.pointerId)) {
+            return;
+        }
+        this.touches.delete(event.pointerId);
+        if (this.touches.size < 2) {
+            this.pinch = null;
+        }
+        if (this.pinched) {
+            event.stopPropagation();
+            if (this.touches.size === 0) {
+                this.pinched = false;
+            }
         }
     }
 

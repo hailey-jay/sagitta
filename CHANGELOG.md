@@ -25,9 +25,26 @@
 
 - The blank preset (`; _`, `:blank`) draws nothing, with the label over the line, as `\cong` between objects, written as `draw=none`; the canvas shows it faintly.
 
+### The mode line
+
+- Undo and redo say what they took back or did again, as `undone: delete 2 objects, 1 arrow`.
+- A message stays longer the longer it is, up to ten seconds, and `:messages` lists the last hundred, newest first, each with its time.
+- A cell's position reads as the export names it, row then column from the diagram's top-left object (`2-1`), rather than in the canvas's own coordinates.
+- While a label uses a macro KaTeX does not know, or cannot be read, the mode line shows `⚠ N undefined`; clicking it, or `:undefined`, selects those cells and names the macros.
+- The buttons have tooltips naming their keys, and screen readers a name for each glyph and each message as it comes.
+
+### The help and the key list
+
+- Typing in the help searches it; ESC clears the search, then leaves.
+- A key list line cut short has the whole of what it says as its tooltip, and a list taller than the window scrolls.
+- In a narrow window, each group's title goes above its lines, and the lines narrow, so that nothing runs off the right.
+
 ### Elsewhere
 
 - `:version` says which version of Sagitta this is.
+- `ui.light_panels` (`p` in the settings layer) makes the panels light, with dark writing.
+- A button reached by the keyboard is ringed.
+- On a touch screen, two fingers pan and pinch to zoom.
 - The web page starts sooner: its scripts load together rather than one after another, KaTeX's styles and its two commonest fonts load with them, and it opens from the files it kept, refreshing them behind for the next visit, rather than waiting on the network for each. A version just published therefore shows from the second visit after it.
 - Turning the wheel, or swiping a trackpad, redraws the grid once a frame, however many turns arrive in it.
 - KaTeX is the minified build its release ships, half the size, so the web page has half as much to download and parse.

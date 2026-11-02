@@ -440,6 +440,31 @@ Commands.TABLE["help"] = {
 };
 
 // Open the settings file, or the keys file, in the desktop's editor (in a browser, both, in the page).
+/// `undefined` selects the cells whose labels use macros KaTeX does not know, or cannot be read,
+/// and says which macros, so that a large diagram's can be found (see `UI.broken`).
+Commands.undefined_macros = (ui) => {
+    const { cells, macros } = ui.broken();
+    if (cells.length === 0) {
+        ui.mode_line.flash("every label's macros are defined");
+        return;
+    }
+    ui.deselect();
+    ui.select(...cells.map(([cell]) => cell));
+    ui.centre_view();
+    const one = cells.length === 1;
+    const labels = `${cells.length} label${one ? "" : "s"}`;
+    ui.mode_line.flash(macros.length > 0
+        ? `${labels} ${one ? "uses" : "use"} what is not defined: ${macros.join(" ")}`
+        : `${labels} cannot be read`);
+};
+Commands.TABLE["undefined"] = {
+    run: (commands) => Commands.undefined_macros(commands.ui),
+};
+
+/// `messages` lists what the mode line has said, newest first (see `Layer.Messages`).
+Commands.TABLE["messages"] = {
+    run: (commands) => commands.ui.keymap.layers.messages.toggle(),
+};
 Commands.TABLE["settings-file"] = {
     run: (commands) => commands.ui.keymap.layers.settings.open_file(),
 };

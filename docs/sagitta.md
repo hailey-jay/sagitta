@@ -70,6 +70,9 @@ There are no global macros, by design.
 `--macros FILE`, `f` in the macros layer, or `:macros FILE` choose another file.
 The macros reload whenever the file changes.
 
+KaTeX draws a macro it does not know in red.
+While any label uses one, or cannot be read at all, the mode line shows `⚠ N undefined`, with the macros as its tooltip; clicking it, or `:undefined`, selects those cells, centres the view on them, and names the macros.
+
 ## Keys
 
 Sagitta's keys work as quiver's do: the command layer stays open by itself, so its keys work without `;`, and a label is typed only after RET, which selects the whole label, so that typing replaces it and an arrow key edits it in place; RET again, or ESC, puts it down.
@@ -78,6 +81,9 @@ Backspace, like `<delete>`, deletes the selection, or, with nothing selected, th
 The layer's keys are listed only on `;`, never by waiting, though a list of choices, such as after `t`, shows at once.
 The mode line's badge says what the keys do now: `NORMAL` at rest; `;`, or what the layer is setting, such as `; CURVE`, while it awaits a key; `EDIT` while a label is edited; and `MARK` or `CHECKPOINT`, in yellow, while one waits.
 A `●` after the file's name marks unsaved changes.
+A cell's position is given as the export names it, row then column from the diagram's top-left object, as `2-1` for `from=2-1`; a position above or left of the diagram has a row or column of 0 or less.
+Undo and redo say what they took back or did again, as `undone: delete 2 objects, 1 arrow`.
+A message stays for three seconds, and longer the longer it is, up to ten; `:messages` lists the last hundred, newest first, each with its time, and ESC leaves the list.
 
 The rest live one key away:
 
@@ -92,6 +98,8 @@ The rest live one key away:
   An arrow's code is its source's then its target's, so the arrow from `A` to `S` is `AS`, and a second one `AS2`.
   An arrow whose code would be longer than three characters, as between arrows, takes one of its own, as a vertex does.
 - `C-/` (or `<f1>`, or `:help`, where a browser or one of its extensions keeps the keys) help, which ends with what Sagitta is made from and where its source is, `C-e` export, `C-i` import (paste tikz-cd), `C-m` macros (paste definitions), `C-,` settings, and `C-s` save.
+  Typing in the help searches it, keeping the lines whose key or description hold what is typed; Backspace takes a character back, and ESC clears the search, then leaves.
+  Before anything is typed, `:` and `;` do what they do outside the help.
 - `:dark-mode`: a grey canvas, with the default colour drawn in white.
   Other colours are drawn exactly, and nothing saved changes.
   It follows the system's colour scheme until it is first set.
@@ -123,6 +131,7 @@ After `\left`, the closing delimiter comes with `\right`.
 The mouse works too.
 Click a cell to select it, and again to edit its label; click an empty space twice for a new cell; drag from a cell to draw an arrow, by the edge of its space to move it, an arrow's end to reconnect it, and a selected arrow's checkpoint, by its ring, to move it.
 The wheel pans, and zooms with Shift or Control held; dragging with the middle button pans, over a cell as well as over empty space, as does dragging with Control or Option held.
+On a touch screen, two fingers pan the view and pinch to zoom; whatever the first finger had begun, such as an arrow, is let go.
 Right-click, or the `; commands` button in the mode line, opens the command layer, listing its keys at once, and clicking a line of its list presses that key; the sliders have `−` and `+` buttons.
 The mode line's `⚙` button opens the settings.
 The help lists all this under Mouse.
@@ -383,6 +392,7 @@ A value the setting cannot take is refused, with what it may be.
 | `diagram.var_corner` | `false` | the corner `; p` gives first, which follows the last one used |
 | `diagram.arrow_preset` | `"plain"` | the preset new arrows take, from `plain`, `equals`, `inclusion`, `mono`, `epi`, `maps-to`, `dashed`, `dotted`, `squiggly`, and `blank` |
 | `ui.dark_mode` | the system's | the grey canvas, which follows the system's colour scheme, and is left out of the file, until it is set |
+| `ui.light_panels` | `false` | light panels (the mode line, the key list, the command line, and the tips), with dark writing |
 | `ui.zoom` | `100` | the zoom the view starts at, and `reset-zoom` returns to, in percent (20 to 200) |
 | `ui.label_size` | `26` | the size of labels, in pixels (8 to 72), which the whole diagram is drawn to the scale of (see The canvas) |
 | `ui.which_key_compact` | `false` | list only the command layer's keys and their values, with what each does on hovering |

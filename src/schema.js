@@ -22,6 +22,9 @@ const SETTINGS = {
         // Whether the canvas is grey, with the default colour drawn in white (see `main.css`). Until
         // it is set, it follows the system's colour scheme (see `UI.initialise`).
         "ui.dark_mode": false,
+        // Whether the mode line, the key list, the command line, and the tips are light rather
+        // than dark (see `body.light-panels` in `main.css`).
+        "ui.light_panels": false,
         // The zoom the view starts at, and that `reset-zoom` returns to, in percent.
         "ui.zoom": 100,
         // The size of the labels, in pixels.
