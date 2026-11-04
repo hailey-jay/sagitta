@@ -496,9 +496,16 @@ class Keys {
         ui.update_mark_region();
     }
 
-    /// Leave select mode with the buffer: `how` is `replace`, `add`, or `subtract`.
+    /// Leave select mode with the buffer, and the rectangle of a mark still set: `how` is
+    /// `replace`, `add`, or `subtract`.
     commit_buffer(how) {
         const ui = this.ui;
+        if (ui.mark !== null) {
+            const rectangle = Keys.cells_between(ui, ui.mark, ui.focus_position);
+            ui.mark = null;
+            ui.buffer ??= new Set();
+            this.buffer(...rectangle.filter((cell) => cell.is_vertex()));
+        }
         const cells = Array.from(Keys.buffered(ui));
         ui.buffer = null;
         ui.update_mark_region();

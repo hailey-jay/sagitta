@@ -3086,6 +3086,34 @@ def test_select_mode_gathers_a_buffer_then_replaces_adds_or_takes_away(sagitta, 
     assert steps[2:] == ["A,B,D,f", True, "A,f", "C,D,\\alpha", "C,D,\\alpha", True, False]
 
 
+def test_while_gathering_no_label_is_edited(sagitta, home):
+    """`C-SPC` at `A`, → to `B`, and RET selects the rectangle, `A`, `B`, and `f`, and leaves the
+    mark, with no label open; in select mode, RET on the cell under the focus point, and Tab to a
+    queued cell, open no label either."""
+    script = """(async () => {
+        %s
+        const selected = () => Array.from(ui.selection, (cell) => cell.label).sort().join(",");
+        const editing = () => document.activeElement === ui.label_input.element;
+        ui.deselect();
+        ui.reposition_focus_point(new Position(0, 0));
+        ui.focus_point.class_list.add("focused");
+        const steps = [];
+        await press(" ", { ctrlKey: true });
+        await press("ArrowRight");
+        await press("Enter");
+        steps.push(selected(), ui.mark === null, ui.buffer === null, editing());
+        ui.positions.get("0 1").element.query_selector("kbd")?.class_list.add("queue");
+        await press("v");
+        await press("Tab");
+        steps.push(editing(), ui.buffer !== null);
+        await press("Enter");
+        steps.push(editing(), ui.buffer === null);
+        return steps;
+    })()""" % PRESS
+    assert sagitta("evaluate", _diagram(home / "paper"), script) == [
+        "A,B,f", True, True, False, False, True, False, True]
+
+
 def test_text_labels_wrap_what_is_typed_and_unwrap_to_edit(sagitta, home):
     """`:claire` turns text-label mode on, as `:text-labels` does: typing `R&D_1` on `A` stores
     `\textnormal{R\&D\_1}`, while `$x_1$` stays maths inside; the input shows the text alone; a

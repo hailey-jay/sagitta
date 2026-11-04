@@ -17,6 +17,7 @@
 
 ### Selecting
 
+- While a mark is set or select mode is on, no label opens: RET, `+`, and `-` end the gathering, and with a mark set they take its rectangle at once, so `C-SPC`, a move, and RET select it.
 - `S-arrows` walk from a cell to the arrow at it that leaves nearest that way, and from an arrow to its source, its target, or the arrow beside it.
 - `; v`, or `:select-mode`, gathers a buffer, outlined in blue, that RET puts in place of the selection, `+` adds to it, and `-` takes from it.
 - A mark's rectangle (`C-SPC`) goes into the same buffer, and joins what select mode has gathered, so rectangles and cells walked over can be taken together, or a rectangle taken away.
@@ -27,7 +28,7 @@
 
 ### Universal constructions
 
-- `:limit` (`:lim`) and `:colimit` (`:colim`) add the cone, or cocone, over the selection, with its label and legs guessed from the shape: a product or coproduct, a pullback or pushout completing the square with its corner, an equaliser or coequaliser, a kernel or cokernel with `additive`, a terminal or initial object with nothing selected, and `\lim` or `\operatorname{colim}` otherwise. Legs go only where no arrow of the diagram does, or everywhere with `all`; `universal` adds a second cone and the dashed `\exists !`. One step to undo, queued for labels.
+- `:limit` (`:lim`) and `:colimit` (`:colim`) add the cone, or cocone, over the selection, with its label and legs guessed from the shape: a product or coproduct, a pullback or pushout with its corner where it completes the square, an equaliser or coequaliser, a kernel or cokernel with `additive`, a terminal or initial object with nothing selected, and `\lim` or `\operatorname{colim}` otherwise. It goes at the focus point if that is empty, else completing a square, else above the diagram (below, for a colimit). Legs go only where no arrow of the diagram does, or everywhere with `all`, labelled outside the cone; `universal` adds a second cone, its legs bending round the limit, and the dashed `\exists !`. One step to undo, queued for labels.
 - `:natural-transformation` (`:nat`) stamps two parallel functors curving apart with a 2-cell between them, and `:adjoint-pair` (`:adj`) an adjoint pair with `⊣` between its arrows, each from the setup layer, as the other presets are.
 
 ### Spectral sequences

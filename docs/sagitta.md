@@ -123,6 +123,7 @@ The rest live one key away:
 - Cells just drawn, or stamped by a preset, are queued for labels: Tab goes to the next one waiting, and S-TAB back, to any cell of the queue, labelled or not, so that a typo can be fixed; Tab then goes on to the next one waiting.
   ESC, with nothing selected and the focus point hidden, lets go of the queue.
 - `C-SPC` marks one corner of a rectangle of cells, as Emacs sets a mark: press it, move the focus point, and press it again to put every cell between the two corners, along with the arrows whose both ends are among them, into select mode's buffer.
+  RET, `+`, or `-` while the mark is set takes its rectangle at once, so `C-SPC`, a move, and RET select it; while a mark is set or select mode is on, no label opens.
   Select mode opens if it is not on, so RET then selects the rectangle, `+` adds it, and `-` takes it away; in select mode, the rectangle joins what is gathered already, and the path to its other corner is not gathered.
   ESC lets go of the mark.
   While there is a mark, the mode line shows `MARK`, and a dashed rectangle runs from it to the focus point, over the cells it would take.
@@ -341,7 +342,8 @@ Two commands carry on from what is there:
 ## Limits and colimits
 
 `:limit` (`:lim`) and `:colimit` (`:colim`) add the cone, or cocone, over the selection: its objects, with the ends of its arrows, and the arrows among them, are the diagram.
-One object is added, beyond the diagram's top-left corner for a limit and its bottom-right for a colimit, with a leg to (or from) each object that no arrow of the diagram reaches (or leaves), since the other legs are composites.
+One object is added, with a leg to (or from) each object that no arrow of the diagram reaches (or leaves), since the other legs are composites, each labelled on the side away from the diagram.
+It goes at the focus point, if that is on an empty cell; otherwise where it completes the square of a pullback or pushout; otherwise centred above the diagram, or below it for a colimit.
 It is one step to undo, selected, and queued for labels, as a preset is.
 
 The label and legs are guessed from the shape:
@@ -349,8 +351,8 @@ The label and legs are guessed from the shape:
 | Selected | `:lim` | `:colim` |
 |---|---|---|
 | two or more objects, no arrows | `A \times B`, legs `\pi_1`, `\pi_2` | `A \sqcup B`, legs `\iota_1`, `\iota_2` |
-| a cospan `A → C ← B` | `A \times_C B`, completing the square, with a pullback corner | (the general case) |
-| a span `A ← C → B` | (the general case) | `A \sqcup_C B`, completing the square, with a pushout corner |
+| a cospan `A → C ← B` | `A \times_C B`, with a pullback corner where it completes the square | (the general case) |
+| a span `A ← C → B` | (the general case) | `A \sqcup_C B`, with a pushout corner where it completes the square |
 | a parallel pair `f, g : A ⇉ B` | `\mathrm{eq}(f, g)`, a mono into `A` | `\mathrm{coeq}(f, g)`, an epi out of `B` |
 | one arrow `f`, with `additive` | `\ker f`, a mono | `\operatorname{coker} f`, an epi |
 | nothing | `1`, at the focus point | `0`, at the focus point |
@@ -360,7 +362,7 @@ A factor longer than one symbol is bracketed, as `(A \oplus B) \times C`, and th
 The options:
 
 - `all` draws every leg, composites too.
-- `universal` adds a second cone `X`, further out, with its own legs, and the unique arrow from it, dashed and labelled `\exists !`.
+- `universal` adds a second cone `X`, further out (on along the square's diagonal, or above, or below), with its own legs, bending round the limit, and the unique arrow from it, dashed and labelled `\exists !`.
 - `additive` writes direct sums `\oplus` for products and coproducts, and takes a kernel or cokernel of one arrow.
 
 In amscd, a cone that needs a diagonal or long arrow is refused; a pullback or pushout square of neighbours, which needs neither, is drawn without its corner, which amscd has no way to draw.

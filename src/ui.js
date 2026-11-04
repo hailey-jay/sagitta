@@ -749,8 +749,18 @@ class UI {
         this.queue_sizing();
     }
 
-    /// Focus the label input and select all its text.
+    /// Whether cells are being gathered, by a mark set with `C-SPC` or in select mode's buffer
+    /// (see `Keys.mark` and `Keys.select_mode`), while which no label is edited: RET, `+`, and `-`
+    /// end the gathering instead.
+    selecting() {
+        return this.buffer !== null || this.mark !== null;
+    }
+
+    /// Focus the label input and select all its text, unless cells are being gathered.
     focus_label_input() {
+        if (this.selecting()) {
+            return;
+        }
         const input = this.label_input.element;
         input.focus();
         input.setSelectionRange(0, input.value.length);
