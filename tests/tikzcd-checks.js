@@ -1910,10 +1910,13 @@ check("a transposed loop's angle stays within a turn", [0, 90, -90, 180, -135, 4
 
 // `:limit` and `:colimit`: the cone over the selection, its label and legs guessed from its shape.
 {
-    const run = (code, select, command, words = []) => {
+    // The focus point is on the first selected object, as after selecting by keyboard, unless
+    // `focus` puts it elsewhere; with nothing selected, it is on an empty cell.
+    const run = (code, select, command, words = [], focus = null) => {
         const { ui } = load(code);
-        ui.focus_position = new Position(0, 3);
         ui.select(...ui.quiver.all_cells().filter((cell) => select.includes(cell.label)));
+        const first = Array.from(ui.selection).find((cell) => cell.is_vertex());
+        ui.focus_position = focus ?? first?.position ?? new Position(0, 3);
         Commands.TABLE[command].run(new Commands(ui), words);
         return ui;
     };
@@ -1931,7 +1934,7 @@ check("a transposed loop's angle stays within a turn", [0, 90, -90, 180, -135, 4
     const pullback = run(cospan, ["A", "B", "C"], "limit");
     check(":limit of a cospan completes the square as its pullback, with the corner",
         body(pullback), ["\t{A \\times_C B} & B \\\\", "\tA & C",
-            "\t\\arrow[\"{\\pi_2}\", from=1-1, to=1-2]", "\t\\arrow[\"{\\pi_1}\", from=1-1, to=2-1]",
+            "\t\\arrow[\"{\\pi_2}\", from=1-1, to=1-2]", "\t\\arrow[\"{\\pi_1}\"', from=1-1, to=2-1]",
             "\t\\arrow[\"\\lrcorner\"{anchor=center, pos=0.125}, draw=none, from=1-1, to=2-2]",
             "\t\\arrow[from=1-2, to=2-2]", "\t\\arrow[from=2-1, to=2-2]"]);
     check("as one step, selected", [added(pullback).length, pullback.history.present], [4, 1]);
@@ -1943,12 +1946,24 @@ check("a transposed loop's angle stays within a turn", [0, 90, -90, 180, -135, 4
         added(run(row, ["A", "B"], "limit"))[0], added(run(row, ["A", "B"], "colimit"))[0],
         added(run(row, ["A", "B"], "limit", ["additive"]))[0],
     ], ["A \\times B", "A \\sqcup B", "A \\oplus B"]);
-    check("beyond the diagram's corner", body(run(row, ["A", "B"], "limit")).slice(0, 2),
-        ["\t{A \\times B} \\\\", "\t& A & B"]);
+    check("above the diagram", body(run(row, ["A", "B"], "limit")).slice(0, 2),
+        ["\t{A \\times B} \\\\", "\tA & B"]);
+    check("or below it, for a colimit", body(run(row, ["A", "B"], "colimit")).slice(0, 2),
+        ["\tA & B \\\\", "\t{A \\sqcup B}"]);
+    check("or at the focus point, on an empty cell",
+        body(run(row, ["A", "B"], "limit", [], new Position(3, 0))).slice(0, 1),
+        ["\tA & B && {A \\times B}"]);
+    const in_a_row = "\\begin{tikzcd}\n\tA & B & C\n\t\\arrow[from=1-1, to=1-2]\n"
+        + "\t\\arrow[from=1-3, to=1-2]\n\\end{tikzcd}\n";
+    check("a cospan in a row takes its pullback above its middle, with no corner",
+        body(run(in_a_row, ["A", "B", "C"], "limit")), ["\t& {A \\times_B C} \\\\",
+            "\tA & B & C", "\t\\arrow[\"{\\pi_1}\"', from=1-2, to=2-1]",
+            "\t\\arrow[\"{\\pi_2}\", from=1-2, to=2-3]", "\t\\arrow[from=2-1, to=2-2]",
+            "\t\\arrow[from=2-3, to=2-2]"]);
     check("a parallel pair takes its equaliser, by a mono, or coequaliser, by an epi", [
         body(run(pair, ["A", "B"], "limit")).slice(0, 3),
         added(run(pair, ["A", "B"], "colimit"))[0],
-    ], [["\t{\\mathrm{eq}(f, g)} \\\\", "\t& A & B", "\t\\arrow[tail, from=1-1, to=2-2]"],
+    ], [["\t{\\mathrm{eq}(f, g)} \\\\", "\tA & B", "\t\\arrow[tail, from=1-1, to=2-1]"],
         "\\mathrm{coeq}(f, g)"]);
     check("an arrow takes its kernel or cokernel when additive, and otherwise a plain lim", [
         added(run(one, ["A", "B"], "limit", ["additive"]))[0],
@@ -1961,9 +1976,15 @@ check("a transposed loop's angle stays within a turn", [0, 90, -90, 180, -135, 4
             added(run(cospan, ["A", "B", "C"], "limit", ["all"])).length], [4, 5]);
     check("nothing selected takes a terminal or initial object at the focus point",
         [added(run(row, [], "limit")), added(run(row, [], "colimit"))], [["1"], ["0"]]);
-    check("universal adds a cone X and its unique arrow, dashed",
-        body(run(row, ["A", "B"], "limit", ["universal"])).slice(3, 4),
-        ["\t\\arrow[\"{\\exists !}\", dashed, from=1-1, to=2-2]"]);
+    const universal = body(run(row, ["A", "B"], "limit", ["universal"]));
+    check("universal adds a cone X above, and its unique arrow, dashed",
+        universal.filter((line) => line.includes("exists")),
+        ["\t\\arrow[\"{\\exists !}\", dashed, from=1-1, to=2-1]"]);
+    check("its legs bending round the limit", universal.filter((line) =>
+        line.includes("from=1-1") && line.includes("curve")).length, 2);
+    check("away from it", [Universal.bend(new Position(0, 0), new Position(2, 0),
+        new Position(1, -1)), Universal.bend(new Position(0, 0), new Position(2, 0),
+        new Position(1, 1))], [18, -18]);
     check("a factor of more than one symbol is bracketed",
         ["A", "X_1", "\\mathbb{Z}", "A \\oplus B", "H^{n}"].map(Universal.factor),
         ["A", "X_1", "(\\mathbb{Z})", "(A \\oplus B)", "H^{n}"]);

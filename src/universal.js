@@ -1,7 +1,7 @@
 /// `:limit` (`:lim`) and `:colimit` (`:colim`): the cone, or cocone, over the selected objects
 /// (and the ends of selected arrows), with the arrows among them as the diagram. One object is
-/// added, beyond the diagram's top-left corner for a limit and its bottom-right for a colimit (or
-/// completing the square of a pullback or pushout), with a leg to (or from) each object no arrow
+/// added (where `Universal.where` says: at the focus point, completing a square, or above or below
+/// the diagram), with a leg to (or from) each object no arrow
 /// of the diagram reaches (or leaves), since the others' legs are composites; `all` draws every
 /// leg. Its label is guessed from the shape (see `Universal.guess`), and `universal` adds a
 /// second cone `X` and the unique arrow from it, dashed. The new cells are one step to undo,
@@ -106,6 +106,37 @@ class Universal {
         return at;
     }
 
+    /// Where the (co)limit of `diagram`, guessed as `guess`, goes: the focus point, if it is shown
+    /// on an empty cell, as the place chosen for it; else the cell completing the square of a
+    /// pullback or pushout; else centred above the diagram, or below it for a colimit, a row
+    /// further out for each row in the way.
+    static where(ui, diagram, guess, colimit) {
+        const focused = ui.focus_point?.class_list.contains("focused") ?? true;
+        if (focused && ui.focus_position !== undefined
+            && !ui.positions.has(`${ui.focus_position}`)) {
+            return ui.focus_position;
+        }
+        if (guess.place !== undefined && !ui.positions.has(`${guess.place}`)) {
+            return guess.place;
+        }
+        const xs = diagram.vertices.map((vertex) => vertex.position.x);
+        const ys = diagram.vertices.map((vertex) => vertex.position.y);
+        const step = new Position(0, colimit ? 1 : -1);
+        const start = new Position(Math.floor((Math.min(...xs) + Math.max(...xs)) / 2),
+            colimit ? Math.max(...ys) + 1 : Math.min(...ys) - 1);
+        return Universal.free(ui, start, step);
+    }
+
+    /// The curve, in pt, that bends an arrow from `from` to `to` away from `around`, so that a
+    /// leg of the second cone passes by the (co)limit rather than through it.
+    static bend(from, to, around) {
+        const d = to.sub(from);
+        const v = around.sub(from);
+        // On screen, with rows growing downwards, a negative cross product puts `around` to the
+        // left of the arrow, and a positive curve bends it to the right.
+        return d.x * v.y - d.y * v.x < 0 ? 18 : -18;
+    }
+
     /// Add the limit, or with `colimit` the colimit, of the selection of `ui`, by `options`
     /// (`all`, `universal`, and `additive`, as `Universal.SCHEMA` describes them).
     static add(ui, colimit, { all = false, universal = false, additive = false } = {}) {
@@ -129,29 +160,41 @@ class Universal {
                 }
             }
         }
-        const xs = diagram.vertices.map((vertex) => vertex.position.x);
-        const ys = diagram.vertices.map((vertex) => vertex.position.y);
-        const step = colimit ? new Position(1, 1) : new Position(-1, -1);
-        const corner = colimit ? new Position(Math.max(...xs), Math.max(...ys))
-            : new Position(Math.min(...xs), Math.min(...ys));
-        const at = guess.place !== undefined && !ui.positions.has(`${guess.place}`)
-            ? guess.place : Universal.free(ui, corner.add(step), step);
+        const at = Universal.where(ui, diagram, guess, colimit);
+        // The square's corner is marked only where the new object completes it.
+        const square = guess.place !== undefined && at.eq(guess.place);
         const vertices = [{ label: guess.label, position: at }];
-        // Each edge is `{ source, target, label, preset }`, or `{ ..., type }` for a corner mark,
-        // an end being a vertex already there or an index into `vertices`.
-        const edges = Array.from(guess.legs).map(([vertex, { label, preset }]) => colimit
-            ? { source: vertex, target: 0, label, preset }
-            : { source: 0, target: vertex, label, preset });
-        if (guess.corner !== undefined && !amscd) {
+        // Each edge is `{ source, target, label, preset, curve }`, or `{ ..., type }` for a
+        // corner mark, an end being a vertex already there or an index into `vertices`.
+        // Each leg's label goes on the side away from the diagram, outside the cone.
+        const centre = new Position(
+            diagram.vertices.reduce((sum, vertex) => sum + vertex.position.x, 0)
+                / diagram.vertices.length,
+            diagram.vertices.reduce((sum, vertex) => sum + vertex.position.y, 0)
+                / diagram.vertices.length);
+        const edges = Array.from(guess.legs).map(([vertex, { label, preset }]) => {
+            const [from, to] = colimit ? [vertex.position, at] : [at, vertex.position];
+            const alignment = Universal.bend(from, to, centre) > 0 ? "right" : "left";
+            return colimit ? { source: vertex, target: 0, label, preset, alignment }
+                : { source: 0, target: vertex, label, preset, alignment };
+        });
+        if (square && !amscd) {
             edges.push({ source: 0, target: guess.corner, label: "",
                 type: ui.settings.get("diagram.var_corner") ? "corner-inverse" : "corner" });
         }
         if (universal) {
+            // `X` goes further out the way the limit went from the diagram: on along the square's
+            // diagonal, or above (below, for a colimit).
+            const middle = square ? guess.corner.position : null;
+            const step = middle !== null
+                ? new Position(Math.sign(at.x - middle.x), Math.sign(at.y - middle.y))
+                : new Position(0, colimit ? 1 : -1);
             const away = Universal.free(ui, at.add(step), step, [at]);
             vertices.push({ label: "X", position: away });
             for (const vertex of guess.legs.keys()) {
-                edges.push(colimit ? { source: vertex, target: 1, label: "", preset: "plain" }
-                    : { source: 1, target: vertex, label: "", preset: "plain" });
+                const [from, to] = colimit ? [vertex.position, away] : [away, vertex.position];
+                edges.push({ source: colimit ? vertex : 1, target: colimit ? 1 : vertex, label: "",
+                    preset: "plain", curve: Universal.bend(from, to, at) });
             }
             edges.push({ source: colimit ? 0 : 1, target: colimit ? 1 : 0, label: "\\exists !",
                 preset: "dashed" });
@@ -177,13 +220,15 @@ class Universal {
             const made = vertices.map(({ label, position }) => new Vertex(ui, label, position));
             added.push(...made);
             const end = (end) => typeof end === "number" ? made[end] : end;
-            for (const { source, target, label, preset, type } of edges) {
+            for (const { source, target, label, preset, type, curve = 0, alignment = "left" }
+                of edges) {
                 let options;
                 if (type !== undefined) {
                     options = Edge.default_options(null, { name: type });
                 } else {
                     const { style, level = 1 } = Presets.style(preset);
-                    options = Edge.default_options({ level }, style);
+                    options = Edge.default_options({ level, curve, label_alignment: alignment },
+                        style);
                 }
                 added.push(new Edge(ui, label, end(source), end(target), options));
             }
