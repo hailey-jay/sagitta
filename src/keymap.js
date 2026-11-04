@@ -381,9 +381,10 @@ class Keymap {
             this.paste();
             return true;
         }
-        // Select mode ends on RET, `+` (or `=`, its key unshifted), or `-`, ahead of the command
-        // layer, where `-` is dashed (see `Keys.select_mode`).
-        if (ui.buffer !== null && ui.in_mode(UIMode.Default) && !ui.input_is_active()
+        // Select mode, or a mark, ends on RET, `+` (or `=`, its key unshifted), or `-`, ahead of
+        // the command layer, where `-` is dashed (see `Keys.select_mode`): a mark's rectangle is
+        // gathered first, so `C-SPC`, a move, and RET select it.
+        if (ui.selecting() && ui.in_mode(UIMode.Default, UIMode.Pan) && !ui.input_is_active()
             && !event.ctrlKey && !event.metaKey && !event.altKey
         ) {
             const how = { "Enter": "replace", "+": "add", "=": "add", "-": "subtract" }[event.key];
@@ -511,6 +512,10 @@ class Keymap {
     /// as RET leaves it: typing replaces it, and an arrow key goes to either end of it.
     begin_edit(text = null, caret = null) {
         const ui = this.ui;
+        // No label is edited while cells are being gathered (see `UI.selecting`).
+        if (ui.selecting()) {
+            return;
+        }
         const input = ui.label_input.element;
         this.unchoose();
         input.focus();
