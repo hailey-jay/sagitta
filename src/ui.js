@@ -47,9 +47,19 @@ class UI {
         // `null` if there is none. The mode line shows `MARK` while there is one.
         this.mark = null;
 
+        // The cells select mode has gathered (`; v`, see `Keys.select_mode`), to replace, add to,
+        // or take from the selection, or `null` outside select mode. The mode line shows
+        // `SELECT` while there is one.
+        this.buffer = null;
+
         // The checkpoint being moved with the focus point, as `{ edge, from, index }` for each
         // selected arrow whose route it is in, or `null` (see `Keys.carry`).
         this.carried = null;
+
+        // Whether the label input holds the text inside a wrapped label, in text-label mode, and
+        // the selection it holds it for (see `update_selection` and `TextLabels`).
+        this.text_label_editing = false;
+        this.text_label_selection = null;
 
         // The element associated with the focus position.
         this.focus_point = null;
@@ -101,6 +111,10 @@ class UI {
         // sizing them is scheduled.
         this.unsized_labels = new Set();
         this.sizing_labels = false;
+
+        // The cells whose labels KaTeX could not draw whole, as they were last drawn: each to the
+        // macros it does not know, or `null` where the label cannot be read (see `render_maths`).
+        this.broken_labels = new Map();
         // How many times in a row each edge's label has measured nothing, though it has text (see
         // `size_labels`).
         this.unmeasured = new WeakMap();
@@ -120,8 +134,8 @@ class UI {
         this._format = "tikz-cd";
         this.amscd_ends = new Map();
 
-        // The frame of a spectral sequence, if the diagram has one (see `SpectralSequence`).
-        this.frame = null;
+        // The frame of each spectral sequence page the diagram holds (see `SpectralSequence`).
+        this.frames = [];
 
         // Whether the view stays where it is as columns and rows resize, rather than moving to
         // keep what is in it centred: while a preset's ghost is redrawn on every key press (see
@@ -139,6 +153,10 @@ class UI {
         // change of extent is animated, and the frame of that animation (see `animate_layout`).
         this.layout_settled = false;
         this.layout_frame = null;
+        // The frame a wheel's pan or zoom is to be drawn in, and the grid's colour, with whether
+        // it is dark mode's (see `pan_to` and `update_grid`).
+        this.view_frame = null;
+        this.grid_colour = null;
     }
 
     /// The diagram's column and row separation, in em.
@@ -178,7 +196,7 @@ class UI {
         }
         const problems = Formats.problems(format, this.quiver);
         // Only tikz-cd draws a spectral sequence's axes; its entries and ticks stay.
-        const frame = format !== "tikz-cd" && this.frame !== null;
+        const frame = format !== "tikz-cd" && this.frames.length > 0;
         if (frame) {
             problems.push(["the axes of a spectral sequence", []]);
         }
@@ -197,9 +215,9 @@ class UI {
         const since = this.history.present;
         const actions = format === "amscd" ? AmsCD.convert(this) : [];
         if (frame) {
-            const dropped = { kind: "frame", from: this.frame, to: null };
-            this.history.effect(this, [dropped], false);
-            actions.push(dropped);
+            const dropped = SpectralSequence.clearing(this);
+            this.history.effect(this, dropped, false);
+            actions.push(...dropped);
         }
         const switched = { kind: "format", from: this.format, to: format };
         this.format = format;
@@ -348,6 +366,25 @@ class UI {
             }
             // A `%` is typed as the sign, `\%`, since a comment means nothing in a label (see
             // `Delimiters.percent`), unless it finishes `\%`.
+            // In text-label mode, typing over the whole label, as RET leaves it selected, types
+            // text, whatever the label was (as `\bullet`, which Space gives a new cell).
+            if (ui.settings.get("ui.text_labels") && !ui.text_label_editing
+                && input.selectionStart === 0 && input.selectionEnd === input.value.length
+            ) {
+                ui.text_label_editing = true;
+            }
+            // In text, the characters that TeX would stop at, or split the cell at, are typed as
+            // text (see `TextLabels.escape`).
+            if (ui.text_label_editing && data !== null) {
+                const before = input.value.slice(0, input.selectionStart);
+                const replacement = TextLabels.escape(before, data);
+                if (replacement !== null) {
+                    event.preventDefault();
+                    input.setRangeText(replacement, input.selectionStart, input.selectionEnd, "end");
+                    input.dispatchEvent(new Event("input"));
+                    return;
+                }
+            }
             if (data === "%") {
                 const before = input.value.slice(0, input.selectionStart);
                 if ((before.match(/\\*$/)[0].length % 2) === 0) {
@@ -374,8 +411,12 @@ class UI {
         // the input field is modified.
         ui.label_input.listen("input", () => {
             if (!ui.in_mode(UIMode.Command)) {
+                // In text-label mode, what is typed is the text inside the wrapper.
+                const value = ui.text_label_editing ? TextLabels.wrap(
+                    ui.label_input.element.value, ui.settings.get("ui.text_wrapper"))
+                    : ui.label_input.element.value;
                 const selection = Array.from(ui.selection).filter((cell) => {
-                    return cell.label !== ui.label_input.element.value;
+                    return cell.label !== value;
                 });
                 if (selection.length === 0) {
                     // It can happen that we receive an event (e.g. `inputType` `historyUndo`)
@@ -390,11 +431,11 @@ class UI {
                     ["label", ui.selection],
                     [{
                         kind: "label",
-                        value: ui.label_input.element.value,
+                        value,
                         cells: selection.map((cell) => ({
                             cell,
                             from: cell.label,
-                            to: ui.label_input.element.value,
+                            to: value,
                         })),
                     }],
                 );
@@ -507,7 +548,7 @@ class UI {
             }
             // Currently all errors are disabled, so we don't wrap this in a try-catch block.
             katex.render(
-                Delimiters.percent(cell.label).replace(/\$/g, "\\$"),
+                Delimiters.dollars(Delimiters.percent(cell.label)),
                 label.element,
                 {
                     throwOnError: false,
@@ -518,9 +559,33 @@ class UI {
                         .includes(context.command),
                 },
             );
+            // KaTeX draws a macro it does not know in the error colour, as text, and a label it
+            // cannot read at all as a `katex-error`.
+            if (label.element.querySelector(".katex-error") !== null) {
+                this.broken_labels.set(cell, null);
+            } else {
+                const unknown = Array.from(
+                    label.element.querySelectorAll('.mord.text[style*="--ui-error"]'),
+                    (element) => element.textContent,
+                );
+                if (unknown.length > 0) {
+                    this.broken_labels.set(cell, unknown);
+                } else {
+                    this.broken_labels.delete(cell);
+                }
+            }
             this.unsized_labels.add(cell);
         }
         this.queue_sizing();
+    }
+
+    /// The cells of the diagram whose labels use macros KaTeX does not know, or cannot be read,
+    /// as `[[cell, macros or null]]`, and every unknown macro among them, once each, in order.
+    broken() {
+        const cells = Array.from(this.broken_labels)
+            .filter(([cell]) => this.quiver.cells[cell.level]?.has(cell));
+        const macros = [...new Set(cells.flatMap(([, unknown]) => unknown ?? []))];
+        return { cells, macros };
     }
 
     /// Size the labels in `unsized_labels` (see `size_labels`), once the fonts they need have
@@ -566,7 +631,7 @@ class UI {
         }
         const width = katex.element.offsetWidth;
         const outer = label.element.getBoundingClientRect();
-        const struts = Array.from(katex.element.querySelectorAll(".katex-html .strut"))
+        const struts = Array.from(katex.element.querySelectorAll(".katex-html .katex-strut"))
             .map((strut) => strut.getBoundingClientRect());
         if (struts.length === 0 || outer.height === 0) {
             const height = katex.element.offsetHeight;
@@ -578,7 +643,7 @@ class UI {
         const bottom = Math.max(...struts.map(({ bottom }) => bottom));
         // How far the label reaches below its baseline, as KaTeX sets each strut as far below the
         // baseline as the box goes, which amscd sets a label above an arrow by.
-        const elements = Array.from(katex.element.querySelectorAll(".katex-html .strut"));
+        const elements = Array.from(katex.element.querySelectorAll(".katex-html .katex-strut"));
         const em = parseFloat(getComputedStyle(elements[0]).fontSize);
         const descent = Math.max(0, ...elements.map((strut) =>
             -(parseFloat(strut.style.verticalAlign) || 0) * em));
@@ -601,7 +666,7 @@ class UI {
         const label = vertex.element.query_selector(".label");
         const katex = vertex.element.query_selector(".label .katex-html");
         const struts = katex === null ? []
-            : Array.from(katex.element.querySelectorAll(".strut"));
+            : Array.from(katex.element.querySelectorAll(".katex-strut"));
         const outer = label.element.getBoundingClientRect();
         if (struts.length === 0 || outer.height === 0) {
             return null;
@@ -684,8 +749,18 @@ class UI {
         this.queue_sizing();
     }
 
-    /// Focus the label input and select all its text.
+    /// Whether cells are being gathered, by a mark set with `C-SPC` or in select mode's buffer
+    /// (see `Keys.mark` and `Keys.select_mode`), while which no label is edited: RET, `+`, and `-`
+    /// end the gathering instead.
+    selecting() {
+        return this.buffer !== null || this.mark !== null;
+    }
+
+    /// Focus the label input and select all its text, unless cells are being gathered.
     focus_label_input() {
+        if (this.selecting()) {
+            return;
+        }
         const input = this.label_input.element;
         input.focus();
         input.setSelectionRange(0, input.value.length);
@@ -698,7 +773,25 @@ class UI {
         const input = this.label_input.element;
         // While a prompt owns the input, what it holds is being typed, not a label.
         if (!this.in_mode(UIMode.Command)) {
-            const label = ArrowOptions.common(this.selection, (cell) => cell.label) ?? "";
+            let label = ArrowOptions.common(this.selection, (cell) => cell.label) ?? "";
+            // In text-label mode, a label that is empty, or one wrapped group, is edited as the
+            // text inside; any other, or a selection of different labels, as it is. While the
+            // same selection's label is typed, it stays text, even through a state (an unclosed
+            // brace) that does not unwrap, and the input keeps what is typed.
+            if (this.text_label_selection === this.selection
+                && document.activeElement === input
+            ) {
+                label = input.value;
+            } else {
+                const common = ArrowOptions.common(this.selection, (cell) => cell.label);
+                const text = !this.settings.get("ui.text_labels") || common === null ? null
+                    : common === "" ? "" : TextLabels.unwrap(common);
+                this.text_label_editing = text !== null;
+                this.text_label_selection = this.selection;
+                if (text !== null) {
+                    label = text;
+                }
+            }
             if (input.value !== label) {
                 // Guard on the value changing: assigning it moves the caret to the end.
                 input.value = label;
@@ -743,9 +836,12 @@ class UI {
     }
 
     /// Unqueue any selected cell, typically after an edit affecting the cells in the selection.
+    /// Take the selected cells out of the queue, as labelled: S-TAB still goes back to them (see
+    /// `Keys.next_queued`) until ESC lets go of the queue.
     unqueue_selected() {
         for (const element of this.element.query_selector_all(".cell.selected kbd.queue")) {
             element.class_list.remove("queue");
+            element.class_list.add("walked");
         }
     }
 
@@ -791,6 +887,7 @@ class UI {
         // The mark, and a carried checkpoint, belong to the diagram they were set in.
         this.mark = null;
         this.carried = null;
+        this.buffer = null;
         this.update_mark_region();
 
         // Clear the quiver and update associated UI elements. A new diagram is in tikz-cd until
@@ -799,7 +896,7 @@ class UI {
         this._format = "tikz-cd";
         this.grid.fixed = null;
         this.amscd_ends = new Map();
-        this.frame = null;
+        this.frames = [];
         this.update_extent();
     }
 
@@ -809,13 +906,19 @@ class UI {
         return { macros, colours };
     }
 
+    /// The frame of the spectral sequence page in use, or `null` (see `SpectralSequence.current`).
+    get frame() {
+        return SpectralSequence.current(this);
+    }
+
     /// Returns options that are not saved persistently in `settings`, but are used to modify
     /// export output.
     options() {
         return {
             dimensions: this.diagram_size(),
             sep: this.sep,
-            frame: this.frame,
+            frames: this.frames,
+            kept: this.kept,
         };
     }
 
@@ -833,6 +936,7 @@ class UI {
             });
         }
         document.body.classList.toggle("dark", this.settings.get("ui.dark_mode"));
+        document.body.classList.toggle("light-panels", this.settings.get("ui.light_panels"));
         document.body.style.setProperty("--label-size", `${this.settings.get("ui.label_size")}px`);
         this.update_scale();
         this.scale = this.default_scale();
@@ -1272,6 +1376,10 @@ class UI {
         for (const cell of this.quiver.all_cells()) {
             cell.element.class_list.toggle("in-mark", inside.has(cell));
         }
+        const buffered = Keys.buffered(this);
+        for (const cell of this.quiver.all_cells()) {
+            cell.element.class_list.toggle("in-buffer", buffered.has(cell));
+        }
         this.mark_region.class_list.toggle("hidden", this.mark === null);
         if (this.mark === null) {
             return;
@@ -1540,8 +1648,10 @@ class UI {
         return effectful;
     }
 
-    /// Repositions the view by an absolute offset.
-    pan_to(offset, zoom = this.scale) {
+    /// Repositions the view by an absolute offset. The view moves at once; with `queue`, the grid
+    /// and the axes behind it are redrawn in the next frame instead, once for however many turns
+    /// of the wheel arrive before it, as a trackpad sends far more than the screen shows.
+    pan_to(offset, zoom = this.scale, queue = false) {
         this.view.x = offset.x;
         this.view.y = offset.y;
         this.scale = zoom;
@@ -1549,16 +1659,30 @@ class UI {
         this.canvas.set_style({
             transform: `translate(${-view.x}px, ${-view.y}px) scale(${2 ** this.scale})`,
         });
+        if (queue) {
+            this.view_frame ??= requestAnimationFrame(() => {
+                this.view_frame = null;
+                this.draw_view();
+            });
+            return;
+        }
+        cancelAnimationFrame(this.view_frame);
+        this.view_frame = null;
+        this.draw_view();
+    }
+
+    /// Redraw what follows the view: the grid, and the axes of a spectral sequence, which follow
+    /// its ticks wherever the layout puts them.
+    draw_view() {
         this.update_grid();
-        // The axes of a spectral sequence follow its ticks wherever the layout puts them.
         SpectralSequence.draw(this);
     }
 
     /// Repositions the view by a relative offset.
     /// If `offset` is positive, then everything will appear to move towards the top left.
     /// If `zoom` is positive, then everything will grow larger.
-    pan_view(offset, zoom = 0) {
-        this.pan_to(this.view.add(offset), this.scale + zoom);
+    pan_view(offset, zoom = 0, queue = false) {
+        this.pan_to(this.view.add(offset), this.scale + zoom, queue);
     }
 
     /// Centre the view with respect to the selection, or the entire quiver if no cells are
@@ -1647,6 +1771,9 @@ class UI {
             case "ui.dark_mode":
                 document.body.classList.toggle("dark", value);
                 this.update_grid();
+                break;
+            case "ui.light_panels":
+                document.body.classList.toggle("light-panels", value);
                 break;
             case "ui.zoom":
                 this.scale = this.default_scale();
@@ -1787,8 +1914,16 @@ class UI {
         // Constants for parameters of the grid pattern.
         // The (average) length of the dashes making up the cell border lines.
         const DASH_LENGTH = this.grid.gap.x;
-        // The border colour, which dark mode changes.
-        const BORDER_COLOUR = getComputedStyle(document.body).getPropertyValue("--grid");
+        // The border colour, which only dark mode changes, so it is looked up again only then,
+        // rather than on every turn of the wheel.
+        const dark = document.body.classList.contains("dark");
+        if (this.grid_colour?.dark !== dark) {
+            this.grid_colour = {
+                dark,
+                value: getComputedStyle(document.body).getPropertyValue("--grid"),
+            };
+        }
+        const BORDER_COLOUR = this.grid_colour.value;
 
         const [width, height] = [document.body.offsetWidth, document.body.offsetHeight];
         const canvas = this.grid_canvas;

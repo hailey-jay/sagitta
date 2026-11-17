@@ -13,3 +13,5 @@ scratch/
 node_modules/
 # Packages, from npm run dist.
 dist/
+# The web page, from npm run site.
+site/

@@ -448,6 +448,9 @@ module.exports = {
                 case "wait":
                     await ctx.wait(rest[0]);
                     break;
+                case "command":
+                    await ctx.command(rest[0]);
+                    break;
                 case "eval":
                     found.push(await ctx.js(rest[0]));
                     break;
@@ -456,11 +459,12 @@ module.exports = {
         return found;
     },
 
-    /// The mark (`C-SPC`): on the square `A B / C D`, with the focus point on `A`, take the top
-    /// row, then the whole square, then add the row again to show Shift adds rather than replaces,
-    /// and finally drop a mark with Escape. Returns the counts and the mode line after each step,
-    /// with whether the rectangle from the mark is shown, its size in cells, and how many cells it
-    /// marks as those it would take.
+    /// The mark (`C-SPC`): on the square `A B / C D`, with the focus point on `A`, put the top
+    /// row into select mode's buffer and select it with RET, then the whole square, then take the
+    /// row away with `-`, drop a mark with Escape, and last mark a rectangle inside select mode,
+    /// where the path to the mark's other corner is not gathered. Returns the counts, the mode
+    /// line, and how many cells are in the buffer after each step, with whether the rectangle from
+    /// the mark is shown, its size in cells, and how many cells it marks as those it would take.
     mark: async (ctx) => {
         const steps = {};
         const region = () => ctx.js(`(() => {
@@ -482,21 +486,28 @@ module.exports = {
                 counts: await ctx.counts(),
                 mode_line: await ctx.mode_line(),
                 region: await region(),
+                buffered: await ctx.js(`document.querySelectorAll(".cell.in-buffer").length`),
             };
         };
-        // `A` and `B`, and the arrow between them.
         await step("mark at A", ["Space", ["control"]]);
         // Before the mark is used, the rectangle grows with the focus point.
         await step("towards B", ["Right"]);
-        await step("top row", ["Space", ["control"]]);
+        // `A` and `B`, and the arrow between them, go into the buffer, and RET selects them.
+        await step("row in the buffer", ["Space", ["control"]]);
+        await step("top row", ["Enter"]);
         // The whole square, from `A` again: four vertices and all four arrows.
         await step("square", ["Left"], ["Space", ["control"]],
-            ["Right"], ["Down"], ["Space", ["control"]]);
-        // Shift adds, so marking the top row again over the square leaves the square selected.
-        await step("adding the row", ["Up"], ["Left"], ["Space", ["control"]],
-            ["Right"], ["Space", ["control", "shift"]]);
-        // A mark dropped with Escape selects nothing, and the selection is left alone.
+            ["Right"], ["Down"], ["Space", ["control"]], ["Enter"]);
+        // `-` takes the top row away, leaving `C`, `D`, and the three arrows at them.
+        await step("row taken away", ["Up"], ["Left"], ["Space", ["control"]],
+            ["Right"], ["Space", ["control"]], ["-"]);
+        // A mark dropped with Escape gathers nothing, and leaves the selection as it was.
         await step("mark dropped", ["Space", ["control"]], ["Escape"]);
+        // In select mode, from `A`: the mark's rectangle down the left column is gathered, and
+        // not `B` and `D`, which the focus point passes on its way to `C`.
+        await step("rectangle in select mode", ["Left"], [";"], ["v"], ["Space", ["control"]],
+            ["Right"], ["Down"], ["Left"], ["Space", ["control"]]);
+        await step("left column", ["Enter"]);
         return steps;
     },
 
@@ -512,8 +523,9 @@ module.exports = {
     /// A Control key whose release the window never sees, as when a file dialog or another window
     /// takes the focus while it is held: Control goes down and stays down as far as the page knows,
     /// which pans. Then plain keys, with Control up, as the next real key press reports: Right
-    /// moves the focus point from `A`, and `C-SPC` twice takes the top row. Returns the mode after
-    /// the stuck key, after Right, and the counts at the end.
+    /// moves the focus point from `A`, and `C-SPC` twice puts the top row into select mode's
+    /// buffer, which RET selects. Returns the mode after the stuck key, after Right, and the counts
+    /// at the end.
     stale_pan: async (ctx) => {
         ctx.contents.sendInputEvent({ type: "keyDown", keyCode: "Control", modifiers: ["control"] });
         await ctx.wait(50);
@@ -524,6 +536,7 @@ module.exports = {
         await ctx.press("Space", ["control"]);
         await ctx.press("Right");
         await ctx.press("Space", ["control"]);
+        await ctx.press("Enter");
         return { stuck, after, counts: await ctx.counts() };
     },
 

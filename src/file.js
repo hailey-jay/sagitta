@@ -451,11 +451,18 @@ class DiagramFile {
     }
 
     /// Set the column and row separations from the `tikzcd` environment's options in `text`, which
-    /// the encoding does not record.
+    /// the encoding does not record, and note whether they hold `cramped` and `ampersand
+    /// replacement`, which saving keeps (see `UI.options`) whatever the export settings say.
     static restore_sep(ui, text) {
         const sep = { column: DiagramFile.SEPS.normal, row: DiagramFile.SEPS.normal };
         const environment = DiagramFile.environment(text);
-        for (const option of environment === null ? [] : environment.options.split(",")) {
+        const options = environment === null ? [] : environment.options.split(",")
+            .map((option) => option.trim());
+        ui.kept = {
+            cramped: options.includes("cramped"),
+            ampersand: options.some((option) => /^ampersand replacement\s*=/.test(option)),
+        };
+        for (const option of options) {
             const match = option.trim().match(/^(column |row )?sep\s*=\s*(\w+|[\d.]+em)$/);
             if (match === null) {
                 continue;

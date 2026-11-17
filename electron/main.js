@@ -8,15 +8,19 @@
 const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, shell } = require("electron");
 const child_process = require("node:child_process");
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
+const { find_up } = require("./paths.js");
 
 const USAGE = `\
 Usage: sagitta [--macros FILE] [--devtools] [DIAGRAM.cd.tex] [-- SWITCHES]
+       sagitta --check [--macros FILE] [DIR]
 
 A keyboard-driven editor for tikz-cd and amscd diagrams. Opens DIAGRAM, which
 need not exist yet, or else an empty diagram. In the app, C-/ lists the keys.
 
+  --check [DIR]  read every diagram under DIR (or here) without a window, and
+                 list what Sagitta cannot read, what saving would change, and
+                 undefined macros; exits 1 if it finds any
   --macros FILE  take macros from FILE, not the nearest macros.tex
   --devtools     open Chromium's developer tools
   -h, --help     show this and exit
@@ -48,7 +52,8 @@ function usage_error(message) {
     report(`sagitta: ${message}; see sagitta --help\n`, 2);
 }
 
-/// The command-line arguments, as `{ diagram, macros, devtools, switches, arguments }`, with paths
+/// The command-line arguments, as `{ diagram, macros, devtools, switches, arguments, check }`
+/// (`check` the working directory if `--check` is given, and `diagram` its directory), with paths
 /// made absolute, `switches` those after `--`, and `arguments` those before it. Exits on `--help`, `--version`, or a mistake, which
 /// would otherwise open an empty diagram regardless.
 function parse_arguments() {
@@ -63,7 +68,8 @@ function parse_arguments() {
         argv = JSON.parse(process.env.SAGITTA_ARGUMENTS);
         delete process.env.SAGITTA_ARGUMENTS;
     }
-    const result = { diagram: null, macros: null, devtools: false, switches: [], arguments: [] };
+    const result = { diagram: null, macros: null, devtools: false, switches: [], arguments: [],
+        check: null };
     for (let i = 0; i < argv.length; ++i) {
         const argument = argv[i];
         if (argument === "-h" || argument === "--help") {
@@ -75,6 +81,8 @@ function parse_arguments() {
                 usage_error("--macros needs a file");
             }
             result.macros = path.resolve(argv[++i]);
+        } else if (argument === "--check") {
+            result.check = process.cwd();
         } else if (argument === "--devtools") {
             result.devtools = true;
         } else if (argument === "--") {
@@ -84,7 +92,7 @@ function parse_arguments() {
         } else if (argument.startsWith("-")) {
             usage_error(`unknown option '${argument}'`);
         } else if (result.diagram !== null) {
-            usage_error("one diagram at a time");
+            usage_error(result.check === null ? "one diagram at a time" : "one directory at a time");
         } else {
             result.diagram = path.resolve(argv[i]);
         }
@@ -93,6 +101,21 @@ function parse_arguments() {
 }
 
 const args = parse_arguments();
+
+// `--check` reads the diagrams under its directory (given where a diagram would be) and reports,
+// opening no window (see `check.js`).
+if (args.check !== null) {
+    require("./check.js").check(path.join(__dirname, ".."), args.diagram ?? args.check,
+        args.macros, find_up).then(({ text, code }) => {
+        // The report is the output, problems or none; only a mistake in the arguments is an error.
+        if (WINDOWED || code === 2) {
+            report(text, code);
+        }
+        process.stdout.write(text);
+        app.exit(code);
+        process.exit(code);
+    });
+}
 
 // Chromium reads no switches after `--`, so Sagitta starts again, detached, with them as its only
 // arguments besides the app's directory under the stock binary, and with its own arguments in
@@ -195,6 +218,9 @@ function write_file(file, text) {
 }
 
 app.whenReady().then(() => {
+    if (args.check !== null) {
+        return;
+    }
     // No menu bar: every binding is the page's own, and a menu would claim `Alt` and some chords.
     Menu.setApplicationMenu(null);
 
@@ -271,29 +297,7 @@ app.whenReady().then(() => {
             }
             return shell.openPath(keys);
         },
-        // The nearest file called `name` in `directory` or its ancestors, or `null`. The search
-        // ends at the enclosing git repository's root, and never reaches the home directory, so
-        // that a stray `~/macros.tex` is not taken up by every diagram outside a project.
-        find_up: (directory, name) => {
-            // Windows spells one directory several ways, and they differ in case. Compare paths
-            // the way the platform does, or the search takes up a `macros.tex` above the home
-            // directory.
-            const same = (a, b) => process.platform === "win32"
-                ? a.toLowerCase() === b.toLowerCase()
-                : a === b;
-            const home = os.homedir();
-            for (let current = directory; !same(current, home); current = path.dirname(current)) {
-                const candidate = path.join(current, name);
-                if (fs.existsSync(candidate)) {
-                    return candidate;
-                }
-                const root = fs.existsSync(path.join(current, ".git"));
-                if (root || path.dirname(current) === current) {
-                    return null;
-                }
-            }
-            return null;
-        },
+        find_up,
         open_dialog: (kind, directory) => {
             const paths = dialog.showOpenDialogSync(window, {
                 defaultPath: directory ?? undefined,

@@ -55,6 +55,7 @@ class Keymap {
             import: new Layer.Import(this),
             macros: new Layer.Macros(this),
             help: new Layer.Help(this),
+            messages: new Layer.Messages(this),
             export: new Layer.Export(this),
             settings: new Layer.Settings(this),
             colour: new Layer.Colour(this),
@@ -78,8 +79,8 @@ class Keymap {
         // Whether Shift is held, which shortens both ends of an arrow together.
         this.symmetric = false;
 
-        // The arrows set aside from the selection while its cells' label is edited, and those
-        // cells, or `null` (see `edit_target`).
+        // The cells set aside from the selection while the rest of it is labelled, and the cells
+        // labelled, as `{ aside, labelled }`, or `null` (see `edit_target`).
         this.set_aside = null;
 
         // The list of the command layer's bindings, and whether it is shown (see `enter`).
@@ -380,6 +381,18 @@ class Keymap {
             this.paste();
             return true;
         }
+        // Select mode, or a mark, ends on RET, `+` (or `=`, its key unshifted), or `-`, ahead of
+        // the command layer, where `-` is dashed (see `Keys.select_mode`): a mark's rectangle is
+        // gathered first, so `C-SPC`, a move, and RET select it.
+        if (ui.selecting() && ui.in_mode(UIMode.Default, UIMode.Pan) && !ui.input_is_active()
+            && !event.ctrlKey && !event.metaKey && !event.altKey
+        ) {
+            const how = { "Enter": "replace", "+": "add", "=": "add", "-": "subtract" }[event.key];
+            if (how !== undefined) {
+                ui.keys.commit_buffer(how);
+                return true;
+            }
+        }
         // A layer may take keys with modifiers too, as the setup layer of a preset does.
         if (this.layer?.captures_all && !ui.in_mode(UIMode.Command)) {
             return this.layer.intercept(event);
@@ -417,10 +430,19 @@ class Keymap {
     }
 
     /// Select the cell that typing should edit. With the focus point visible, that is the cell
-    /// under it (created, if `create`, when there is none); otherwise it is the selection. Returns
-    /// whether there is anything to edit.
-    edit_target(create) {
+    /// under it (created, if `create`, when there is none); otherwise it is the selection. With
+    /// `arrows` (S-RET), it is the selection's arrows alone. Returns whether there is anything to
+    /// edit.
+    edit_target(create, arrows = false) {
         const ui = this.ui;
+        if (arrows) {
+            const edges = Array.from(ui.selection).filter((cell) => cell.is_edge());
+            if (edges.length === 0) {
+                throw new Error("S-RET labels the selected arrows, and none is selected.");
+            }
+            this.set_aside_all(edges);
+            return true;
+        }
         if (ui.focus_point.class_list.contains("focused")) {
             const cell = ui.cell_under_focus_point();
             if (cell !== null) {
@@ -441,13 +463,23 @@ class Keymap {
         // come back once it is put down (see `restore_selection`).
         const drawn = Keymap.drawn_to(ui.selection);
         if (drawn !== null) {
-            const edges = Array.from(ui.selection).filter((cell) => cell !== drawn);
-            this.set_aside = { edges, vertices: new Set([drawn]) };
-            for (const edge of edges) {
-                ui.deselect(edge);
-            }
+            this.set_aside_all([drawn]);
         }
         return ui.selection.size > 0;
+    }
+
+    /// Deselect all but `labelled`, until the label is put down (see `restore_selection`).
+    set_aside_all(labelled) {
+        const ui = this.ui;
+        const kept = new Set(labelled);
+        const aside = Array.from(ui.selection).filter((cell) => !kept.has(cell));
+        if (aside.length === 0) {
+            return;
+        }
+        this.set_aside = { aside, labelled: kept };
+        for (const cell of aside) {
+            ui.deselect(cell);
+        }
     }
 
     /// The cell of `selection` if it is one cell and arrows into it, as Space leaves it after
@@ -462,16 +494,16 @@ class Keymap {
             ? vertex : null;
     }
 
-    /// Bring back the arrows `edit_target` set aside, once the label is put down, unless the
+    /// Bring back the cells `edit_target` set aside, once the label is put down, unless the
     /// selection has changed since.
     restore_selection() {
         const set_aside = this.set_aside;
         this.set_aside = null;
         const ui = this.ui;
-        if (set_aside !== null && ui.selection.size === set_aside.vertices.size
-            && Array.from(ui.selection).every((cell) => set_aside.vertices.has(cell))
+        if (set_aside !== null && ui.selection.size === set_aside.labelled.size
+            && Array.from(ui.selection).every((cell) => set_aside.labelled.has(cell))
         ) {
-            ui.select(...set_aside.edges);
+            ui.select(...set_aside.aside);
         }
     }
 
@@ -480,6 +512,10 @@ class Keymap {
     /// as RET leaves it: typing replaces it, and an arrow key goes to either end of it.
     begin_edit(text = null, caret = null) {
         const ui = this.ui;
+        // No label is edited while cells are being gathered (see `UI.selecting`).
+        if (ui.selecting()) {
+            return;
+        }
         const input = ui.label_input.element;
         this.unchoose();
         input.focus();
@@ -596,11 +632,14 @@ class Keymap {
         // The compact list shows only the keys and their values, and what each does on hovering.
         const compact = ui.settings.get("ui.which_key_compact");
         this.which_key.class_list.toggle("compact", compact);
-        for (const entry of this.which_key.query_selector_all(".main .entry")) {
-            if (compact) {
-                entry.set_attributes({ title: entry.query_selector("kbd + span").element.textContent });
-            } else {
-                entry.remove_attributes("title");
+        // A line cut short, or with only its key showing, has the whole of what it does as its
+        // tooltip.
+        if (!this.which_key_titled) {
+            this.which_key_titled = true;
+            for (const entry of this.which_key.query_selector_all(".main .entry")) {
+                entry.set_attributes({
+                    title: entry.query_selector("kbd + span").element.textContent,
+                });
             }
         }
 
@@ -691,6 +730,10 @@ class Keymap {
                     wide ? " wide" : ""}` })
                     .add(new DOM.Element("kbd").add(key))
                     .add_to(group);
+                // A line cut short has the whole of what it says as its tooltip.
+                if (typeof description === "string" && !wide) {
+                    entry.set_attributes({ title: description });
+                }
                 if (swatch !== null) {
                     entry.add(new DOM.Element("i", { class: "swatch" }, {
                         background: swatch.css(),
@@ -1154,9 +1197,14 @@ Keymap.CONTEXT = new Enum(
             },
         },
         {
-            combinations: [{ key: "Enter", context: Always }],
-            press: (ui) => ui.keys.enter(),
-            help: [["Typing", "edit the label"]],
+            // Shift labels the selected arrows rather than the cell (see `edit_target`), and
+            // puts a label down as RET does.
+            combinations: [{ key: "Enter", shift: null, context: Always }],
+            press: (ui, event) => ui.keys.enter(event),
+            help: [
+                ["Typing", "edit the label", "RET"],
+                ["Typing", "label the selected arrows", "S-RET"],
+            ],
         },
         // Without the modifier, which is the mark's (see `Bindings.DEFAULTS`).
         {
@@ -1200,7 +1248,7 @@ Keymap.CONTEXT = new Enum(
             press: (ui, event) => ui.keys.arrow(event),
             help: [
                 ["Moving", "move", "arrows"],
-                ["Moving", "extend the selection", "S-arrows"],
+                ["Moving", "walk to an arrow, or an arrow's end", "S-arrows"],
                 ["Moving", "move, bend, or turn the selection", "C-arrows"],
             ],
         },
@@ -1239,6 +1287,8 @@ Keymap.HELP_ELSEWHERE = {
         // from empty space, which the modifiers cannot.
         ["Mouse", "pan", "scroll"],
         ["Mouse", "pan", "C-drag  A-drag  middle-drag"],
+        // `Pointer.touch_move`.
+        ["Mouse", "pan, and pinch to zoom", "two fingers"],
         ["Mouse", "zoom", "S-scroll  C-scroll"],
     ],
 };
@@ -1274,6 +1324,7 @@ Keymap.WHICH_KEY = [
     // marks the one they take now (see `Commands.preset`).
     ["Presets", [
         "plain", "equals", "inclusion", "mono", "epi", "maps-to", "dashed", "dotted", "squiggly",
+        "blank",
     ].map((name) => [name, name.replace("-", " "), null, `preset:${name}`])],
     ["Label", [
         ["align", "alignment", "edge", "alignment:"],
@@ -1290,6 +1341,7 @@ Keymap.WHICH_KEY = [
     ]],
     ["Select", [
         ["toggle-selection", "select or deselect, by code"],
+        ["select-mode", "select mode: RET, + add, - take away"],
         ["select-at-focus", "select at focus"],
         ["create-arrows", "arrows to cells, by code", "selection"],
         ["delete-selection", "delete", "selection"],
@@ -1316,7 +1368,7 @@ Keymap.WHICH_KEY = [
 Keymap.NOT_AMSCD = new Set([
     "tail", "body", "head", "adjunction", "corner", "crossing-over", "route", "checkpoint",
     "move-checkpoint", "colour", "level", "curve", "offset", "length", "inclusion", "mono", "epi",
-    "maps-to", "dashed", "dotted", "squiggly", "position", "label-colour", "align-centre",
+    "maps-to", "dashed", "dotted", "squiggly", "blank", "position", "label-colour", "align-centre",
     "align-over", "align-source", "align-target",
 ]);
 

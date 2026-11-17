@@ -142,7 +142,8 @@ UIMode.Connect = class extends UIMode {
             }
             const edge = Edge.create(ui, this.source, this.target);
             ui.select(edge);
-            if (!event.shiftKey && !event.metaKey && !event.ctrlKey) {
+            // No label is edited while cells are being gathered (see `UI.selecting`).
+            if (!event.shiftKey && !event.metaKey && !event.ctrlKey && !ui.selecting()) {
                 ui.label_input.element.focus();
             }
             return edge;

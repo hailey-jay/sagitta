@@ -48,7 +48,7 @@ A windowed program on Windows has no console, so `--help` and `--version` open a
 ### In a browser
 
 Sagitta also runs as a web page.
-Run `npm run web` in a clone and open <http://127.0.0.1:8000>, or serve the repository from any static host.
+Run `npm run web` in a clone and open <http://127.0.0.1:8000>, or run `npm run site` and upload the `site/` it makes to any static host.
 
 Chromium browsers (Chrome, Edge, Brave) open and save the diagram file in place, as the desktop app does.
 Firefox and Safari open a copy, and saving downloads the diagram.
@@ -57,6 +57,7 @@ Without a folder, or in Firefox and Safari, take macros from `f` in the macros l
 Chromium also reopens the last diagram, and its folder, on the next visit, once you agree.
 A link ending in `#q=...`, as quiver's do, opens the diagram it encodes, untitled; `q` in the export layer copies a diagram's, so the page's address followed by it opens that diagram.
 Once loaded, the page opens without a network, and browsers that install web apps (Chrome and Edge, or Safari's Add to Dock) can install it to run in a window of its own.
+It opens from what it kept, without waiting on the network, so a version published since the last visit shows from the visit after.
 Settings and the keys file live in the browser's storage, and opening the settings file (`o` in the settings layer) edits both.
 The browser keeps `C-n` for itself, so start a new diagram with `:new`.
 
@@ -95,6 +96,7 @@ sagitta [--macros FILE] [--devtools] [DIAGRAM.cd.tex] [-- SWITCHES]
 ```
 
 `sagitta --help` explains the options.
+`sagitta --check DIR` reads every diagram under `DIR` without a window, and lists what Sagitta cannot read, what saving would change, and undefined macros, for a paper's CI.
 `DIAGRAM` need not exist yet.
 
 Keys work as in quiver: a letter runs a command, and `RET` edits the label of the cell under the cursor.

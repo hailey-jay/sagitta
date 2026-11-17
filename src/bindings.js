@@ -265,6 +265,7 @@ Bindings.DEFAULTS = {
     "flip-hor": [],
     "flip-ver": [],
     "rotate": [],
+    "transpose": [],
     "centre-view": ["; z"],
     // The focus point to the diagram's first object, and the view to it.
     "go-home": ["; g"],
@@ -323,6 +324,7 @@ Bindings.DEFAULTS = {
     "dashed": ["; -"],
     "dotted": [],
     "squiggly": ["; ~"],
+    "blank": ["; _"],
 
     // Where an arrow's ends attach, when they attach to arrows.
     "align-source": ["; ["],
@@ -338,10 +340,8 @@ Bindings.DEFAULTS = {
     "move-checkpoint": ["; m"],
     "rounding": [],
 
-    // The mark, a corner of a rectangle of cells to select. Shift with `mark`'s key adds the
-    // rectangle to the selection, as `mark-add` does.
+    // The mark, a corner of a rectangle of cells to gather into select mode's buffer.
     "mark": ["C-SPC"],
-    "mark-add": [],
 
     // Colours, the selection, and the hint-code prompts.
     "colour": ["; c"],
@@ -349,6 +349,7 @@ Bindings.DEFAULTS = {
     // Selecting at the focus point has no key here, as Shift-Space does it.
     "select-at-focus": [],
     "toggle-selection": ["; s"],
+    "select-mode": ["; v"],
     "create-arrows": ["; e"],
     "change-source": ["; ,"],
     "change-target": ["; ."],
@@ -400,16 +401,13 @@ Bindings.HANDLERS = {
     },
     "paste": { press: (ui) => ui.keys.paste(), help: ["Chords", "paste"] },
     "mark": {
-        press: (ui, event) => ui.keys.mark(event.shiftKey),
+        press: (ui) => ui.keys.mark(),
         help: ["Typing", "mark a region"],
-    },
-    "mark-add": {
-        press: (ui) => ui.keys.mark(true),
-        help: ["Typing", "mark a region to add"],
     },
     "search": { press: (ui) => ui.keymap.search() },
     "select-at-focus": { press: (ui) => ui.keys.toggle_at_focus() },
     "toggle-selection": { press: (ui) => ui.keys.code_prompt("Toggle") },
+    "select-mode": { press: (ui) => ui.keys.select_mode() },
     // Arrows from the selection to the cells whose codes are typed.
     "create-arrows": {
         press: (ui) => {

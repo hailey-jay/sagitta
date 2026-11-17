@@ -149,3 +149,108 @@ Delimiters.balanced = (label) => {
     }
     return depth === 0;
 };
+
+/// The commands whose group is text, in which `$ $` is maths again.
+Delimiters.TEXT_COMMANDS = new Set([
+    "text", "textnormal", "textrm", "textup", "textit", "textsl", "textsc", "textbf", "textmd",
+    "textsf", "texttt", "emph", "mbox", "hbox",
+]);
+
+/// `label` with each `$` that would leave maths escaped as `\$`, so that the canvas draws it as
+/// the sign, as quiver does, while a `$` inside a text group, as `\textnormal{Hi $\sum$}`, is
+/// left to go back into maths there, as it does in TeX.
+Delimiters.dollars = (label) => {
+    // The mode of each open group, from the outermost: `math`, `text`, or `text-math`, which is
+    // text gone back into maths with `$`.
+    const modes = ["math"];
+    let text_next = false;
+    let out = "";
+    for (let i = 0; i < label.length; ++i) {
+        const c = label[i];
+        const mode = modes[modes.length - 1];
+        if (c === "\\") {
+            const name = label.slice(i + 1).match(/^[a-zA-Z]+|^./)?.[0] ?? "";
+            out += c + name;
+            i += name.length;
+            text_next = Delimiters.TEXT_COMMANDS.has(name);
+            continue;
+        }
+        if (c === "{") {
+            modes.push(text_next && mode !== "text" ? "text" : mode === "text-math" ? "math" : mode);
+        } else if (c === "}") {
+            if (modes.length > 1) {
+                modes.pop();
+            }
+        } else if (c === "$") {
+            if (mode === "text") {
+                modes[modes.length - 1] = "text-math";
+            } else if (mode === "text-math") {
+                modes[modes.length - 1] = "text";
+            } else {
+                out += "\\$";
+                text_next = false;
+                continue;
+            }
+        }
+        if (!/\s/.test(c)) {
+            text_next = false;
+        }
+        out += c;
+    }
+    return out;
+};
+
+/// Text-label mode (`:text-labels`, `ui.text_labels`): labels are typed as text, and stored
+/// wrapped in `ui.text_wrapper`, `\textnormal` by default, which is upright and of the document's
+/// own font even in an italic theorem, and shrinks in an arrow's script style as `\text` does. The
+/// label input shows a wrapped label without its wrapper, and wraps what is typed; a label that is
+/// not one wrapped group is edited as it is.
+const TextLabels = {};
+
+/// The wrappers `ui.text_wrapper` may be, all of which a label is unwrapped from.
+TextLabels.WRAPPERS = ["\\textnormal", "\\text", "\\textrm"];
+
+/// What typing a character does in text, outside `$ $`, where TeX would otherwise stop or split
+/// the cell: the character as text instead.
+TextLabels.ESCAPES = {
+    "_": "\\_", "&": "\\&", "#": "\\#", "^": "\\textasciicircum{}", "~": "\\textasciitilde{}",
+};
+
+/// The text inside `label`, if it is one group of a wrapper, as `\textnormal{a b}`, or `null`.
+/// The group must close at the end, so `\text{a} \text{b}` is two groups, and not unwrapped.
+TextLabels.unwrap = (label) => {
+    const wrapper = TextLabels.WRAPPERS.find((wrapper) => label.startsWith(`${wrapper}{`));
+    if (wrapper === undefined) {
+        return null;
+    }
+    const start = wrapper.length + 1;
+    let depth = 1;
+    for (let i = start; i < label.length; ++i) {
+        if (label[i] === "\\") {
+            ++i;
+        } else if (label[i] === "{") {
+            ++depth;
+        } else if (label[i] === "}" && --depth === 0) {
+            return i === label.length - 1 ? label.slice(start, i) : null;
+        }
+    }
+    return null;
+};
+
+/// `text` wrapped in `wrapper`, unless it is empty, or already one wrapped group.
+TextLabels.wrap = (text, wrapper) => text === "" || TextLabels.unwrap(text) !== null ? text
+    : `${wrapper}{${text}}`;
+
+/// What typing `data` after `before` should insert in text instead, or `null` to type it as it
+/// is: inside `$ $`, or after a backslash, which escapes it already.
+TextLabels.escape = (before, data) => {
+    const replacement = TextLabels.ESCAPES[data];
+    if (replacement === undefined) {
+        return null;
+    }
+    if (before.match(/\\*$/)[0].length % 2 === 1) {
+        return null;
+    }
+    const dollars = (before.replace(/\\./g, "").match(/\$/g) ?? []).length;
+    return dollars % 2 === 0 ? replacement : null;
+};

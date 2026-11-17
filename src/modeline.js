@@ -25,6 +25,10 @@ class ModeLine {
 
         /// Whether the message is an error waiting to be dismissed, which flashes do not replace.
         this.standing = false;
+
+        /// The messages shown so far, oldest first, for `:messages`: `{ text, error, time, count }`,
+        /// where `count` is how many times running it was shown.
+        this.log = [];
     }
 
     initialise(ui) {
@@ -34,7 +38,7 @@ class ModeLine {
             .add(content)
             .listen("click", action);
 
-        this.element = new DOM.Div({ class: "mode-line" })
+        this.element = new DOM.Div({ class: "mode-line", role: "toolbar", "aria-label": "Mode line" })
             .listen("pointerdown", (event) => {
                 if (event.button === 0) {
                     event.stopImmediatePropagation();
@@ -49,7 +53,10 @@ class ModeLine {
             }))
             .add(new DOM.Element("span", { class: "arrow" }))
             .add(new DOM.Element("span", { class: "queue" }))
-            .add(new DOM.Element("span", { class: "message" })
+            // The labels using macros KaTeX does not know; a click selects them.
+            .add(button({ class: "broken" }, "", () => Commands.undefined_macros(ui)))
+            // A screen reader reads each message out as it comes.
+            .add(new DOM.Element("span", { class: "message", role: "status", "aria-live": "polite" })
                 // Clicking an error dismisses it.
                 .listen("click", () => this.dismiss_error()))
             .add(new DOM.Element("span", { class: "fill" }));
@@ -74,7 +81,8 @@ class ModeLine {
         const hints = new DOM.Element("span", { class: "hints" }).add_to(this.element);
         for (const name of ["undo", "save", "export", "shortcuts"]) {
             const { label, combinations } = this.actions.get(name);
-            hints.add(button({ class: "hint", "data-action": name }, "", () => {
+            const title = `${label} (${Keymap.describe(combinations)})`;
+            hints.add(button({ class: "hint", "data-action": name, title }, "", () => {
                 this.run(ui, name);
             }).add(new DOM.Element("kbd").add(Keymap.describe(combinations.slice(0, 1)))).add(` ${
                 label.toLowerCase()
@@ -100,7 +108,9 @@ class ModeLine {
         const action_button = (name, attributes, content) => {
             const { label, combinations } = this.actions.get(name);
             const title = `${label} (${Keymap.describe(combinations)})`;
-            return button({ ...attributes, title }, content, () => this.run(ui, name));
+            // A glyph alone says nothing to a screen reader, so it is named.
+            return button({ ...attributes, title, "aria-label": label }, content,
+                () => this.run(ui, name));
         };
         this.element
             .add(new DOM.Element("span", { class: "zoom" })
@@ -109,7 +119,8 @@ class ModeLine {
                 .add(action_button("zoom-in", { "data-action": "zoom-in" }, "+"))
             )
             .add(action_button("settings", { class: "menu" }, "⚙"))
-            .add(button({ class: "menu", title: "All commands (:)" }, "≡", () => {
+            .add(button({ class: "menu", title: "All commands (:)", "aria-label": "All commands" },
+                "≡", () => {
                 ui.prompt.open("Command");
             }));
 
@@ -171,12 +182,23 @@ class ModeLine {
         this.add_action(ui, "open-folder", "Open folder", () => ui.file.open_folder(),
             () => typeof host.open_folder === "function");
 
+        // Undo and redo say what they did, as a large diagram may change out of sight.
+        const travel = (verb, step, index) => {
+            const actions = ui.history.actions[index()];
+            if (!step()) {
+                return;
+            }
+            const what = History.describe(actions ?? []);
+            if (what !== "") {
+                this.flash(`${verb}: ${what}`);
+            }
+        };
         this.add_action(ui, "undo", "Undo",
-            () => ui.history.undo(ui),
+            () => travel("undone", () => ui.history.undo(ui), () => ui.history.present - 1),
             () => ui.in_mode(...default_pan) && ui.history.present !== 0,
         );
         this.add_action(ui, "redo", "Redo",
-            () => ui.history.redo(ui),
+            () => travel("redone", () => ui.history.redo(ui), () => ui.history.present),
             () => ui.in_mode(...default_pan) && ui.history.present < ui.history.actions.length,
         );
 
@@ -211,8 +233,7 @@ class ModeLine {
             ["flip-labels", "Flip labels", "flip labels"],
         ]) {
             this.add_action(ui, name, label, () => {
-                ui.unqueue_selected();
-                ui.history.add(ui, [{ kind, cells: ui.selection }], true);
+                        ui.history.add(ui, [{ kind, cells: ui.selection }], true);
             }, edges);
         }
 
@@ -222,9 +243,7 @@ class ModeLine {
             () => {
                 ui.deselect();
                 const actions = [{ kind: "delete", cells: new Set(ui.quiver.all_cells()) }];
-                if (ui.frame !== null) {
-                    actions.push({ kind: "frame", from: ui.frame, to: null });
-                }
+                actions.push(...SpectralSequence.clearing(ui));
                 ui.history.add(ui, actions, true);
                 ui.update_selection();
             },
@@ -247,37 +266,41 @@ class ModeLine {
             ui.update_selection();
         }, () => ui.in_mode(...default_pan) && doomed().size > 0);
 
-        // Transformations of the whole diagram. Each moves the vertices, and fixes up the edges
-        // (including loops, whose angles are absolute).
+        // Transformations of the selection's objects (those selected, and the ends of selected
+        // arrows) within the rectangle round them, or, with nothing selected, of the whole
+        // diagram. Each moves the vertices, and fixes up the arrows among them (loops too, whose
+        // angles are absolute); an arrow from one of them to a cell left in place follows its end.
         const transform = (name, label, move, edges) => {
             this.add_action(ui, name, label, () => {
-                const vertices = ui.quiver.all_cells().filter((cell) => cell.is_vertex());
-                const bounding_rect = ui.quiver.bounding_rect();
+                const { vertices, inside } = Transforms.moving(ui);
+                const bounding_rect = Transforms.bounds(vertices);
                 if (bounding_rect === null) {
                     return;
                 }
-                const loops = ui.quiver.all_cells().filter((cell) => cell.is_loop());
+                const loops = inside.filter((cell) => cell.is_loop());
                 const displacements = vertices.map((vertex) => ({
                     vertex,
                     from: vertex.position,
                     to: move(bounding_rect, vertex.position),
                 }));
-                // A spectral sequence's page has its axes one way round.
-                if (SpectralSequence.follow(ui, displacements) === null) {
-                    UI.display_error(`${label} would scramble the spectral sequence's bidegrees.`);
+                const refused = Transforms.refuses(ui, label, displacements);
+                if (refused !== null) {
+                    UI.display_error(refused);
                     return;
                 }
                 ui.history.add(ui, [{
                     kind: "move",
                     displacements,
+                    // Only the routes of arrows carried along whole are turned with them.
                     routes: ui.quiver.moved_routes(
-                        displacements, (position) => move(bounding_rect, position)),
-                }, ...edges(loops)], true);
+                        displacements, (position) => move(bounding_rect, position))
+                        .filter(({ edge }) => inside.includes(edge)),
+                }, ...edges(loops, inside)], true);
             }, () => ui.in_mode(...default_pan) && any_cells());
         };
-        const reflect = (angle) => (loops) => [{
+        const reflect = (angle) => (loops, inside) => [{
             kind: "flip",
-            cells: ui.quiver.all_cells().filter((cell) => cell.is_edge() && !cell.is_loop()),
+            cells: inside.filter((cell) => cell.is_edge() && !cell.is_loop()),
         }, {
             kind: "reverse",
             cells: loops,
@@ -318,6 +341,14 @@ class ModeLine {
                     return { edge, from: edge.options.angle, to };
                 }),
             }],
+        );
+        // Across the diagonal from the top-left corner: rows become columns.
+        transform("transpose", "Transpose",
+            ([[x_min, y_min]], position) => new Position(
+                x_min + (position.y - y_min),
+                y_min + (position.x - x_min),
+            ),
+            reflect((angle) => Transforms.angle(90 - angle)),
         );
 
         this.add_action(ui, "centre-view", "Centre view", () => {
@@ -378,14 +409,39 @@ class ModeLine {
         );
     }
 
-    /// Show `text` in the mode line for a few seconds, styled as an error if `error`, unless an
-    /// error is waiting to be dismissed.
+    /// Show `text` in the mode line for a few seconds, longer the longer it is, styled as an error
+    /// if `error`, unless an error is waiting to be dismissed. Each is kept for `:messages` too.
     flash(text, error = false) {
         if (this.standing) {
+            this.record(text, error);
             return;
         }
         this.show_message(text, error);
-        this.flash_timeout = setTimeout(() => this.show_message("", false), 3000);
+        this.flash_timeout = setTimeout(() => this.show_message("", false),
+            ModeLine.flash_duration(text));
+    }
+
+    /// How long `text` is flashed for, in milliseconds: three seconds, and a little more for each
+    /// character past the first forty, up to ten seconds.
+    static flash_duration(text) {
+        return Math.min(10000, 3000 + 50 * Math.max(0, `${text}`.length - 40));
+    }
+
+    /// Keep `text` for `:messages`, counting it again if it is the last one kept.
+    record(text, error) {
+        if (text === "") {
+            return;
+        }
+        const last = this.log[this.log.length - 1];
+        if (last !== undefined && last.text === text && last.error === error) {
+            ++last.count;
+            last.time = new Date();
+            return;
+        }
+        this.log.push({ text, error, time: new Date(), count: 1 });
+        if (this.log.length > ModeLine.LOG_LENGTH) {
+            this.log.shift();
+        }
     }
 
     /// Show the error `text` in the mode line until it is dismissed (see `dismiss_error`).
@@ -407,6 +463,7 @@ class ModeLine {
     show_message(text, error) {
         clearTimeout(this.flash_timeout);
         this.standing = false;
+        this.record(text, error);
         const message = this.element.query_selector(".message").clear().add(text);
         // Long messages are cut short, so the whole of each is also its tooltip.
         message.set_attributes({ title: text });
@@ -455,8 +512,10 @@ class ModeLine {
 
         // The diagram's file, marked `●` with unsaved changes, by more than its colour.
         ui.file.update();
-        // Export options other than the defaults, which saving writes too, follow it.
-        const differences = Layer.Export.differences(ui);
+        // Export options other than the defaults, which saving writes too, follow it, and
+        // text-label mode, which changes what typing writes.
+        const differences = [...Layer.Export.differences(ui),
+            ...ui.settings.get("ui.text_labels") ? ["text labels"] : []];
         this.element.query_selector(".file").clear()
             .add(ui.file.name())
             .add(ui.file.dirty ? new DOM.Element("span", {
@@ -465,7 +524,7 @@ class ModeLine {
             }).add(" ●") : "")
             .add(differences.length === 0 ? "" : new DOM.Element("span", {
                 class: "export-options",
-                title: "Export options, which saving writes too (C-e)",
+                title: "Export options, which saving writes too (C-e), and text-label mode",
             }).add(` [${differences.join(", ")}]`));
 
         // What typing would edit.
@@ -480,6 +539,17 @@ class ModeLine {
         const queue = this.element.query_selector(".queue").clear();
         if (queued > 0) {
             queue.add(new DOM.Element("kbd").add("TAB")).add(` ${queued} queued`);
+        }
+
+        // The labels KaTeX could not draw whole, which `:undefined` selects.
+        const broken = ui.broken();
+        const unknown = this.element.query_selector(".broken").clear();
+        unknown.class_list.toggle("hidden", broken.cells.length === 0);
+        if (broken.cells.length > 0) {
+            unknown.add(`⚠ ${broken.cells.length} undefined`);
+            unknown.set_attributes({ title: `${broken.macros.length > 0
+                ? `Not defined: ${broken.macros.join(" ")}` : "Labels that cannot be read"
+            }. Click, or :undefined, to select them.` });
         }
 
         // Hints and zoom buttons for disabled actions are greyed out.
@@ -522,7 +592,8 @@ class ModeLine {
         }
         // A mark waiting for its other corner, or a checkpoint being carried, is state the user
         // cannot otherwise see, so it shows wherever the layer has nothing of its own to show.
-        const pending = ui.mark !== null ? "MARK" : ui.carried !== null ? "CHECKPOINT" : null;
+        const pending = ui.mark !== null ? "MARK" : ui.carried !== null ? "CHECKPOINT"
+            : ui.buffer !== null ? "SELECT" : null;
         if (!ui.keymap.active) {
             return ["EDIT", pending, "edit"];
         }
@@ -616,10 +687,20 @@ class ModeLine {
     target(ui) {
         // Within a spectral sequence, a cell's bidegree too (see `SpectralSequence`), but for the
         // ticks and the axes' names, which have none.
-        const page = (position) => ui.frame !== null
-            && !SpectralSequence.on_ticks(ui.frame, position);
-        const where = (position) => `(${position.x},${position.y})${!page(position)
-            ? "" : `  ${SpectralSequence.describe(ui.frame, position)}`}`;
+        const page = (position) => {
+            const frame = SpectralSequence.at(ui, position);
+            return frame !== null && !SpectralSequence.on_ticks(frame, position);
+        };
+        // A position is given as the export names it, row then column from the diagram's
+        // top-left object (`from=2-1`), so that it reads the same in the file; one above or left
+        // of the diagram is at 0 or less.
+        let corner;
+        const cell_name = (position) => {
+            corner ??= ui.quiver.bounding_rect()?.[0] ?? [position.x, position.y];
+            return `${position.y - corner[1] + 1}-${position.x - corner[0] + 1}`;
+        };
+        const where = (position) => `${cell_name(position)}${!page(position)
+            ? "" : `  ${SpectralSequence.describe(SpectralSequence.at(ui, position), position)}`}`;
         const describe = (cell) => {
             const label = cell.label.trim() === "" ? "∅" : cell.label;
             return cell.is_vertex() ? `${label}  ${where(cell.position)}` : label;
@@ -633,12 +714,22 @@ class ModeLine {
                 return `new vertex  ${where(ui.focus_position)}`;
             }
         }
+        // Space's selection, a cell and the arrows just drawn to it: RET labels the cell, and
+        // S-RET the arrows.
+        const drawn = Keymap.drawn_to(ui.selection);
+        if (drawn !== null) {
+            const arrows = Array.from(ui.selection).filter((cell) => cell !== drawn)
+                .map(describe);
+            return `${describe(drawn)}  S-RET ${arrows.slice(0, 4).join(", ")}${
+                arrows.length > 4 ? ", …" : ""}`;
+        }
         switch (ui.selection.size) {
             case 0:
                 // In a spectral sequence, where the focus point is, by bidegree, even while it is
                 // hidden.
                 return !page(ui.focus_position) ? ""
-                    : `focus  ${SpectralSequence.describe(ui.frame, ui.focus_position)}`;
+                    : `focus  ${SpectralSequence.describe(SpectralSequence.at(ui, ui.focus_position),
+                        ui.focus_position)}`;
             case 1:
                 return describe(ui.selection.values().next().value);
             default:
@@ -649,3 +740,6 @@ class ModeLine {
         }
     }
 }
+
+/// How many messages `:messages` keeps.
+ModeLine.LOG_LENGTH = 100;

@@ -912,6 +912,9 @@ class Edge extends Cell {
         if (preset.level !== undefined) {
             options.level = Math.max(Math.max(source.level, target.level ?? 0) + 1, preset.level);
         }
+        if (preset.label_alignment !== undefined) {
+            options.label_alignment = preset.label_alignment;
+        }
 
         // The following heuristics are only sensible for non-loops, and for which the target is a
         // cell (rather than the pointer).
@@ -1172,6 +1175,11 @@ class Edge extends Cell {
         this.arrow.label_leg = this.is_routed() ? QuiverExport.route_leg(
             QuiverExport.route_points(this), this.options.label_position / 100) : null;
         Edge.update_style(this.arrow, this.options);
+        // An arrow that draws nothing (the blank preset) shows faintly on the canvas alone, so
+        // that it can be found and picked.
+        const { style } = this.options;
+        this.element.class_list.toggle("blank", style.name === "arrow"
+            && ["tail", "body", "head"].every((component) => style[component].name === "none"));
         const label = this.arrow.label.element;
         this.arrow.redraw();
         // An arrow that could not be drawn (its ends overlapping, as wide labels do before their

@@ -89,8 +89,9 @@ Layer.Import = class extends Layer {
         }
         const since = ui.history.present;
         ui.deselect();
-        // The diagram's spectral sequence goes with it, as Clear takes it (see `SpectralSequence`).
-        const frame = ui.frame;
+        // The diagram's spectral sequence pages go with it, as Clear takes them (see
+        // `SpectralSequence`).
+        const frames = ui.frames;
         const existing = ui.quiver.all_cells();
         if (existing.length > 0) {
             ui.history.add(ui, [{ kind: "delete", cells: new Set(existing) }], true);
@@ -105,11 +106,14 @@ Layer.Import = class extends Layer {
         if (cells.size > 0) {
             ui.history.add(ui, [{ kind: "create", cells }]);
         }
-        // Only tikz-cd reads a frame; the import set it outside the history, so it is a step too.
-        const imported = format === "tikz-cd" ? ui.frame : null;
-        if (imported !== frame) {
-            ui.frame = frame;
-            ui.history.add(ui, [{ kind: "frame", from: frame, to: imported }], true);
+        // Only tikz-cd reads frames; the import set them outside the history, so they are a step
+        // too: the old pages go, and the new ones come.
+        const imported = format === "tikz-cd" ? ui.frames : [];
+        ui.frames = frames;
+        const steps = [...frames.map((frame) => ({ kind: "frame", from: frame, to: null })),
+            ...imported.map((frame) => ({ kind: "frame", from: null, to: frame }))];
+        if (steps.length > 0) {
+            ui.history.add(ui, steps, true);
         }
         ui.history.squash(since);
         ui.history.permanentise();
@@ -302,6 +306,8 @@ Layer.Macros = class extends Layer {
 Layer.Help = class extends Layer {
     constructor(keymap) {
         super(keymap);
+        // What has been typed to search the help (see `search`).
+        this.query = "";
         // Sagitta's version, for the About lines, once the host has said.
         this.version = null;
         host.version().then((version) => {
@@ -310,7 +316,11 @@ Layer.Help = class extends Layer {
     }
 
     describe() {
-        return ["HELP", "keys"];
+        return ["HELP", this.query === "" ? "type to search" : `/${this.query}_`];
+    }
+
+    entered() {
+        this.query = "";
     }
 
     /// The help's lines describe keys rather than being them.
@@ -379,9 +389,27 @@ Layer.Help = class extends Layer {
         }
         elsewhere(Keymap.HELP_ELSEWHERE.after);
         const shortcuts = keys(this.keymap.combinations("shortcuts"), "chords");
+        sections.get("Help").push(["type", "search the help, ESC to clear"]);
         sections.get("Help").push([`${shortcuts} RET ; ESC`.trim(), "leave"]);
         sections.set("About", this.about());
-        return Array.from(sections);
+        return this.search(Array.from(sections));
+    }
+
+    /// The `sections` whose lines hold what has been typed, in their key or what they say,
+    /// ignoring case, leaving out the sections with none.
+    search(sections) {
+        if (this.query === "") {
+            return sections;
+        }
+        const query = this.query.toLowerCase();
+        const text = (part) => typeof part === "string" ? part : part?.element?.textContent ?? "";
+        const found = sections
+            .map(([title, lines]) => [title, lines.filter(([key, description]) =>
+                `${text(key)} ${text(description)}`.toLowerCase().includes(query))])
+            .filter(([, lines]) => lines.length > 0);
+        return found.length > 0 ? found : [["Search", [
+            ["", `nothing holds "${this.query}"`, false, "", null, null, false, true],
+        ]]];
     }
 
     /// What Sagitta is, what it is made from, and where its source and notices are, as lines with
@@ -409,6 +437,77 @@ Layer.Help = class extends Layer {
         return lines;
     }
 
+    /// Typing searches the help (see `search`), and Backspace takes back what was typed. Before
+    /// anything is typed, `:` opens the command line and `;` leaves; Escape clears the search,
+    /// then leaves.
+    intercept(event) {
+        const searching = this.query !== "";
+        switch (event.key) {
+            case ":":
+            case ";":
+                if (searching) {
+                    break;
+                }
+                this.leave();
+                if (event.key === ":") {
+                    this.ui.prompt.open("Command");
+                }
+                return true;
+            case "Escape":
+                if (searching) {
+                    this.query = "";
+                    this.keymap.render();
+                } else {
+                    this.leave();
+                }
+                return true;
+            case "Enter":
+                this.leave();
+                return true;
+            case "Backspace":
+                this.query = this.query.slice(0, -1);
+                this.keymap.render();
+                return true;
+        }
+        if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey
+            && (searching || event.key !== " ")) {
+            this.query += event.key;
+            this.keymap.render();
+            return true;
+        }
+        // Arrow keys still move the focus point; every other key belongs to the layer.
+        return !event.key.startsWith("Arrow");
+    }
+};
+
+/// Where Sagitta's source lives, which the GPL has the About lines point to.
+Layer.Help.SOURCE = "https://github.com/hailey-jay/sagitta";
+
+/// The messages layer (`:messages`): what the mode line has said, newest first, each with when,
+/// so that one gone before it was read can be read here.
+Layer.Messages = class extends Layer {
+    describe() {
+        return ["MESSAGES", `${this.ui.mode_line.log.length}`];
+    }
+
+    get clickable() {
+        return false;
+    }
+
+    groups() {
+        const log = this.ui.mode_line.log;
+        if (log.length === 0) {
+            return [["Messages", [["", "nothing yet", false, "", null, null, false, true]]]];
+        }
+        const time = (date) => date.toTimeString().slice(0, 8);
+        const lines = log.slice().reverse().map(({ text, error, time: when, count }) => [
+            time(when),
+            `${error ? "error: " : ""}${text}${count > 1 ? ` (×${count})` : ""}`,
+            false, "", null, null, false, true,
+        ]);
+        return [["Messages", lines], ["", [["RET ; ESC", "leave"]]]];
+    }
+
     intercept(event) {
         switch (event.key) {
             case ":":
@@ -421,13 +520,9 @@ Layer.Help = class extends Layer {
                 this.leave();
                 return true;
         }
-        // Arrow keys still move the focus point; every other key belongs to the layer.
         return !event.key.startsWith("Arrow");
     }
 };
-
-/// Where Sagitta's source lives, which the GPL has the About lines point to.
-Layer.Help.SOURCE = "https://github.com/hailey-jay/sagitta";
 
 /// The export layer (`C-e`): the diagram's tikz-cd encoding as an object, whose options are toggled
 /// and stepped by key, and which `y` or Enter copies to the clipboard.
@@ -872,6 +967,7 @@ Layer.Settings = class extends Layer {
 Layer.Settings.GROUPS = [
     ["View", [
         ["d", "ui.dark_mode", "dark mode"],
+        ["p", "ui.light_panels", "light panels"],
         ["z", "ui.zoom", "zoom to start at"],
         ["l", "ui.label_size", "label size"],
     ]],
@@ -908,6 +1004,7 @@ Layer.Settings.PRESET_KEYS = {
     "dashed": "-",
     "dotted": ".",
     "squiggly": "~",
+    "blank": "_",
 };
 
 /// The colour layer (`; c` for arrows, `; C` for labels): the selection's colour as an object,
@@ -1137,8 +1234,8 @@ Layer.Preset = class extends Layer {
         // The cells of the ghost, and why there is none, if it would land on cells already there.
         this.ghost = new Set();
         this.problem = null;
-        // The frame the diagram had before a spectral sequence's ghost put its own in its place
-        // (see `SpectralSequence`), or `undefined` while there is no such ghost.
+        // The frames the diagram had before a spectral sequence's ghost added its own (see
+        // `SpectralSequence`), or `undefined` while there is no such ghost.
         this.frame = undefined;
         // Leave on a press outside the key list, before the canvas or the mode line sees it, so
         // that the mode line's buttons (save, undo, ...) act on the diagram without the ghost.
@@ -1191,7 +1288,7 @@ Layer.Preset = class extends Layer {
             element.class_list.remove("in-the-way");
         }
         if (this.frame !== undefined) {
-            ui.frame = this.frame;
+            ui.frames = this.frame;
             this.frame = undefined;
         }
         ui.update_extent?.();
@@ -1211,7 +1308,7 @@ Layer.Preset = class extends Layer {
             if (spec.frame !== undefined && ui.format !== "tikz-cd") {
                 throw new Error(`${ui.format} has no axes for a spectral sequence: try :format tikz-cd`);
             }
-            Presets.one_frame(ui, spec);
+            Presets.frame_room(ui, spec);
             // The cells it would land on are marked, as well as named.
             for (const cell of Presets.in_the_way(ui, spec)) {
                 cell.element.class_list.add("in-the-way");
@@ -1222,8 +1319,8 @@ Layer.Preset = class extends Layer {
             }
             // A spectral sequence's ghost shows its axes, as its own frame would draw them.
             if (spec.frame !== undefined) {
-                this.frame = ui.frame;
-                ui.frame = Presets.frame(ui, spec.frame);
+                this.frame = ui.frames;
+                ui.frames = [...ui.frames, Presets.frame(ui, spec.frame)];
                 SpectralSequence.draw(ui);
             }
             // What the diagram's format cannot draw is shown as not here, rather than stamped and

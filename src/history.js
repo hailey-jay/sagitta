@@ -105,6 +105,45 @@ class History {
             || modifications.some(({ from, to }) => !same(from, to));
     }
 
+    /// What an event does, in a few words, for the mode line after undo or redo: as `delete
+    /// 2 objects, 1 arrow` or `curve, colour`. Each kind is named once, in the order done.
+    static describe(actions) {
+        const count = (cells) => {
+            const all = Array.from(cells);
+            const vertices = all.filter((cell) => cell.is_vertex()).length;
+            const edges = all.length - vertices;
+            const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+            return [vertices > 0 ? plural(vertices, "object") : null,
+                edges > 0 ? plural(edges, "arrow") : null].filter((p) => p !== null).join(", ");
+        };
+        const names = {
+            create: "add", connect: "reconnect", crossing_over: "crossing over",
+            edge_alignment: "edge alignment", label_colour: "label colour",
+            label_alignment: "label alignment", label_position: "label position",
+        };
+        const parts = [];
+        const seen = new Set();
+        for (const action of actions) {
+            if (!History.changes(action)) {
+                continue;
+            }
+            let part = names[action.kind] ?? action.kind.replace(/_/g, " ");
+            if (action.kind === "create" || action.kind === "delete") {
+                part = `${part} ${count(action.cells)}`;
+            } else if (action.kind === "label" && action.labels.length > 1) {
+                part = `${action.labels.length} labels`;
+            }
+            if (!seen.has(part)) {
+                seen.add(part);
+                parts.push(part);
+            }
+        }
+        if (parts.length > 3) {
+            return `${parts.slice(0, 3).join(", ")}, and ${parts.length - 3} more`;
+        }
+        return parts.join(", ");
+    }
+
     /// Add a collapsible history event. This allows the last event to be modified later,
     /// replacing the history state.
     add_collapsible(ui, collapse, event, invoke = false) {
@@ -430,8 +469,8 @@ class History {
                     ui.format = action[to];
                     break;
                 case "frame":
-                    // A spectral sequence's frame (see `SpectralSequence`).
-                    ui.frame = action[to];
+                    // A spectral sequence page's frame (see `SpectralSequence.replace`).
+                    SpectralSequence.replace(ui, action[from], action[to]);
                     break;
             }
             for (const cell of ui.quiver.transitive_dependencies(cells)) {
